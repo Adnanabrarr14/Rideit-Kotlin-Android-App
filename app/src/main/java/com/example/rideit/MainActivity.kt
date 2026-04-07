@@ -33,6 +33,8 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.BasicTextField
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.DirectionsBike
+import androidx.compose.material.icons.automirrored.filled.Logout
 import androidx.compose.material.icons.filled.AccountCircle
 import androidx.compose.material.icons.filled.DirectionsBike
 import androidx.compose.material.icons.filled.DirectionsCar
@@ -602,7 +604,7 @@ fun RideHomeScreen(onLogout: () -> Unit) {
                         DropdownMenuItem(
                             text = { Text("Logout") },
                             leadingIcon = {
-                                Icon(Icons.Default.Logout, contentDescription = null)
+                                Icon(Icons.AutoMirrored.Filled.Logout, contentDescription = null)
                             },
                             onClick = {
                                 menuExpanded = false
@@ -778,7 +780,7 @@ fun RideHomeScreen(onLogout: () -> Unit) {
                         time = "6 min"
                     )
                     VehicleItem(
-                        icon = Icons.Default.DirectionsBike,
+                        icon = Icons.AutoMirrored.Filled.DirectionsBike,
                         title = "Bike",
                         time = "8 min"
                     )
