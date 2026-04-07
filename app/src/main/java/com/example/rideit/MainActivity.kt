@@ -1,6 +1,13 @@
 package com.example.rideit
 
+import android.content.Context
+import android.location.Address
+import android.location.Geocoder
+import android.location.Geocoder.GeocodeListener
+import android.os.Build
 import android.os.Bundle
+import android.os.Handler
+import android.os.Looper
 import android.widget.Toast
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
@@ -33,8 +40,6 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.BasicTextField
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.automirrored.filled.DirectionsBike
-import androidx.compose.material.icons.automirrored.filled.Logout
 import androidx.compose.material.icons.filled.AccountCircle
 import androidx.compose.material.icons.filled.DirectionsBike
 import androidx.compose.material.icons.filled.DirectionsCar
@@ -65,6 +70,7 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableFloatStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -73,6 +79,7 @@ import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.layout.onSizeChanged
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontWeight
@@ -81,6 +88,7 @@ import androidx.compose.ui.text.input.VisualTransformation
 import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import com.google.android.gms.maps.CameraUpdateFactory
 import com.google.android.gms.maps.model.CameraPosition
 import com.google.android.gms.maps.model.LatLng
 import com.google.maps.android.compose.GoogleMap
@@ -88,8 +96,12 @@ import com.google.maps.android.compose.MapProperties
 import com.google.maps.android.compose.MapUiSettings
 import com.google.maps.android.compose.Marker
 import com.google.maps.android.compose.MarkerState
+import com.google.maps.android.compose.Polyline
 import com.google.maps.android.compose.rememberCameraPositionState
+import java.util.Locale
+import java.util.concurrent.Executors
 import kotlin.math.roundToInt
+import kotlinx.coroutines.launch
 
 class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -453,53 +465,64 @@ fun LoginScreen(
 
 @Composable
 fun RideHomeScreen(onLogout: () -> Unit) {
-    val islamabad = LatLng(33.6844, 73.0479)
+    val context = LocalContext.current
+    val scope = rememberCoroutineScope()
+    val pickupLatLng = LatLng(33.6844, 73.0479)
 
     val cameraPositionState = rememberCameraPositionState {
-        position = CameraPosition.fromLatLngZoom(islamabad, 12f)
+        position = CameraPosition.fromLatLngZoom(pickupLatLng, 12f)
     }
 
     var dropOffText by remember { mutableStateOf("") }
     var menuExpanded by remember { mutableStateOf(false) }
+    var destinationLatLng by remember { mutableStateOf<LatLng?>(null) }
+    var destinationTitle by remember { mutableStateOf("") }
 
     BoxWithConstraints(modifier = Modifier.fillMaxSize()) {
         val density = LocalDensity.current
         val screenHeightPx = with(density) { maxHeight.toPx() }
 
-        var panelHeightPx by remember { mutableFloatStateOf(0f) }
+        val expandedTopPx = screenHeightPx * 0.28f
+        val midTopPx = screenHeightPx * 0.58f
+        val collapsedTopPx = screenHeightPx * 0.85f
 
-        val minPanelTopPx = screenHeightPx * 0.32f
-        val defaultPanelTopPx = screenHeightPx * 0.60f
-
-        var panelOffsetY by remember { mutableFloatStateOf(defaultPanelTopPx) }
-
-        val maxPanelTopPx = if (panelHeightPx > 0f) {
-            (screenHeightPx - panelHeightPx).coerceAtLeast(minPanelTopPx)
-        } else {
-            defaultPanelTopPx
-        }
-
-        panelOffsetY = panelOffsetY.coerceIn(minPanelTopPx, maxPanelTopPx)
+        var panelOffsetY by remember { mutableFloatStateOf(midTopPx) }
 
         GoogleMap(
             modifier = Modifier.fillMaxSize(),
             cameraPositionState = cameraPositionState,
             properties = MapProperties(isMyLocationEnabled = false),
             uiSettings = MapUiSettings(
-                scrollGesturesEnabled = false,
-                zoomGesturesEnabled = false,
-                tiltGesturesEnabled = false,
-                rotationGesturesEnabled = false,
+                scrollGesturesEnabled = true,
+                zoomGesturesEnabled = true,
+                tiltGesturesEnabled = true,
+                rotationGesturesEnabled = true,
                 compassEnabled = true,
                 zoomControlsEnabled = false,
                 myLocationButtonEnabled = false
-            )
+            ),
+            onMapClick = {
+                panelOffsetY = collapsedTopPx
+            }
         ) {
             Marker(
-                state = MarkerState(position = islamabad),
+                state = MarkerState(position = pickupLatLng),
                 title = "Pickup Location",
                 snippet = "My Current Location"
             )
+
+            destinationLatLng?.let { dest ->
+                Marker(
+                    state = MarkerState(position = dest),
+                    title = destinationTitle.ifBlank { "Drop-off Location" }
+                )
+
+                Polyline(
+                    points = listOf(pickupLatLng, dest),
+                    color = Color(0xFFFF3B30),
+                    width = 10f
+                )
+            }
         }
 
         Box(
@@ -604,7 +627,7 @@ fun RideHomeScreen(onLogout: () -> Unit) {
                         DropdownMenuItem(
                             text = { Text("Logout") },
                             leadingIcon = {
-                                Icon(Icons.AutoMirrored.Filled.Logout, contentDescription = null)
+                                Icon(Icons.Default.Logout, contentDescription = null)
                             },
                             onClick = {
                                 menuExpanded = false
@@ -620,7 +643,6 @@ fun RideHomeScreen(onLogout: () -> Unit) {
             modifier = Modifier
                 .offset { IntOffset(0, panelOffsetY.roundToInt()) }
                 .fillMaxWidth()
-                .onSizeChanged { panelHeightPx = it.height.toFloat() }
                 .clip(RoundedCornerShape(topStart = 28.dp, topEnd = 28.dp))
                 .background(Color(0xF00A0A0A))
                 .border(
@@ -631,7 +653,7 @@ fun RideHomeScreen(onLogout: () -> Unit) {
                 .draggable(
                     orientation = Orientation.Vertical,
                     state = rememberDraggableState { delta ->
-                        panelOffsetY = (panelOffsetY + delta).coerceIn(minPanelTopPx, maxPanelTopPx)
+                        panelOffsetY = (panelOffsetY + delta).coerceIn(expandedTopPx, collapsedTopPx)
                     }
                 )
                 .navigationBarsPadding()
@@ -749,7 +771,31 @@ fun RideHomeScreen(onLogout: () -> Unit) {
                             .border(
                                 width = 0.5.dp,
                                 color = Color.White.copy(alpha = 0.12f)
-                            ),
+                            )
+                            .clickable {
+                                val query = dropOffText.trim()
+                                if (query.isBlank()) {
+                                    Toast.makeText(context, "Enter drop-off location", Toast.LENGTH_SHORT).show()
+                                } else {
+                                    searchLocation(
+                                        context = context,
+                                        query = query,
+                                        onSuccess = { foundLatLng, label ->
+                                            destinationLatLng = foundLatLng
+                                            destinationTitle = label
+                                            scope.launch {
+                                                cameraPositionState.animate(
+                                                    CameraUpdateFactory.newLatLngZoom(foundLatLng, 13.5f)
+                                                )
+                                            }
+                                            panelOffsetY = midTopPx
+                                        },
+                                        onError = { message ->
+                                            Toast.makeText(context, message, Toast.LENGTH_SHORT).show()
+                                        }
+                                    )
+                                }
+                            },
                         contentAlignment = Alignment.Center
                     ) {
                         Icon(
@@ -780,7 +826,7 @@ fun RideHomeScreen(onLogout: () -> Unit) {
                         time = "6 min"
                     )
                     VehicleItem(
-                        icon = Icons.AutoMirrored.Filled.DirectionsBike,
+                        icon = Icons.Default.DirectionsBike,
                         title = "Bike",
                         time = "8 min"
                     )
@@ -923,5 +969,66 @@ fun VehicleItem(
             fontSize = 16.sp,
             fontWeight = FontWeight.ExtraBold
         )
+    }
+}
+
+private fun searchLocation(
+    context: Context,
+    query: String,
+    onSuccess: (LatLng, String) -> Unit,
+    onError: (String) -> Unit
+) {
+    if (!Geocoder.isPresent()) {
+        onError("Location search is not available on this device")
+        return
+    }
+
+    val geocoder = Geocoder(context, Locale.getDefault())
+
+    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+        geocoder.getFromLocationName(query, 1, object : GeocodeListener {
+            override fun onGeocode(addresses: MutableList<Address>) {
+                val address = addresses.firstOrNull()
+                if (address == null) {
+                    onError("Location not found")
+                    return
+                }
+
+                val latLng = LatLng(address.latitude, address.longitude)
+                val label = address.getAddressLine(0) ?: query
+                Handler(Looper.getMainLooper()).post {
+                    onSuccess(latLng, label)
+                }
+            }
+
+            override fun onError(errorMessage: String?) {
+                Handler(Looper.getMainLooper()).post {
+                    onError(errorMessage ?: "Search failed")
+                }
+            }
+        })
+    } else {
+        val mainHandler = Handler(Looper.getMainLooper())
+        Executors.newSingleThreadExecutor().execute {
+            try {
+                @Suppress("DEPRECATION")
+                val addresses = geocoder.getFromLocationName(query, 1)
+                val address = addresses?.firstOrNull()
+
+                mainHandler.post {
+                    if (address == null) {
+                        onError("Location not found")
+                    } else {
+                        val latLng = LatLng(address.latitude, address.longitude)
+                        val label = address.getAddressLine(0) ?: query
+                        onSuccess(latLng, label)
+                    }
+                }
+            } catch (e: Exception) {
+                mainHandler.post {
+                    onError(e.message ?: "Search failed")
+                }
+            }
+        }
     }
 }
