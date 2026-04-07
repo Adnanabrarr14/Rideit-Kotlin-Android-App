@@ -7,8 +7,12 @@ import androidx.activity.compose.setContent
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.gestures.Orientation
+import androidx.compose.foundation.gestures.draggable
+import androidx.compose.foundation.gestures.rememberDraggableState
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
@@ -18,6 +22,7 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.navigationBarsPadding
+import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.statusBarsPadding
@@ -55,6 +60,7 @@ import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableFloatStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
@@ -64,19 +70,24 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.layout.onSizeChanged
+import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.text.input.VisualTransformation
+import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.google.android.gms.maps.model.CameraPosition
 import com.google.android.gms.maps.model.LatLng
 import com.google.maps.android.compose.GoogleMap
 import com.google.maps.android.compose.MapProperties
+import com.google.maps.android.compose.MapUiSettings
 import com.google.maps.android.compose.Marker
 import com.google.maps.android.compose.MarkerState
 import com.google.maps.android.compose.rememberCameraPositionState
+import kotlin.math.roundToInt
 
 class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -449,11 +460,38 @@ fun RideHomeScreen(onLogout: () -> Unit) {
     var dropOffText by remember { mutableStateOf("") }
     var menuExpanded by remember { mutableStateOf(false) }
 
-    Box(modifier = Modifier.fillMaxSize()) {
+    BoxWithConstraints(modifier = Modifier.fillMaxSize()) {
+        val density = LocalDensity.current
+        val screenHeightPx = with(density) { maxHeight.toPx() }
+
+        var panelHeightPx by remember { mutableFloatStateOf(0f) }
+
+        val minPanelTopPx = screenHeightPx * 0.32f
+        val defaultPanelTopPx = screenHeightPx * 0.60f
+
+        var panelOffsetY by remember { mutableFloatStateOf(defaultPanelTopPx) }
+
+        val maxPanelTopPx = if (panelHeightPx > 0f) {
+            (screenHeightPx - panelHeightPx).coerceAtLeast(minPanelTopPx)
+        } else {
+            defaultPanelTopPx
+        }
+
+        panelOffsetY = panelOffsetY.coerceIn(minPanelTopPx, maxPanelTopPx)
+
         GoogleMap(
             modifier = Modifier.fillMaxSize(),
             cameraPositionState = cameraPositionState,
-            properties = MapProperties(isMyLocationEnabled = false)
+            properties = MapProperties(isMyLocationEnabled = false),
+            uiSettings = MapUiSettings(
+                scrollGesturesEnabled = false,
+                zoomGesturesEnabled = false,
+                tiltGesturesEnabled = false,
+                rotationGesturesEnabled = false,
+                compassEnabled = true,
+                zoomControlsEnabled = false,
+                myLocationButtonEnabled = false
+            )
         ) {
             Marker(
                 state = MarkerState(position = islamabad),
@@ -468,10 +506,10 @@ fun RideHomeScreen(onLogout: () -> Unit) {
                 .background(
                     brush = Brush.verticalGradient(
                         colors = listOf(
-                            Color.Black.copy(alpha = 0.08f),
+                            Color.Black.copy(alpha = 0.02f),
                             Color.Transparent,
-                            Color.Black.copy(alpha = 0.25f),
-                            Color.Black.copy(alpha = 0.72f)
+                            Color.Black.copy(alpha = 0.06f),
+                            Color.Black.copy(alpha = 0.18f)
                         )
                     )
                 )
@@ -574,234 +612,250 @@ fun RideHomeScreen(onLogout: () -> Unit) {
                     }
                 }
             }
+        }
 
-            Spacer(modifier = Modifier.weight(2.25f))
-
-            Column(
+        Column(
+            modifier = Modifier
+                .offset { IntOffset(0, panelOffsetY.roundToInt()) }
+                .fillMaxWidth()
+                .onSizeChanged { panelHeightPx = it.height.toFloat() }
+                .clip(RoundedCornerShape(topStart = 28.dp, topEnd = 28.dp))
+                .background(Color(0xF00A0A0A))
+                .border(
+                    width = 1.dp,
+                    color = Color.White.copy(alpha = 0.05f),
+                    shape = RoundedCornerShape(topStart = 28.dp, topEnd = 28.dp)
+                )
+                .draggable(
+                    orientation = Orientation.Vertical,
+                    state = rememberDraggableState { delta ->
+                        panelOffsetY = (panelOffsetY + delta).coerceIn(minPanelTopPx, maxPanelTopPx)
+                    }
+                )
+                .navigationBarsPadding()
+                .padding(start = 16.dp, end = 16.dp, top = 10.dp, bottom = 12.dp)
+        ) {
+            Box(
                 modifier = Modifier
-                    .fillMaxWidth()
-                    .clip(RoundedCornerShape(topStart = 28.dp, topEnd = 28.dp))
-                    .background(Color(0xF00A0A0A))
-                    .border(
-                        width = 1.dp,
-                        color = Color.White.copy(alpha = 0.05f),
-                        shape = RoundedCornerShape(topStart = 28.dp, topEnd = 28.dp)
+                    .align(Alignment.CenterHorizontally)
+                    .padding(vertical = 6.dp)
+                    .width(48.dp)
+                    .height(5.dp)
+                    .clip(RoundedCornerShape(999.dp))
+                    .background(Color.White.copy(alpha = 0.25f))
+            )
+
+            RideCard {
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Icon(
+                        imageVector = Icons.Outlined.LocationOn,
+                        contentDescription = null,
+                        tint = Color.White,
+                        modifier = Modifier.size(30.dp)
                     )
-                    .navigationBarsPadding()
-                    .padding(start = 16.dp, end = 16.dp, top = 16.dp, bottom = 12.dp)
-            ) {
-                RideCard {
-                    Row(verticalAlignment = Alignment.CenterVertically) {
-                        Icon(
-                            imageVector = Icons.Outlined.LocationOn,
-                            contentDescription = null,
-                            tint = Color.White,
-                            modifier = Modifier.size(30.dp)
-                        )
-                        Spacer(modifier = Modifier.width(10.dp))
-                        Text(
-                            text = "Pickup Location",
-                            color = Color.White,
-                            fontSize = 18.sp,
-                            fontWeight = FontWeight.ExtraBold
-                        )
-                    }
+                    Spacer(modifier = Modifier.width(10.dp))
+                    Text(
+                        text = "Pickup Location",
+                        color = Color.White,
+                        fontSize = 18.sp,
+                        fontWeight = FontWeight.ExtraBold
+                    )
+                }
 
-                    Spacer(modifier = Modifier.height(10.dp))
-                    HorizontalDivider(color = Color.White.copy(alpha = 0.12f))
-                    Spacer(modifier = Modifier.height(10.dp))
+                Spacer(modifier = Modifier.height(10.dp))
+                HorizontalDivider(color = Color.White.copy(alpha = 0.12f))
+                Spacer(modifier = Modifier.height(10.dp))
 
-                    Row(verticalAlignment = Alignment.CenterVertically) {
-                        Icon(
-                            imageVector = Icons.Default.Place,
-                            contentDescription = null,
-                            tint = Color(0xFFFF2A2A),
-                            modifier = Modifier.size(30.dp)
-                        )
-                        Spacer(modifier = Modifier.width(10.dp))
-                        Text(
-                            text = "My Current Location",
-                            color = Color.White,
-                            fontSize = 17.sp,
-                            fontWeight = FontWeight.Bold
-                        )
-                    }
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Icon(
+                        imageVector = Icons.Default.Place,
+                        contentDescription = null,
+                        tint = Color(0xFFFF2A2A),
+                        modifier = Modifier.size(30.dp)
+                    )
+                    Spacer(modifier = Modifier.width(10.dp))
+                    Text(
+                        text = "My Current Location",
+                        color = Color.White,
+                        fontSize = 17.sp,
+                        fontWeight = FontWeight.Bold
+                    )
+                }
+            }
+
+            Spacer(modifier = Modifier.height(14.dp))
+
+            RideCard {
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Icon(
+                        imageVector = Icons.Default.Place,
+                        contentDescription = null,
+                        tint = Color(0xFFFF2A2A),
+                        modifier = Modifier.size(30.dp)
+                    )
+                    Spacer(modifier = Modifier.width(10.dp))
+                    Text(
+                        text = "Drop-off Location",
+                        color = Color.White,
+                        fontSize = 18.sp,
+                        fontWeight = FontWeight.ExtraBold
+                    )
                 }
 
                 Spacer(modifier = Modifier.height(14.dp))
-
-                RideCard {
-                    Row(verticalAlignment = Alignment.CenterVertically) {
-                        Icon(
-                            imageVector = Icons.Default.Place,
-                            contentDescription = null,
-                            tint = Color(0xFFFF2A2A),
-                            modifier = Modifier.size(30.dp)
-                        )
-                        Spacer(modifier = Modifier.width(10.dp))
-                        Text(
-                            text = "Drop-off Location",
-                            color = Color.White,
-                            fontSize = 18.sp,
-                            fontWeight = FontWeight.ExtraBold
-                        )
-                    }
-
-                    Spacer(modifier = Modifier.height(14.dp))
-
-                    Row(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .height(56.dp)
-                            .clip(RoundedCornerShape(14.dp))
-                            .background(Color(0xFF1B1B1B))
-                            .border(
-                                width = 1.dp,
-                                color = Color.White.copy(alpha = 0.08f),
-                                shape = RoundedCornerShape(14.dp)
-                            ),
-                        verticalAlignment = Alignment.CenterVertically
-                    ) {
-                        BasicTextField(
-                            value = dropOffText,
-                            onValueChange = { newText -> dropOffText = newText },
-                            singleLine = true,
-                            textStyle = TextStyle(
-                                color = Color.White,
-                                fontSize = 16.sp
-                            ),
-                            modifier = Modifier
-                                .weight(1f)
-                                .padding(horizontal = 14.dp),
-                            decorationBox = { innerTextField ->
-                                if (dropOffText.isEmpty()) {
-                                    Text(
-                                        text = "Enter drop-off location",
-                                        color = Color.White.copy(alpha = 0.45f),
-                                        fontSize = 16.sp
-                                    )
-                                }
-                                innerTextField()
-                            }
-                        )
-
-                        Box(
-                            modifier = Modifier
-                                .fillMaxHeight()
-                                .width(56.dp)
-                                .border(
-                                    width = 0.5.dp,
-                                    color = Color.White.copy(alpha = 0.12f)
-                                ),
-                            contentAlignment = Alignment.Center
-                        ) {
-                            Icon(
-                                imageVector = Icons.Default.Search,
-                                contentDescription = null,
-                                tint = Color.White,
-                                modifier = Modifier.size(30.dp)
-                            )
-                        }
-                    }
-                }
-
-                Spacer(modifier = Modifier.height(14.dp))
-
-                RideCard {
-                    Row(
-                        modifier = Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.SpaceAround
-                    ) {
-                        VehicleItem(
-                            icon = Icons.Default.DirectionsCar,
-                            title = "Economy",
-                            time = "4 min"
-                        )
-                        VehicleItem(
-                            icon = Icons.Default.DirectionsCar,
-                            title = "Premium",
-                            time = "6 min"
-                        )
-                        VehicleItem(
-                            icon = Icons.Default.DirectionsBike,
-                            title = "Bike",
-                            time = "8 min"
-                        )
-                    }
-                }
-
-                Spacer(modifier = Modifier.height(18.dp))
-
-                Button(
-                    onClick = { },
-                    shape = RoundedCornerShape(22.dp),
-                    colors = ButtonDefaults.buttonColors(
-                        containerColor = Color.Transparent
-                    ),
-                    contentPadding = PaddingValues(0.dp),
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .height(62.dp)
-                ) {
-                    Box(
-                        modifier = Modifier
-                            .fillMaxSize()
-                            .clip(RoundedCornerShape(22.dp))
-                            .background(
-                                brush = Brush.horizontalGradient(
-                                    colors = listOf(
-                                        Color(0xFFFF3B30),
-                                        Color(0xFFFF1E1E),
-                                        Color(0xFFE00000)
-                                    )
-                                )
-                            ),
-                        contentAlignment = Alignment.Center
-                    ) {
-                        Text(
-                            text = "Request Ride",
-                            color = Color.White,
-                            fontSize = 20.sp,
-                            fontWeight = FontWeight.ExtraBold
-                        )
-                    }
-                }
-
-                Spacer(modifier = Modifier.height(12.dp))
 
                 Row(
                     modifier = Modifier
                         .fillMaxWidth()
-                        .height(60.dp)
-                        .clip(RoundedCornerShape(18.dp))
-                        .background(Color(0xFF0D0D0D))
+                        .height(56.dp)
+                        .clip(RoundedCornerShape(14.dp))
+                        .background(Color(0xFF1B1B1B))
                         .border(
                             width = 1.dp,
-                            color = Color.White.copy(alpha = 0.04f),
-                            shape = RoundedCornerShape(18.dp)
+                            color = Color.White.copy(alpha = 0.08f),
+                            shape = RoundedCornerShape(14.dp)
                         ),
-                    verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.SpaceEvenly
+                    verticalAlignment = Alignment.CenterVertically
                 ) {
-                    Icon(
-                        imageVector = Icons.Default.Home,
-                        contentDescription = null,
-                        tint = Color.White.copy(alpha = 0.55f),
-                        modifier = Modifier.size(26.dp)
+                    BasicTextField(
+                        value = dropOffText,
+                        onValueChange = { newText -> dropOffText = newText },
+                        singleLine = true,
+                        textStyle = TextStyle(
+                            color = Color.White,
+                            fontSize = 16.sp
+                        ),
+                        modifier = Modifier
+                            .weight(1f)
+                            .padding(horizontal = 14.dp),
+                        decorationBox = { innerTextField ->
+                            if (dropOffText.isEmpty()) {
+                                Text(
+                                    text = "Enter drop-off location",
+                                    color = Color.White.copy(alpha = 0.45f),
+                                    fontSize = 16.sp
+                                )
+                            }
+                            innerTextField()
+                        }
                     )
-                    Icon(
-                        imageVector = Icons.Default.Place,
-                        contentDescription = null,
-                        tint = Color.White.copy(alpha = 0.35f),
-                        modifier = Modifier.size(26.dp)
+
+                    Box(
+                        modifier = Modifier
+                            .fillMaxHeight()
+                            .width(56.dp)
+                            .border(
+                                width = 0.5.dp,
+                                color = Color.White.copy(alpha = 0.12f)
+                            ),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Icon(
+                            imageVector = Icons.Default.Search,
+                            contentDescription = null,
+                            tint = Color.White,
+                            modifier = Modifier.size(30.dp)
+                        )
+                    }
+                }
+            }
+
+            Spacer(modifier = Modifier.height(14.dp))
+
+            RideCard {
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceAround
+                ) {
+                    VehicleItem(
+                        icon = Icons.Default.DirectionsCar,
+                        title = "Economy",
+                        time = "4 min"
                     )
-                    Icon(
-                        imageVector = Icons.Default.AccountCircle,
-                        contentDescription = null,
-                        tint = Color.White.copy(alpha = 0.35f),
-                        modifier = Modifier.size(26.dp)
+                    VehicleItem(
+                        icon = Icons.Default.DirectionsCar,
+                        title = "Premium",
+                        time = "6 min"
+                    )
+                    VehicleItem(
+                        icon = Icons.Default.DirectionsBike,
+                        title = "Bike",
+                        time = "8 min"
                     )
                 }
+            }
+
+            Spacer(modifier = Modifier.height(18.dp))
+
+            Button(
+                onClick = { },
+                shape = RoundedCornerShape(22.dp),
+                colors = ButtonDefaults.buttonColors(
+                    containerColor = Color.Transparent
+                ),
+                contentPadding = PaddingValues(0.dp),
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .height(62.dp)
+            ) {
+                Box(
+                    modifier = Modifier
+                        .fillMaxSize()
+                        .clip(RoundedCornerShape(22.dp))
+                        .background(
+                            brush = Brush.horizontalGradient(
+                                colors = listOf(
+                                    Color(0xFFFF3B30),
+                                    Color(0xFFFF1E1E),
+                                    Color(0xFFE00000)
+                                )
+                            )
+                        ),
+                    contentAlignment = Alignment.Center
+                ) {
+                    Text(
+                        text = "Request Ride",
+                        color = Color.White,
+                        fontSize = 20.sp,
+                        fontWeight = FontWeight.ExtraBold
+                    )
+                }
+            }
+
+            Spacer(modifier = Modifier.height(12.dp))
+
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .height(60.dp)
+                    .clip(RoundedCornerShape(18.dp))
+                    .background(Color(0xFF0D0D0D))
+                    .border(
+                        width = 1.dp,
+                        color = Color.White.copy(alpha = 0.04f),
+                        shape = RoundedCornerShape(18.dp)
+                    ),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.SpaceEvenly
+            ) {
+                Icon(
+                    imageVector = Icons.Default.Home,
+                    contentDescription = null,
+                    tint = Color.White.copy(alpha = 0.55f),
+                    modifier = Modifier.size(26.dp)
+                )
+                Icon(
+                    imageVector = Icons.Default.Place,
+                    contentDescription = null,
+                    tint = Color.White.copy(alpha = 0.35f),
+                    modifier = Modifier.size(26.dp)
+                )
+                Icon(
+                    imageVector = Icons.Default.AccountCircle,
+                    contentDescription = null,
+                    tint = Color.White.copy(alpha = 0.35f),
+                    modifier = Modifier.size(26.dp)
+                )
             }
         }
     }
