@@ -1,8 +1,7 @@
 package com.example.rideit.navigation
 
-object Routes {
-    const val LOGIN = "login"
-    const val SIGNUP = "signup"
-    const val HOME = "home"
-    const val MAP = "map"
+sealed class Routes(val route: String) {
+    data object Login : Routes("login")
+    data object Home : Routes("home")
+    data object Map : Routes("map")
 }

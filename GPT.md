@@ -63,3 +63,34 @@
 - App runs without crash
 - Navigation structure ready for real UI integration
 
+
+
+- # Rideit - Phase 2 Progress
+
+## Current Phase
+Phase 2 - UI Integration + Map Base
+
+## Working
+- Navigation structure completed
+- Login -> Home -> Map flow working
+- Firebase login working
+- Google Map loading
+- Current location working
+- Pickup / Dropoff panel visible
+- Login screen light theme fixed
+- Home screen light theme fixed
+- Map screen white theme and purple Search button working
+
+## Not completed yet
+- Pickup suggestions/autocomplete
+- Dropoff suggestions/autocomplete
+- Search button action
+- Geocoding integration
+- Route drawing
+- Final Rideit behavior
+
+## Current stable checkpoint
+Project is stable and runnable.
+Do not change Gradle/Kotlin setup unless necessary.
+Next task: add professional location suggestions safely.
+

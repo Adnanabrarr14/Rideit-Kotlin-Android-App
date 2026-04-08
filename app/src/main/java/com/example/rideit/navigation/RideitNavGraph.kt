@@ -1,77 +1,44 @@
 package com.example.rideit.navigation
 
-import androidx.compose.foundation.layout.Box
-import androidx.compose.foundation.layout.fillMaxSize
-import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
-import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.navigation.NavHostController
 import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
+import com.example.rideit.ui.map.MapScreen
+import com.example.rideit.ui.screens.HomeScreen
+import com.example.rideit.ui.screens.LoginScreen
 
 @Composable
 fun RideitNavGraph(
-    navController: NavHostController
+    navController: NavHostController,
+    modifier: Modifier = Modifier
 ) {
     NavHost(
         navController = navController,
-        startDestination = Routes.LOGIN
+        startDestination = Routes.Login.route,
+        modifier = modifier
     ) {
-        composable(Routes.LOGIN) {
-            TemporaryLoginScreen()
+        composable(Routes.Login.route) {
+            LoginScreen(
+                onLoginSuccess = {
+                    navController.navigate(Routes.Home.route) {
+                        popUpTo(Routes.Login.route) { inclusive = true }
+                    }
+                }
+            )
         }
 
-        composable(Routes.SIGNUP) {
-            TemporarySignupScreen()
+        composable(Routes.Home.route) {
+            HomeScreen(
+                onOpenMap = {
+                    navController.navigate(Routes.Map.route)
+                }
+            )
         }
 
-        composable(Routes.HOME) {
-            TemporaryHomeScreen()
+        composable(Routes.Map.route) {
+            MapScreen()
         }
-
-        composable(Routes.MAP) {
-            TemporaryMapScreen()
-        }
-    }
-}
-
-@Composable
-fun TemporaryLoginScreen() {
-    Box(
-        modifier = Modifier.fillMaxSize(),
-        contentAlignment = Alignment.Center
-    ) {
-        Text(text = "Login Screen")
-    }
-}
-
-@Composable
-fun TemporarySignupScreen() {
-    Box(
-        modifier = Modifier.fillMaxSize(),
-        contentAlignment = Alignment.Center
-    ) {
-        Text(text = "Signup Screen")
-    }
-}
-
-@Composable
-fun TemporaryHomeScreen() {
-    Box(
-        modifier = Modifier.fillMaxSize(),
-        contentAlignment = Alignment.Center
-    ) {
-        Text(text = "Home Screen")
-    }
-}
-
-@Composable
-fun TemporaryMapScreen() {
-    Box(
-        modifier = Modifier.fillMaxSize(),
-        contentAlignment = Alignment.Center
-    ) {
-        Text(text = "Map Screen")
     }
 }
