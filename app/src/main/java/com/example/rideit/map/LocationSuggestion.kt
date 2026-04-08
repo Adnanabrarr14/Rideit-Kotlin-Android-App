@@ -1,7 +1,7 @@
-package com.example.rideit.ui.map
+package com.example.rideit.map
 
 data class LocationSuggestion(
-    val id: String,
+    val placeId: String,
     val title: String,
     val subtitle: String = ""
 )

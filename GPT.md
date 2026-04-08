@@ -94,3 +94,37 @@ Project is stable and runnable.
 Do not change Gradle/Kotlin setup unless necessary.
 Next task: add professional location suggestions safely.
 
+# Rideit - Phase 2 Checkpoint
+
+## Status: Stable ✅
+
+### Completed
+- Navigation flow (Login → Home → Map)
+- Firebase login working
+- Google Map integrated
+- Bottom panel UI (Uber-style)
+- Pickup & Dropoff fields
+- Google Places Autocomplete integrated
+- Fallback suggestions working
+- Search button enabled only when both locations selected
+- Toast message on search click
+
+### Not Completed
+- Fetch place details (lat/lng)
+- Directions API integration
+- Route drawing (polyline on map)
+- Fare calculation
+
+### Next Task
+Implement:
+1. Get lat/lng from selected placeId
+2. Call Google Directions API
+3. Decode polyline
+4. Draw route on map
+
+### Notes
+- API key configured correctly
+- App stable (no crashes)
+- Do NOT modify navigation or UI structure
+
+
