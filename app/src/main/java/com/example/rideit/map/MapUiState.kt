@@ -1,5 +1,7 @@
 package com.example.rideit.map
 
+import com.google.android.gms.maps.model.LatLng
+
 data class MapUiState(
     val pickupText: String = "",
     val dropoffText: String = "",
@@ -7,8 +9,14 @@ data class MapUiState(
     val dropoffSuggestions: List<LocationSuggestion> = emptyList(),
     val selectedPickupPlaceId: String = "",
     val selectedDropoffPlaceId: String = "",
-    val searchMessage: String? = null
+    val searchMessage: String? = null,
+    val pickupLatLng: LatLng? = null,
+    val dropoffLatLng: LatLng? = null,
+    val showSearchMarkers: Boolean = false,
+    val searchRequestId: Long = 0L,
+    val routePoints: List<LatLng> = emptyList(),
+    val isRouteLoading: Boolean = false
 ) {
     val isSearchEnabled: Boolean
-        get() = selectedPickupPlaceId.isNotBlank() && selectedDropoffPlaceId.isNotBlank()
+        get() = pickupText.isNotBlank() && dropoffText.isNotBlank()
 }

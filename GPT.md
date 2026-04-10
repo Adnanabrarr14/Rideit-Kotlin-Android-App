@@ -128,3 +128,42 @@ Implement:
 - Do NOT modify navigation or UI structure
 
 
+# Rideit - Phase 2 Checkpoint
+
+## Status
+Stable and working
+
+## Working
+- Login → Home → Map flow
+- Bottom panel UI
+- Pickup / Dropoff suggestions
+- Hard-locked service area for Islamabad / Rawalpindi / Lahore
+- Rich local fallback suggestions
+- Search button validation
+- Pickup marker + Dropoff marker
+- Camera moves to fit selected points
+- Route drawing code added
+
+## Current blocker
+- Search button says: "Routes API key missing"
+- Need to add this meta-data in AndroidManifest.xml inside <application>:
+
+<meta-data
+android:name="com.example.rideit.ROUTES_API_KEY"
+android:value="YOUR_ROUTES_KEY_HERE" />
+
+## Already using
+- com.google.android.geo.API_KEY for Maps / Places
+
+## Next task
+1. Add ROUTES_API_KEY in AndroidManifest.xml
+2. Run app again
+3. Test Search button
+4. If needed, fix Routes API restriction / permission
+5. Finish real route drawing
+
+## Important
+- Do not break current UI
+- Do not change navigation
+- Do not change stable autocomplete flow
+
