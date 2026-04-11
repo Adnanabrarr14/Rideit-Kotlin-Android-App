@@ -167,3 +167,106 @@ android:value="YOUR_ROUTES_KEY_HERE" />
 - Do not change navigation
 - Do not change stable autocomplete flow
 
+
+# Rideit Project Progress
+
+## Phase 1 — Structure ✅
+- Navigation structure created
+- MainActivity cleaned
+- RideitApp.kt connected
+- Routes.kt and RideitNavGraph.kt working
+- App successfully running
+- Base UI implemented in Rideit style
+
+---
+
+## Phase 2 — UI Integration ✅
+- Login → Home → Map flow connected
+- Firebase Authentication working
+- Google Maps integrated
+- Current location working
+- Pickup / Dropoff input panel added
+- Suggestions working (Geocoder)
+- Service area restricted (Islamabad / Rawalpindi / Lahore)
+- Search button working
+- Pickup & Dropoff markers working
+- Camera fit working
+- Basic route drawing implemented
+- UI theme fixed (light theme, purple button)
+
+---
+
+## Phase 3 — Clean Architecture Refactor
+
+### Step 1 — Structure Separation ✅
+- Created modular map feature:
+    - `map/model`
+    - `map/ui`
+    - `map/viewmodel`
+- Moved:
+    - LocationSuggestion.kt → model
+    - MapUiState.kt → model
+    - MapViewModel.kt → viewmodel
+    - MapScreen.kt → ui
+- Updated navigation imports
+- Fixed HomeScreen parameter mismatch
+- Fixed navigation crash after login
+- Firebase login & signup fully working
+- App is stable and running
+
+---
+
+## Current App Status 🚀
+- Login & Signup working with Firebase
+- Navigation working (Login → Home → Map)
+- Map features working
+- Clean structure started
+- Project stable for next phase
+
+---
+
+## Next Step
+👉 Phase 3 Step 2 — Repository Layer
+
+Goal:
+- Move Geocoder + search logic from ViewModel → Repository
+- Make ViewModel clean and professional
+
+
+## Phase 3 — Clean Architecture Refactor
+
+### Step 2 — Repository Layer ✅
+- Created map/repository/MapRepository.kt
+- Moved Geocoder + search logic from ViewModel → Repository
+- ViewModel now handles only UI state
+- Map feature structure now:
+    - model
+    - repository
+    - ui
+    - viewmodel
+- App tested and stable after refactor
+
+### Step 3 — Real Directions Route ⏸️
+- Added route API-ready repository code
+- Added polyline decoding support
+- App remains stable
+- Real road route pending because Google Cloud billing is not enabled
+- Current fallback route is straight line between pickup and dropoff
+
+## Phase 4 — Ride Experience Flow
+
+### Step 1 — Ride Options + Stable Suggestions ✅
+- Added ride options after search:
+  - Bike
+  - Mini
+  - Car
+- Added estimated fare and time
+- Added ride selection
+- Added Confirm Ride button
+- Added ride confirmation message
+- Replaced unstable live search with safe local suggestion system
+- Suggestions now work for supported local places
+- Fixed crash during typing/search
+- Fixed bottom panel height so it no longer covers the whole map
+- App is stable
+

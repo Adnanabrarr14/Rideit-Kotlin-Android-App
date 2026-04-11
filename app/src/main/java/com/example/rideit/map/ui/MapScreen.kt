@@ -1,14 +1,17 @@
 package com.example.rideit.map.ui
 
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.statusBarsPadding
@@ -37,9 +40,11 @@ import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.example.rideit.map.model.LocationSuggestion
+import com.example.rideit.map.model.RideOption
 import com.example.rideit.map.viewmodel.MapViewModel
 import com.google.android.gms.maps.CameraUpdateFactory
 import com.google.android.gms.maps.model.BitmapDescriptorFactory
@@ -109,9 +114,7 @@ fun MapScreen(
         GoogleMap(
             modifier = Modifier.fillMaxSize(),
             cameraPositionState = cameraPositionState,
-            properties = MapProperties(
-                isMyLocationEnabled = false
-            )
+            properties = MapProperties(isMyLocationEnabled = false)
         ) {
             uiState.pickupLatLng?.let { pickup ->
                 Marker(
@@ -158,86 +161,150 @@ fun MapScreen(
             modifier = Modifier
                 .align(Alignment.BottomCenter)
                 .fillMaxWidth()
-                .navigationBarsPadding(),
+                .navigationBarsPadding()
+                .heightIn(max = 430.dp),
             shape = RoundedCornerShape(topStart = 24.dp, topEnd = 24.dp),
             tonalElevation = 8.dp,
             shadowElevation = 8.dp
         ) {
-            Column(
+            LazyColumn(
                 modifier = Modifier
                     .fillMaxWidth()
                     .padding(16.dp),
                 verticalArrangement = Arrangement.spacedBy(10.dp)
             ) {
-                Text(
-                    text = "Choose your ride",
-                    style = MaterialTheme.typography.titleMedium
-                )
-
-                OutlinedTextField(
-                    value = uiState.pickupText,
-                    onValueChange = mapViewModel::onPickupTextChanged,
-                    label = { Text("Pickup location") },
-                    modifier = Modifier.fillMaxWidth(),
-                    singleLine = true
-                )
-
-                if (uiState.pickupSuggestions.isNotEmpty()) {
-                    SuggestionList(
-                        suggestions = uiState.pickupSuggestions,
-                        onSuggestionClick = mapViewModel::onPickupSuggestionSelected
+                item {
+                    Text(
+                        text = "Choose your ride",
+                        style = MaterialTheme.typography.titleMedium
                     )
                 }
 
-                OutlinedTextField(
-                    value = uiState.dropoffText,
-                    onValueChange = mapViewModel::onDropoffTextChanged,
-                    label = { Text("Dropoff location") },
-                    modifier = Modifier.fillMaxWidth(),
-                    singleLine = true
-                )
+                item {
+                    OutlinedTextField(
+                        value = uiState.pickupText,
+                        onValueChange = mapViewModel::onPickupTextChanged,
+                        label = { Text("Pickup location") },
+                        modifier = Modifier.fillMaxWidth(),
+                        singleLine = true
+                    )
+                }
+
+                if (uiState.pickupSuggestions.isNotEmpty()) {
+                    item {
+                        SuggestionList(
+                            suggestions = uiState.pickupSuggestions,
+                            onSuggestionClick = mapViewModel::onPickupSuggestionSelected
+                        )
+                    }
+                }
+
+                item {
+                    OutlinedTextField(
+                        value = uiState.dropoffText,
+                        onValueChange = mapViewModel::onDropoffTextChanged,
+                        label = { Text("Dropoff location") },
+                        modifier = Modifier.fillMaxWidth(),
+                        singleLine = true
+                    )
+                }
 
                 if (uiState.dropoffSuggestions.isNotEmpty()) {
-                    SuggestionList(
-                        suggestions = uiState.dropoffSuggestions,
-                        onSuggestionClick = mapViewModel::onDropoffSuggestionSelected
+                    item {
+                        SuggestionList(
+                            suggestions = uiState.dropoffSuggestions,
+                            onSuggestionClick = mapViewModel::onDropoffSuggestionSelected
+                        )
+                    }
+                }
+
+                item {
+                    Text(
+                        text = "Try: Bahria Town, DHA, Blue Area, Saddar, Johar Town",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
                     )
                 }
 
                 uiState.errorMessage?.let { message ->
-                    Text(
-                        text = message,
-                        color = MaterialTheme.colorScheme.error,
-                        style = MaterialTheme.typography.bodySmall
-                    )
-                }
-
-                Button(
-                    onClick = mapViewModel::onSearchClicked,
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .height(52.dp),
-                    shape = RoundedCornerShape(14.dp)
-                ) {
-                    if (uiState.isLoading) {
-                        CircularProgressIndicator(
-                            modifier = Modifier
-                                .height(20.dp)
-                                .width(20.dp),
-                            strokeWidth = 2.dp
+                    item {
+                        Text(
+                            text = message,
+                            color = MaterialTheme.colorScheme.error,
+                            style = MaterialTheme.typography.bodySmall
                         )
-                        Spacer(modifier = Modifier.width(8.dp))
-                        Text("Searching...")
-                    } else {
-                        Text("Search")
                     }
                 }
 
-                TextButton(
-                    onClick = mapViewModel::clearError,
-                    modifier = Modifier.align(Alignment.End)
-                ) {
-                    Text("Clear message")
+                item {
+                    Button(
+                        onClick = mapViewModel::onSearchClicked,
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .height(52.dp),
+                        shape = RoundedCornerShape(14.dp)
+                    ) {
+                        if (uiState.isLoading) {
+                            CircularProgressIndicator(
+                                modifier = Modifier
+                                    .height(20.dp)
+                                    .width(20.dp),
+                                strokeWidth = 2.dp
+                            )
+                            Spacer(modifier = Modifier.width(8.dp))
+                            Text("Searching...")
+                        } else {
+                            Text("Search")
+                        }
+                    }
+                }
+
+                if (uiState.showRideOptions && uiState.rideOptions.isNotEmpty()) {
+                    item {
+                        Text(
+                            text = "Ride options",
+                            style = MaterialTheme.typography.titleSmall
+                        )
+                    }
+
+                    items(uiState.rideOptions) { option ->
+                        RideOptionCard(
+                            option = option,
+                            isSelected = uiState.selectedRideOption?.id == option.id,
+                            onClick = { mapViewModel.onRideOptionSelected(option) }
+                        )
+                    }
+
+                    item {
+                        Button(
+                            onClick = mapViewModel::onConfirmRideClicked,
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .height(52.dp),
+                            shape = RoundedCornerShape(14.dp)
+                        ) {
+                            Text("Confirm Ride")
+                        }
+                    }
+                }
+
+                uiState.rideConfirmedMessage?.let { message ->
+                    item {
+                        Text(
+                            text = message,
+                            color = Color(0xFF2E7D32),
+                            style = MaterialTheme.typography.bodyMedium
+                        )
+                    }
+                }
+
+                item {
+                    TextButton(
+                        onClick = mapViewModel::clearError,
+                        modifier = Modifier.fillMaxWidth()
+                    ) {
+                        Text("Clear message")
+                    }
                 }
             }
         }
@@ -257,6 +324,7 @@ private fun SuggestionList(
         LazyColumn(
             modifier = Modifier
                 .fillMaxWidth()
+                .heightIn(max = 180.dp)
                 .background(MaterialTheme.colorScheme.surface)
         ) {
             items(suggestions) { suggestion ->
@@ -270,16 +338,79 @@ private fun SuggestionList(
                         text = suggestion.title,
                         style = MaterialTheme.typography.bodyLarge
                     )
-
                     Text(
                         text = suggestion.fullAddress,
                         style = MaterialTheme.typography.bodySmall,
                         color = MaterialTheme.colorScheme.onSurfaceVariant
                     )
                 }
-
                 HorizontalDivider()
             }
+        }
+    }
+}
+
+@Composable
+private fun RideOptionCard(
+    option: RideOption,
+    isSelected: Boolean,
+    onClick: () -> Unit
+) {
+    val borderColor = if (isSelected) Color(0xFF7E57C2) else Color(0xFFE0E0E0)
+    val backgroundColor = if (isSelected) Color(0xFFF3EEFF) else MaterialTheme.colorScheme.surface
+
+    ElevatedCard(
+        modifier = Modifier
+            .fillMaxWidth()
+            .clip(RoundedCornerShape(16.dp))
+            .border(
+                width = 1.5.dp,
+                color = borderColor,
+                shape = RoundedCornerShape(16.dp)
+            )
+    ) {
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .background(backgroundColor)
+                .padding(14.dp),
+            horizontalArrangement = Arrangement.SpaceBetween,
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Column(
+                modifier = Modifier.weight(1f)
+            ) {
+                Text(
+                    text = option.title,
+                    style = MaterialTheme.typography.titleSmall
+                )
+                Text(
+                    text = option.subtitle,
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+            }
+
+            Column(
+                horizontalAlignment = Alignment.End
+            ) {
+                Text(
+                    text = option.estimatedFare,
+                    style = MaterialTheme.typography.titleSmall
+                )
+                Text(
+                    text = option.estimatedTime,
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+            }
+        }
+
+        TextButton(
+            onClick = onClick,
+            modifier = Modifier.fillMaxWidth()
+        ) {
+            Text(if (isSelected) "Selected" else "Select")
         }
     }
 }

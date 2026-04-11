@@ -1,47 +1,37 @@
 package com.example.rideit.map.viewmodel
 
 import android.app.Application
-import android.location.Address
-import android.location.Geocoder
-import android.os.Build
 import androidx.lifecycle.AndroidViewModel
-import androidx.lifecycle.viewModelScope
 import com.example.rideit.map.model.LocationSuggestion
 import com.example.rideit.map.model.MapUiState
+import com.example.rideit.map.model.RideOption
+import com.example.rideit.map.repository.MapRepository
 import com.google.android.gms.maps.model.LatLng
-import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
-import kotlinx.coroutines.launch
-import kotlinx.coroutines.suspendCancellableCoroutine
-import kotlinx.coroutines.withContext
-import java.util.Locale
-import kotlin.coroutines.resume
+import kotlin.math.roundToInt
 
 class MapViewModel(application: Application) : AndroidViewModel(application) {
 
+    private val repository = MapRepository(application.applicationContext)
+
     private val _uiState = MutableStateFlow(MapUiState())
     val uiState: StateFlow<MapUiState> = _uiState.asStateFlow()
-
-    private val allowedCities = listOf(
-        "Islamabad",
-        "Rawalpindi",
-        "Lahore"
-    )
 
     fun onPickupTextChanged(value: String) {
         _uiState.value = _uiState.value.copy(
             pickupText = value,
             selectedPickup = null,
             pickupLatLng = null,
-            pickupSuggestions = emptyList(),
+            pickupSuggestions = repository.searchLocationSuggestions(value),
             routePoints = emptyList(),
+            rideOptions = emptyList(),
+            selectedRideOption = null,
+            showRideOptions = false,
+            rideConfirmedMessage = null,
             errorMessage = null
         )
-
-        if (value.trim().length < 2) return
-        loadSuggestions(query = value, isPickup = true)
     }
 
     fun onDropoffTextChanged(value: String) {
@@ -49,13 +39,14 @@ class MapViewModel(application: Application) : AndroidViewModel(application) {
             dropoffText = value,
             selectedDropoff = null,
             dropoffLatLng = null,
-            dropoffSuggestions = emptyList(),
+            dropoffSuggestions = repository.searchLocationSuggestions(value),
             routePoints = emptyList(),
+            rideOptions = emptyList(),
+            selectedRideOption = null,
+            showRideOptions = false,
+            rideConfirmedMessage = null,
             errorMessage = null
         )
-
-        if (value.trim().length < 2) return
-        loadSuggestions(query = value, isPickup = false)
     }
 
     fun onPickupSuggestionSelected(suggestion: LocationSuggestion) {
@@ -63,13 +54,18 @@ class MapViewModel(application: Application) : AndroidViewModel(application) {
 
         _uiState.value = _uiState.value.copy(
             pickupText = suggestion.title,
-            pickupSuggestions = emptyList(),
             selectedPickup = suggestion,
             pickupLatLng = pickupLatLng,
+            pickupSuggestions = emptyList(),
+            routePoints = emptyList(),
+            rideOptions = emptyList(),
+            selectedRideOption = null,
+            showRideOptions = false,
+            rideConfirmedMessage = null,
             errorMessage = null
         )
 
-        buildSimpleRouteIfPossible()
+        buildPreviewRouteIfPossible()
     }
 
     fun onDropoffSuggestionSelected(suggestion: LocationSuggestion) {
@@ -77,13 +73,18 @@ class MapViewModel(application: Application) : AndroidViewModel(application) {
 
         _uiState.value = _uiState.value.copy(
             dropoffText = suggestion.title,
-            dropoffSuggestions = emptyList(),
             selectedDropoff = suggestion,
             dropoffLatLng = dropoffLatLng,
+            dropoffSuggestions = emptyList(),
+            routePoints = emptyList(),
+            rideOptions = emptyList(),
+            selectedRideOption = null,
+            showRideOptions = false,
+            rideConfirmedMessage = null,
             errorMessage = null
         )
 
-        buildSimpleRouteIfPossible()
+        buildPreviewRouteIfPossible()
     }
 
     fun onSearchClicked() {
@@ -96,25 +97,34 @@ class MapViewModel(application: Application) : AndroidViewModel(application) {
             return
         }
 
-        viewModelScope.launch {
-            _uiState.value = _uiState.value.copy(
-                isLoading = true,
-                errorMessage = null
-            )
+        _uiState.value = _uiState.value.copy(
+            isLoading = true,
+            errorMessage = null,
+            rideConfirmedMessage = null
+        )
 
-            val pickup = geocodeSingleAddress(state.pickupText)
-            val dropoff = geocodeSingleAddress(state.dropoffText)
+        try {
+            val pickup = repository.findPlace(state.pickupText)
+            val dropoff = repository.findPlace(state.dropoffText)
 
             if (pickup == null || dropoff == null) {
                 _uiState.value = _uiState.value.copy(
                     isLoading = false,
-                    errorMessage = "Could not find one or both locations in Islamabad, Rawalpindi, or Lahore."
+                    errorMessage = "Select a valid place from suggestions."
                 )
-                return@launch
+                return
             }
 
             val pickupLatLng = LatLng(pickup.latitude, pickup.longitude)
             val dropoffLatLng = LatLng(dropoff.latitude, dropoff.longitude)
+
+            val routePoints = repository.getRoutePoints(
+                origin = pickupLatLng,
+                destination = dropoffLatLng
+            )
+
+            val distanceKm = repository.calculateDistanceKm(pickupLatLng, dropoffLatLng)
+            val rideOptions = buildRideOptions(distanceKm)
 
             _uiState.value = _uiState.value.copy(
                 isLoading = false,
@@ -126,147 +136,98 @@ class MapViewModel(application: Application) : AndroidViewModel(application) {
                 dropoffLatLng = dropoffLatLng,
                 pickupSuggestions = emptyList(),
                 dropoffSuggestions = emptyList(),
-                routePoints = listOf(pickupLatLng, dropoffLatLng),
+                routePoints = routePoints,
+                rideOptions = rideOptions,
+                selectedRideOption = rideOptions.firstOrNull(),
+                showRideOptions = rideOptions.isNotEmpty(),
+                rideConfirmedMessage = null,
                 errorMessage = null
             )
+        } catch (_: Exception) {
+            _uiState.value = _uiState.value.copy(
+                isLoading = false,
+                errorMessage = "Search failed. Please try again."
+            )
         }
+    }
+
+    fun onRideOptionSelected(option: RideOption) {
+        _uiState.value = _uiState.value.copy(
+            selectedRideOption = option,
+            rideConfirmedMessage = null
+        )
+    }
+
+    fun onConfirmRideClicked() {
+        val selectedRide = _uiState.value.selectedRideOption ?: run {
+            _uiState.value = _uiState.value.copy(
+                errorMessage = "Please select a ride option first."
+            )
+            return
+        }
+
+        _uiState.value = _uiState.value.copy(
+            rideConfirmedMessage = "${selectedRide.title} ride confirmed.",
+            errorMessage = null
+        )
     }
 
     fun clearError() {
         _uiState.value = _uiState.value.copy(errorMessage = null)
     }
 
-    private fun buildSimpleRouteIfPossible() {
+    private fun buildPreviewRouteIfPossible() {
         val pickup = _uiState.value.pickupLatLng
         val dropoff = _uiState.value.dropoffLatLng
 
         if (pickup != null && dropoff != null) {
             _uiState.value = _uiState.value.copy(
-                routePoints = listOf(pickup, dropoff)
+                routePoints = listOf(pickup, dropoff),
+                rideOptions = emptyList(),
+                selectedRideOption = null,
+                showRideOptions = false,
+                rideConfirmedMessage = null
             )
         }
     }
 
-    private fun loadSuggestions(query: String, isPickup: Boolean) {
-        viewModelScope.launch {
-            val results = searchLocationSuggestions(query)
+    private fun buildRideOptions(distanceKm: Double): List<RideOption> {
+        val safeDistance = distanceKm.coerceAtLeast(1.0)
 
-            if (isPickup) {
-                _uiState.value = _uiState.value.copy(
-                    pickupSuggestions = results
-                )
-            } else {
-                _uiState.value = _uiState.value.copy(
-                    dropoffSuggestions = results
-                )
-            }
-        }
-    }
+        val bikeFare = (80 + safeDistance * 18).roundToInt()
+        val miniFare = (140 + safeDistance * 24).roundToInt()
+        val carFare = (220 + safeDistance * 32).roundToInt()
 
-    private suspend fun searchLocationSuggestions(query: String): List<LocationSuggestion> {
-        return withContext(Dispatchers.IO) {
-            try {
-                val geocoder = Geocoder(getApplication(), Locale.getDefault())
+        val bikeTime = estimateTimeMinutes(safeDistance, 28.0)
+        val miniTime = estimateTimeMinutes(safeDistance, 32.0)
+        val carTime = estimateTimeMinutes(safeDistance, 35.0)
 
-                val addresses = getAddressesFromName(geocoder, query, 10)
-
-                addresses
-                    .filter { address -> isAllowedCity(address) }
-                    .mapNotNull { address ->
-                        val title = buildSuggestionTitle(address)
-                        val fullAddress = address.getAddressLine(0) ?: title
-
-                        if (title.isBlank()) {
-                            null
-                        } else {
-                            LocationSuggestion(
-                                title = title,
-                                fullAddress = fullAddress,
-                                latitude = address.latitude,
-                                longitude = address.longitude
-                            )
-                        }
-                    }
-                    .distinctBy { it.fullAddress.lowercase() }
-                    .take(6)
-            } catch (e: Exception) {
-                emptyList()
-            }
-        }
-    }
-
-    private suspend fun geocodeSingleAddress(query: String): LocationSuggestion? {
-        return withContext(Dispatchers.IO) {
-            try {
-                val geocoder = Geocoder(getApplication(), Locale.getDefault())
-                val addresses = getAddressesFromName(geocoder, query, 5)
-
-                val validAddress = addresses.firstOrNull { address ->
-                    isAllowedCity(address)
-                } ?: return@withContext null
-
-                val title = buildSuggestionTitle(validAddress)
-                val fullAddress = validAddress.getAddressLine(0) ?: title
-
-                LocationSuggestion(
-                    title = title,
-                    fullAddress = fullAddress,
-                    latitude = validAddress.latitude,
-                    longitude = validAddress.longitude
-                )
-            } catch (e: Exception) {
-                null
-            }
-        }
-    }
-
-    private fun isAllowedCity(address: Address): Boolean {
-        val cityValues = listOfNotNull(
-            address.locality,
-            address.subAdminArea,
-            address.adminArea
+        return listOf(
+            RideOption(
+                id = "bike",
+                title = "Bike",
+                subtitle = "Affordable quick ride",
+                estimatedFare = "PKR $bikeFare",
+                estimatedTime = "$bikeTime min"
+            ),
+            RideOption(
+                id = "mini",
+                title = "Mini",
+                subtitle = "Budget everyday ride",
+                estimatedFare = "PKR $miniFare",
+                estimatedTime = "$miniTime min"
+            ),
+            RideOption(
+                id = "car",
+                title = "Car",
+                subtitle = "Comfort ride",
+                estimatedFare = "PKR $carFare",
+                estimatedTime = "$carTime min"
+            )
         )
-
-        return cityValues.any { city ->
-            allowedCities.any { allowed ->
-                city.contains(allowed, ignoreCase = true)
-            }
-        }
     }
 
-    private fun buildSuggestionTitle(address: Address): String {
-        return when {
-            !address.featureName.isNullOrBlank() && !address.locality.isNullOrBlank() ->
-                "${address.featureName}, ${address.locality}"
-
-            !address.thoroughfare.isNullOrBlank() && !address.locality.isNullOrBlank() ->
-                "${address.thoroughfare}, ${address.locality}"
-
-            !address.subLocality.isNullOrBlank() && !address.locality.isNullOrBlank() ->
-                "${address.subLocality}, ${address.locality}"
-
-            !address.locality.isNullOrBlank() ->
-                address.locality ?: ""
-
-            else ->
-                address.getAddressLine(0) ?: ""
-        }
-    }
-
-    private suspend fun getAddressesFromName(
-        geocoder: Geocoder,
-        query: String,
-        maxResults: Int
-    ): List<Address> {
-        return if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
-            suspendCancellableCoroutine { continuation ->
-                geocoder.getFromLocationName(query, maxResults) { addresses ->
-                    continuation.resume(addresses ?: emptyList())
-                }
-            }
-        } else {
-            @Suppress("DEPRECATION")
-            geocoder.getFromLocationName(query, maxResults) ?: emptyList()
-        }
+    private fun estimateTimeMinutes(distanceKm: Double, averageSpeedKmH: Double): Int {
+        return ((distanceKm / averageSpeedKmH) * 60).roundToInt().coerceAtLeast(3)
     }
 }
