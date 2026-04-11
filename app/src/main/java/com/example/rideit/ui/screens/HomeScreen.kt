@@ -17,7 +17,7 @@ import androidx.compose.ui.unit.dp
 
 @Composable
 fun HomeScreen(
-    onOpenMap: () -> Unit
+    onGoToMap: () -> Unit
 ) {
     Column(
         modifier = Modifier
@@ -34,7 +34,7 @@ fun HomeScreen(
         Spacer(modifier = Modifier.height(16.dp))
 
         Button(
-            onClick = onOpenMap,
+            onClick = onGoToMap,
             colors = ButtonDefaults.buttonColors(
                 containerColor = Color(0xFF7E57C2),
                 contentColor = Color.White

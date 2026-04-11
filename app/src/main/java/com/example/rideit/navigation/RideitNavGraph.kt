@@ -5,9 +5,9 @@ import androidx.compose.ui.Modifier
 import androidx.navigation.NavHostController
 import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
+import com.example.rideit.map.ui.MapScreen
 import com.example.rideit.ui.screens.HomeScreen
 import com.example.rideit.ui.screens.LoginScreen
-import com.example.rideit.ui.screens.MapScreen
 
 @Composable
 fun RideitNavGraph(
@@ -31,7 +31,7 @@ fun RideitNavGraph(
 
         composable(Routes.Home.route) {
             HomeScreen(
-                onOpenMap = {
+                onGoToMap = {
                     navController.navigate(Routes.Map.route)
                 }
             )
