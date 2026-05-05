@@ -4,18 +4,7 @@ import com.google.firebase.auth.FirebaseAuth
 
 object FirebaseManager {
 
-    private val auth = FirebaseAuth.getInstance()
-
-    fun signup(
-        email: String,
-        password: String,
-        onSuccess: () -> Unit,
-        onError: (String) -> Unit
-    ) {
-        auth.createUserWithEmailAndPassword(email, password)
-            .addOnSuccessListener { onSuccess() }
-            .addOnFailureListener { onError(it.message ?: "Signup failed") }
-    }
+    private val auth: FirebaseAuth = FirebaseAuth.getInstance()
 
     fun login(
         email: String,
@@ -23,16 +12,41 @@ object FirebaseManager {
         onSuccess: () -> Unit,
         onError: (String) -> Unit
     ) {
-        auth.signInWithEmailAndPassword(email, password)
-            .addOnSuccessListener { onSuccess() }
-            .addOnFailureListener { onError(it.message ?: "Login failed") }
+        auth.signInWithEmailAndPassword(email.trim(), password)
+            .addOnSuccessListener {
+                onSuccess()
+            }
+            .addOnFailureListener { exception ->
+                onError(exception.message ?: "Login failed")
+            }
     }
 
-    fun logout() {
-        auth.signOut()
+    fun signup(
+        email: String,
+        password: String,
+        onSuccess: () -> Unit,
+        onError: (String) -> Unit
+    ) {
+        auth.createUserWithEmailAndPassword(email.trim(), password)
+            .addOnSuccessListener {
+                onSuccess()
+            }
+            .addOnFailureListener { exception ->
+                onError(exception.message ?: "Signup failed")
+            }
     }
 
-    fun isLoggedIn(): Boolean {
-        return auth.currentUser != null
+    fun resetPassword(
+        email: String,
+        onSuccess: () -> Unit,
+        onError: (String) -> Unit
+    ) {
+        auth.sendPasswordResetEmail(email.trim())
+            .addOnSuccessListener {
+                onSuccess()
+            }
+            .addOnFailureListener { exception ->
+                onError(exception.message ?: "Password reset failed")
+            }
     }
 }

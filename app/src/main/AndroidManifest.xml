@@ -5,24 +5,25 @@
     <uses-permission android:name="android.permission.ACCESS_COARSE_LOCATION" />
 
     <application
+        android:name=".RideitApp"
         android:allowBackup="true"
-        android:icon="@mipmap/ic_launcher"
-        android:roundIcon="@mipmap/ic_launcher_round"
+        android:theme="@style/Theme.Rideit"
         android:label="Rideit"
-        android:supportsRtl="true"
-        android:theme="@style/Theme.Rideit">
+        android:supportsRtl="true">
 
         <meta-data
             android:name="com.google.android.geo.API_KEY"
-            android:value="AIzaSyBxgZ3FIdX14qTUL80m-RBuISWz_sx3sfk" />
+            android:value="${MAPS_API_KEY}" />
 
         <activity
             android:name=".MainActivity"
             android:exported="true">
+
             <intent-filter>
                 <action android:name="android.intent.action.MAIN" />
                 <category android:name="android.intent.category.LAUNCHER" />
             </intent-filter>
+
         </activity>
 
     </application>

@@ -1,11 +1,5 @@
 package com.example.rideit
 
-import androidx.compose.runtime.Composable
-import androidx.navigation.compose.rememberNavController
-import com.example.rideit.navigation.RideitNavGraph
+import android.app.Application
 
-@Composable
-fun RideitApp() {
-    val navController = rememberNavController()
-    RideitNavGraph(navController = navController)
-}
+class RideitApp : Application()

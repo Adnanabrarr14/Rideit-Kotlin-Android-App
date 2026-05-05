@@ -1,233 +1,193 @@
 package com.example.rideit.map.viewmodel
 
-import android.app.Application
-import androidx.lifecycle.AndroidViewModel
+import androidx.lifecycle.ViewModel
+import androidx.lifecycle.viewModelScope
 import com.example.rideit.map.model.LocationSuggestion
 import com.example.rideit.map.model.MapUiState
 import com.example.rideit.map.model.RideOption
+import com.example.rideit.map.model.RideRequestStatus
 import com.example.rideit.map.repository.MapRepository
+import com.example.rideit.model.Driver
 import com.google.android.gms.maps.model.LatLng
+import kotlinx.coroutines.Job
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
-import kotlinx.coroutines.flow.asStateFlow
-import kotlin.math.roundToInt
+import kotlinx.coroutines.launch
 
-class MapViewModel(application: Application) : AndroidViewModel(application) {
+class MapViewModel : ViewModel() {
 
-    private val repository = MapRepository(application.applicationContext)
+    private val repository = MapRepository()
 
     private val _uiState = MutableStateFlow(MapUiState())
-    val uiState: StateFlow<MapUiState> = _uiState.asStateFlow()
+    val uiState: StateFlow<MapUiState> = _uiState
 
-    fun onPickupTextChanged(value: String) {
-        _uiState.value = _uiState.value.copy(
-            pickupText = value,
-            selectedPickup = null,
-            pickupLatLng = null,
-            pickupSuggestions = repository.searchLocationSuggestions(value),
-            routePoints = emptyList(),
-            rideOptions = emptyList(),
-            selectedRideOption = null,
-            showRideOptions = false,
-            rideConfirmedMessage = null,
-            errorMessage = null
-        )
+    private var searchJob: Job? = null
+    private var driverJob: Job? = null
+
+    fun onPickupTextChanged(text: String) {
+        _uiState.value = _uiState.value.copy(pickupText = text)
     }
 
-    fun onDropoffTextChanged(value: String) {
+    fun onDropoffTextChanged(text: String) {
         _uiState.value = _uiState.value.copy(
-            dropoffText = value,
-            selectedDropoff = null,
-            dropoffLatLng = null,
-            dropoffSuggestions = repository.searchLocationSuggestions(value),
-            routePoints = emptyList(),
-            rideOptions = emptyList(),
-            selectedRideOption = null,
+            dropoffText = text,
             showRideOptions = false,
-            rideConfirmedMessage = null,
-            errorMessage = null
-        )
-    }
-
-    fun onPickupSuggestionSelected(suggestion: LocationSuggestion) {
-        val pickupLatLng = LatLng(suggestion.latitude, suggestion.longitude)
-
-        _uiState.value = _uiState.value.copy(
-            pickupText = suggestion.title,
-            selectedPickup = suggestion,
-            pickupLatLng = pickupLatLng,
-            pickupSuggestions = emptyList(),
-            routePoints = emptyList(),
-            rideOptions = emptyList(),
             selectedRideOption = null,
-            showRideOptions = false,
-            rideConfirmedMessage = null,
             errorMessage = null
         )
 
-        buildPreviewRouteIfPossible()
+        searchJob?.cancel()
+        searchJob = viewModelScope.launch {
+            delay(250)
+
+            val suggestions = repository.searchLocationSuggestions(text)
+
+            _uiState.value = _uiState.value.copy(
+                locationSuggestions = suggestions,
+                errorMessage = if (text.trim().length >= 2 && suggestions.isEmpty()) {
+                    "No locations found"
+                } else {
+                    null
+                }
+            )
+        }
     }
 
-    fun onDropoffSuggestionSelected(suggestion: LocationSuggestion) {
-        val dropoffLatLng = LatLng(suggestion.latitude, suggestion.longitude)
-
+    fun onSuggestionSelected(suggestion: LocationSuggestion) {
         _uiState.value = _uiState.value.copy(
             dropoffText = suggestion.title,
-            selectedDropoff = suggestion,
-            dropoffLatLng = dropoffLatLng,
-            dropoffSuggestions = emptyList(),
-            routePoints = emptyList(),
-            rideOptions = emptyList(),
-            selectedRideOption = null,
-            showRideOptions = false,
-            rideConfirmedMessage = null,
+            dropoffLatLng = LatLng(suggestion.latitude, suggestion.longitude),
+            locationSuggestions = emptyList(),
             errorMessage = null
         )
-
-        buildPreviewRouteIfPossible()
     }
 
     fun onSearchClicked() {
-        val state = _uiState.value
+        val pickup = _uiState.value.pickupLatLng ?: LatLng(33.6844, 73.0479)
+        val dropoff = _uiState.value.dropoffLatLng
 
-        if (state.pickupText.isBlank() || state.dropoffText.isBlank()) {
-            _uiState.value = state.copy(
-                errorMessage = "Please enter both pickup and dropoff locations."
+        if (dropoff == null) {
+            _uiState.value = _uiState.value.copy(
+                errorMessage = "Select a dropoff location from suggestions"
             )
             return
         }
 
-        _uiState.value = _uiState.value.copy(
-            isLoading = true,
-            errorMessage = null,
-            rideConfirmedMessage = null
+        val rides = listOf(
+            RideOption("1", "Mini", "Suzuki Alto / Mira", "Rs. 180", "2 min"),
+            RideOption("2", "Comfort", "Corolla / Civic / Elantra", "Rs. 320", "4 min"),
+            RideOption("3", "Business", "Fortuner / Prado / Tucson", "Rs. 580", "6 min")
         )
 
-        try {
-            val pickup = repository.findPlace(state.pickupText)
-            val dropoff = repository.findPlace(state.dropoffText)
-
-            if (pickup == null || dropoff == null) {
-                _uiState.value = _uiState.value.copy(
-                    isLoading = false,
-                    errorMessage = "Select a valid place from suggestions."
-                )
-                return
-            }
-
-            val pickupLatLng = LatLng(pickup.latitude, pickup.longitude)
-            val dropoffLatLng = LatLng(dropoff.latitude, dropoff.longitude)
-
-            val routePoints = repository.getRoutePoints(
-                origin = pickupLatLng,
-                destination = dropoffLatLng
-            )
-
-            val distanceKm = repository.calculateDistanceKm(pickupLatLng, dropoffLatLng)
-            val rideOptions = buildRideOptions(distanceKm)
-
-            _uiState.value = _uiState.value.copy(
-                isLoading = false,
-                pickupText = pickup.title,
-                dropoffText = dropoff.title,
-                selectedPickup = pickup,
-                selectedDropoff = dropoff,
-                pickupLatLng = pickupLatLng,
-                dropoffLatLng = dropoffLatLng,
-                pickupSuggestions = emptyList(),
-                dropoffSuggestions = emptyList(),
-                routePoints = routePoints,
-                rideOptions = rideOptions,
-                selectedRideOption = rideOptions.firstOrNull(),
-                showRideOptions = rideOptions.isNotEmpty(),
-                rideConfirmedMessage = null,
-                errorMessage = null
-            )
-        } catch (_: Exception) {
-            _uiState.value = _uiState.value.copy(
-                isLoading = false,
-                errorMessage = "Search failed. Please try again."
-            )
-        }
-    }
-
-    fun onRideOptionSelected(option: RideOption) {
         _uiState.value = _uiState.value.copy(
-            selectedRideOption = option,
-            rideConfirmedMessage = null
-        )
-    }
-
-    fun onConfirmRideClicked() {
-        val selectedRide = _uiState.value.selectedRideOption ?: run {
-            _uiState.value = _uiState.value.copy(
-                errorMessage = "Please select a ride option first."
-            )
-            return
-        }
-
-        _uiState.value = _uiState.value.copy(
-            rideConfirmedMessage = "${selectedRide.title} ride confirmed.",
+            pickupLatLng = pickup,
+            routePoints = repository.getRoutePoints(pickup, dropoff),
+            showRideOptions = true,
+            rideOptions = rides,
+            selectedRideOption = rides.first(),
+            rideRequestStatus = RideRequestStatus.IDLE,
+            driver = null,
+            driverLatLng = null,
+            rideConfirmedMessage = null,
             errorMessage = null
         )
     }
 
-    fun clearError() {
-        _uiState.value = _uiState.value.copy(errorMessage = null)
+    fun onRideOptionSelected(option: RideOption) {
+        _uiState.value = _uiState.value.copy(selectedRideOption = option)
     }
 
-    private fun buildPreviewRouteIfPossible() {
-        val pickup = _uiState.value.pickupLatLng
-        val dropoff = _uiState.value.dropoffLatLng
+    fun onConfirmRideClicked() {
+        val selectedRide = _uiState.value.selectedRideOption ?: return
+        val pickup = _uiState.value.pickupLatLng ?: return
 
-        if (pickup != null && dropoff != null) {
+        driverJob?.cancel()
+
+        _uiState.value = _uiState.value.copy(
+            rideRequestStatus = RideRequestStatus.SEARCHING_DRIVER,
+            showRideOptions = false,
+            rideConfirmedMessage = "Searching for ${selectedRide.title} driver..."
+        )
+
+        driverJob = viewModelScope.launch {
+            delay(2500)
+
+            val driver = Driver(
+                id = "1",
+                name = "Ali Khan",
+                vehicleName = when (selectedRide.title) {
+                    "Mini" -> "Suzuki Alto"
+                    "Comfort" -> "Toyota Corolla"
+                    "Business" -> "Toyota Fortuner"
+                    else -> "Suzuki Alto"
+                },
+                vehicleNumber = "LEA-1234",
+                rating = 4.8,
+                arrivalTime = selectedRide.estimatedTime
+            )
+
+            val driverStart = LatLng(
+                pickup.latitude + 0.012,
+                pickup.longitude - 0.012
+            )
+
             _uiState.value = _uiState.value.copy(
-                routePoints = listOf(pickup, dropoff),
-                rideOptions = emptyList(),
-                selectedRideOption = null,
-                showRideOptions = false,
-                rideConfirmedMessage = null
+                rideRequestStatus = RideRequestStatus.DRIVER_FOUND,
+                driver = driver,
+                driverLatLng = driverStart,
+                rideConfirmedMessage = "Driver found"
+            )
+
+            delay(1000)
+
+            _uiState.value = _uiState.value.copy(
+                rideRequestStatus = RideRequestStatus.DRIVER_ARRIVING,
+                rideConfirmedMessage = "Driver is arriving..."
+            )
+
+            moveDriverToPickup(driverStart, pickup)
+
+            _uiState.value = _uiState.value.copy(
+                rideRequestStatus = RideRequestStatus.RIDE_STARTED,
+                rideConfirmedMessage = "Driver arrived. Ride started!"
             )
         }
     }
 
-    private fun buildRideOptions(distanceKm: Double): List<RideOption> {
-        val safeDistance = distanceKm.coerceAtLeast(1.0)
+    private suspend fun moveDriverToPickup(
+        start: LatLng,
+        pickup: LatLng
+    ) {
+        var current = start
 
-        val bikeFare = (80 + safeDistance * 18).roundToInt()
-        val miniFare = (140 + safeDistance * 24).roundToInt()
-        val carFare = (220 + safeDistance * 32).roundToInt()
+        repeat(35) {
+            delay(350)
 
-        val bikeTime = estimateTimeMinutes(safeDistance, 28.0)
-        val miniTime = estimateTimeMinutes(safeDistance, 32.0)
-        val carTime = estimateTimeMinutes(safeDistance, 35.0)
+            val newLat = current.latitude + (pickup.latitude - current.latitude) * 0.12
+            val newLng = current.longitude + (pickup.longitude - current.longitude) * 0.12
 
-        return listOf(
-            RideOption(
-                id = "bike",
-                title = "Bike",
-                subtitle = "Affordable quick ride",
-                estimatedFare = "PKR $bikeFare",
-                estimatedTime = "$bikeTime min"
-            ),
-            RideOption(
-                id = "mini",
-                title = "Mini",
-                subtitle = "Budget everyday ride",
-                estimatedFare = "PKR $miniFare",
-                estimatedTime = "$miniTime min"
-            ),
-            RideOption(
-                id = "car",
-                title = "Car",
-                subtitle = "Comfort ride",
-                estimatedFare = "PKR $carFare",
-                estimatedTime = "$carTime min"
+            current = LatLng(newLat, newLng)
+
+            _uiState.value = _uiState.value.copy(
+                driverLatLng = current
             )
+        }
+
+        _uiState.value = _uiState.value.copy(
+            driverLatLng = pickup
         )
     }
 
-    private fun estimateTimeMinutes(distanceKm: Double, averageSpeedKmH: Double): Int {
-        return ((distanceKm / averageSpeedKmH) * 60).roundToInt().coerceAtLeast(3)
+    fun onCancelRideClicked() {
+        driverJob?.cancel()
+
+        _uiState.value = _uiState.value.copy(
+            rideRequestStatus = RideRequestStatus.CANCELLED,
+            showRideOptions = false,
+            driver = null,
+            driverLatLng = null,
+            rideConfirmedMessage = "Ride cancelled"
+        )
     }
 }

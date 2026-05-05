@@ -1,416 +1,517 @@
 package com.example.rideit.map.ui
 
+import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
+import androidx.compose.animation.slideInVertically
+import androidx.compose.animation.slideOutVertically
+import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
-import androidx.compose.foundation.layout.Arrangement
-import androidx.compose.foundation.layout.Box
-import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.Row
-import androidx.compose.foundation.layout.Spacer
-import androidx.compose.foundation.layout.fillMaxSize
-import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.foundation.layout.height
-import androidx.compose.foundation.layout.heightIn
-import androidx.compose.foundation.layout.navigationBarsPadding
-import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.layout.statusBarsPadding
-import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.MyLocation
-import androidx.compose.material3.Button
-import androidx.compose.material3.CircularProgressIndicator
-import androidx.compose.material3.ElevatedCard
-import androidx.compose.material3.FloatingActionButton
-import androidx.compose.material3.HorizontalDivider
-import androidx.compose.material3.Icon
-import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.OutlinedTextField
-import androidx.compose.material3.Surface
-import androidx.compose.material3.Text
-import androidx.compose.material3.TextButton
-import androidx.compose.runtime.Composable
-import androidx.compose.runtime.LaunchedEffect
-import androidx.compose.runtime.collectAsState
-import androidx.compose.runtime.getValue
-import androidx.compose.runtime.remember
+import androidx.compose.material3.*
+import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.geometry.CornerRadius
+import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.viewmodel.compose.viewModel
-import com.example.rideit.map.model.LocationSuggestion
-import com.example.rideit.map.model.RideOption
+import com.example.rideit.driver.ui.DriverFoundCard
+import com.example.rideit.map.model.*
 import com.example.rideit.map.viewmodel.MapViewModel
 import com.google.android.gms.maps.CameraUpdateFactory
 import com.google.android.gms.maps.model.BitmapDescriptorFactory
+import com.google.android.gms.maps.model.CameraPosition
 import com.google.android.gms.maps.model.LatLng
-import com.google.android.gms.maps.model.LatLngBounds
-import com.google.maps.android.compose.GoogleMap
-import com.google.maps.android.compose.MapProperties
-import com.google.maps.android.compose.Marker
-import com.google.maps.android.compose.MarkerState
-import com.google.maps.android.compose.Polyline
-import com.google.maps.android.compose.rememberCameraPositionState
+import com.google.maps.android.compose.*
+import kotlinx.coroutines.delay
 
 @Composable
 fun MapScreen(
-    modifier: Modifier = Modifier,
     mapViewModel: MapViewModel = viewModel()
 ) {
     val uiState by mapViewModel.uiState.collectAsState()
-    val cameraPositionState = rememberCameraPositionState()
+    var showPanel by remember { mutableStateOf(true) }
 
-    val defaultCenter = remember {
-        LatLng(33.6844, 73.0479)
+    val cameraPositionState = rememberCameraPositionState {
+        position = CameraPosition.fromLatLngZoom(LatLng(33.6844, 73.0479), 14f)
     }
 
-    LaunchedEffect(uiState.pickupLatLng, uiState.dropoffLatLng, uiState.routePoints) {
-        val pickup = uiState.pickupLatLng
-        val dropoff = uiState.dropoffLatLng
-
-        when {
-            pickup != null && dropoff != null -> {
-                val bounds = LatLngBounds.builder()
-                    .include(pickup)
-                    .include(dropoff)
-                    .build()
-
-                cameraPositionState.animate(
-                    update = CameraUpdateFactory.newLatLngBounds(bounds, 160),
-                    durationMs = 1000
-                )
-            }
-
-            pickup != null -> {
-                cameraPositionState.animate(
-                    update = CameraUpdateFactory.newLatLngZoom(pickup, 14f),
-                    durationMs = 800
-                )
-            }
-
-            dropoff != null -> {
-                cameraPositionState.animate(
-                    update = CameraUpdateFactory.newLatLngZoom(dropoff, 14f),
-                    durationMs = 800
-                )
-            }
-
-            else -> {
-                cameraPositionState.move(
-                    CameraUpdateFactory.newLatLngZoom(defaultCenter, 11f)
-                )
-            }
+    LaunchedEffect(cameraPositionState.isMoving) {
+        if (cameraPositionState.isMoving) {
+            showPanel = false
+        } else {
+            delay(500)
+            showPanel = true
         }
     }
 
-    Box(
-        modifier = modifier.fillMaxSize()
-    ) {
+    LaunchedEffect(uiState.dropoffLatLng) {
+        uiState.dropoffLatLng?.let {
+            cameraPositionState.animate(
+                update = CameraUpdateFactory.newLatLngZoom(it, 15.5f),
+                durationMs = 800
+            )
+        }
+    }
+
+    Box(modifier = Modifier.fillMaxSize()) {
         GoogleMap(
             modifier = Modifier.fillMaxSize(),
             cameraPositionState = cameraPositionState,
-            properties = MapProperties(isMyLocationEnabled = false)
+            uiSettings = MapUiSettings(
+                zoomControlsEnabled = false,
+                myLocationButtonEnabled = false,
+                mapToolbarEnabled = false
+            )
         ) {
-            uiState.pickupLatLng?.let { pickup ->
-                Marker(
-                    state = MarkerState(position = pickup),
-                    title = "Pickup",
-                    snippet = uiState.pickupText,
-                    icon = BitmapDescriptorFactory.defaultMarker(BitmapDescriptorFactory.HUE_GREEN)
-                )
+            uiState.pickupLatLng?.let {
+                Marker(state = MarkerState(it), title = "Pickup")
             }
 
-            uiState.dropoffLatLng?.let { dropoff ->
+            uiState.dropoffLatLng?.let {
+                Marker(state = MarkerState(it), title = "Dropoff")
+            }
+
+            uiState.driverLatLng?.let {
                 Marker(
-                    state = MarkerState(position = dropoff),
-                    title = "Dropoff",
-                    snippet = uiState.dropoffText,
-                    icon = BitmapDescriptorFactory.defaultMarker(BitmapDescriptorFactory.HUE_RED)
+                    state = MarkerState(it),
+                    title = "Driver",
+                    icon = BitmapDescriptorFactory.defaultMarker(BitmapDescriptorFactory.HUE_AZURE)
                 )
             }
 
             if (uiState.routePoints.size >= 2) {
-                Polyline(points = uiState.routePoints)
+                Polyline(points = uiState.routePoints, width = 8f)
             }
         }
 
-        FloatingActionButton(
-            onClick = {
-                val target = uiState.pickupLatLng ?: uiState.dropoffLatLng ?: defaultCenter
-                cameraPositionState.move(
-                    CameraUpdateFactory.newLatLngZoom(target, 14f)
-                )
-            },
-            modifier = Modifier
-                .align(Alignment.TopEnd)
-                .statusBarsPadding()
-                .padding(top = 16.dp, end = 16.dp)
+        AnimatedVisibility(
+            visible = showPanel,
+            enter = slideInVertically { it } + fadeIn(),
+            exit = slideOutVertically { it } + fadeOut(),
+            modifier = Modifier.align(Alignment.BottomCenter)
         ) {
-            Icon(
-                imageVector = Icons.Default.MyLocation,
-                contentDescription = "Focus location"
+            RideitBottomPanel(
+                uiState = uiState,
+                mapViewModel = mapViewModel
             )
         }
-
-        Surface(
-            modifier = Modifier
-                .align(Alignment.BottomCenter)
-                .fillMaxWidth()
-                .navigationBarsPadding()
-                .heightIn(max = 430.dp),
-            shape = RoundedCornerShape(topStart = 24.dp, topEnd = 24.dp),
-            tonalElevation = 8.dp,
-            shadowElevation = 8.dp
-        ) {
-            LazyColumn(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(16.dp),
-                verticalArrangement = Arrangement.spacedBy(10.dp)
-            ) {
-                item {
-                    Text(
-                        text = "Choose your ride",
-                        style = MaterialTheme.typography.titleMedium
-                    )
-                }
-
-                item {
-                    OutlinedTextField(
-                        value = uiState.pickupText,
-                        onValueChange = mapViewModel::onPickupTextChanged,
-                        label = { Text("Pickup location") },
-                        modifier = Modifier.fillMaxWidth(),
-                        singleLine = true
-                    )
-                }
-
-                if (uiState.pickupSuggestions.isNotEmpty()) {
-                    item {
-                        SuggestionList(
-                            suggestions = uiState.pickupSuggestions,
-                            onSuggestionClick = mapViewModel::onPickupSuggestionSelected
-                        )
-                    }
-                }
-
-                item {
-                    OutlinedTextField(
-                        value = uiState.dropoffText,
-                        onValueChange = mapViewModel::onDropoffTextChanged,
-                        label = { Text("Dropoff location") },
-                        modifier = Modifier.fillMaxWidth(),
-                        singleLine = true
-                    )
-                }
-
-                if (uiState.dropoffSuggestions.isNotEmpty()) {
-                    item {
-                        SuggestionList(
-                            suggestions = uiState.dropoffSuggestions,
-                            onSuggestionClick = mapViewModel::onDropoffSuggestionSelected
-                        )
-                    }
-                }
-
-                item {
-                    Text(
-                        text = "Try: Bahria Town, DHA, Blue Area, Saddar, Johar Town",
-                        style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant
-                    )
-                }
-
-                uiState.errorMessage?.let { message ->
-                    item {
-                        Text(
-                            text = message,
-                            color = MaterialTheme.colorScheme.error,
-                            style = MaterialTheme.typography.bodySmall
-                        )
-                    }
-                }
-
-                item {
-                    Button(
-                        onClick = mapViewModel::onSearchClicked,
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .height(52.dp),
-                        shape = RoundedCornerShape(14.dp)
-                    ) {
-                        if (uiState.isLoading) {
-                            CircularProgressIndicator(
-                                modifier = Modifier
-                                    .height(20.dp)
-                                    .width(20.dp),
-                                strokeWidth = 2.dp
-                            )
-                            Spacer(modifier = Modifier.width(8.dp))
-                            Text("Searching...")
-                        } else {
-                            Text("Search")
-                        }
-                    }
-                }
-
-                if (uiState.showRideOptions && uiState.rideOptions.isNotEmpty()) {
-                    item {
-                        Text(
-                            text = "Ride options",
-                            style = MaterialTheme.typography.titleSmall
-                        )
-                    }
-
-                    items(uiState.rideOptions) { option ->
-                        RideOptionCard(
-                            option = option,
-                            isSelected = uiState.selectedRideOption?.id == option.id,
-                            onClick = { mapViewModel.onRideOptionSelected(option) }
-                        )
-                    }
-
-                    item {
-                        Button(
-                            onClick = mapViewModel::onConfirmRideClicked,
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .height(52.dp),
-                            shape = RoundedCornerShape(14.dp)
-                        ) {
-                            Text("Confirm Ride")
-                        }
-                    }
-                }
-
-                uiState.rideConfirmedMessage?.let { message ->
-                    item {
-                        Text(
-                            text = message,
-                            color = Color(0xFF2E7D32),
-                            style = MaterialTheme.typography.bodyMedium
-                        )
-                    }
-                }
-
-                item {
-                    TextButton(
-                        onClick = mapViewModel::clearError,
-                        modifier = Modifier.fillMaxWidth()
-                    ) {
-                        Text("Clear message")
-                    }
-                }
-            }
-        }
     }
 }
 
 @Composable
-private fun SuggestionList(
-    suggestions: List<LocationSuggestion>,
-    onSuggestionClick: (LocationSuggestion) -> Unit
+private fun RideitBottomPanel(
+    uiState: MapUiState,
+    mapViewModel: MapViewModel
 ) {
-    ElevatedCard(
+    Surface(
         modifier = Modifier
             .fillMaxWidth()
-            .clip(RoundedCornerShape(16.dp))
+            .padding(horizontal = 14.dp, vertical = 14.dp),
+        shape = RoundedCornerShape(32.dp),
+        color = Color.White,
+        shadowElevation = 18.dp,
+        tonalElevation = 8.dp
     ) {
-        LazyColumn(
+        Column(
             modifier = Modifier
                 .fillMaxWidth()
-                .heightIn(max = 180.dp)
-                .background(MaterialTheme.colorScheme.surface)
+                .heightIn(max = 650.dp)
+                .padding(18.dp)
         ) {
-            items(suggestions) { suggestion ->
-                Column(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .clickable { onSuggestionClick(suggestion) }
-                        .padding(14.dp)
-                ) {
-                    Text(
-                        text = suggestion.title,
-                        style = MaterialTheme.typography.bodyLarge
-                    )
-                    Text(
-                        text = suggestion.fullAddress,
-                        style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant
+            Box(
+                modifier = Modifier
+                    .width(48.dp)
+                    .height(5.dp)
+                    .clip(RoundedCornerShape(50))
+                    .background(Color(0xFFD1D5DB))
+                    .align(Alignment.CenterHorizontally)
+            )
+
+            Spacer(modifier = Modifier.height(16.dp))
+
+            when {
+                uiState.rideRequestStatus == RideRequestStatus.SEARCHING_DRIVER ||
+                        uiState.rideRequestStatus == RideRequestStatus.DRIVER_FOUND ||
+                        uiState.rideRequestStatus == RideRequestStatus.DRIVER_ARRIVING ||
+                        uiState.rideRequestStatus == RideRequestStatus.RIDE_STARTED -> {
+                    RideStatusContent(
+                        uiState = uiState,
+                        onCancelRide = mapViewModel::onCancelRideClicked
                     )
                 }
-                HorizontalDivider()
+
+                uiState.showRideOptions && uiState.rideOptions.isNotEmpty() -> {
+                    RideSelectionContent(
+                        uiState = uiState,
+                        onRideSelected = mapViewModel::onRideOptionSelected,
+                        onConfirmRide = mapViewModel::onConfirmRideClicked
+                    )
+                }
+
+                else -> {
+                    SearchContent(
+                        uiState = uiState,
+                        onPickupChanged = mapViewModel::onPickupTextChanged,
+                        onDropoffChanged = mapViewModel::onDropoffTextChanged,
+                        onSuggestionSelected = mapViewModel::onSuggestionSelected,
+                        onSearchClick = mapViewModel::onSearchClicked
+                    )
+                }
             }
         }
     }
 }
 
 @Composable
-private fun RideOptionCard(
-    option: RideOption,
-    isSelected: Boolean,
+private fun SearchContent(
+    uiState: MapUiState,
+    onPickupChanged: (String) -> Unit,
+    onDropoffChanged: (String) -> Unit,
+    onSuggestionSelected: (LocationSuggestion) -> Unit,
+    onSearchClick: () -> Unit
+) {
+    val purple = Color(0xFF8A35F2)
+
+    Text(
+        text = "Where are you going?",
+        color = Color(0xFF111827),
+        fontWeight = FontWeight.Bold,
+        style = MaterialTheme.typography.headlineSmall
+    )
+
+    Spacer(modifier = Modifier.height(18.dp))
+
+    OutlinedTextField(
+        value = uiState.pickupText,
+        onValueChange = onPickupChanged,
+        label = { Text("Pickup location") },
+        modifier = Modifier.fillMaxWidth(),
+        singleLine = true,
+        shape = RoundedCornerShape(18.dp)
+    )
+
+    Spacer(modifier = Modifier.height(12.dp))
+
+    OutlinedTextField(
+        value = uiState.dropoffText,
+        onValueChange = onDropoffChanged,
+        label = { Text("Dropoff location") },
+        modifier = Modifier.fillMaxWidth(),
+        singleLine = true,
+        shape = RoundedCornerShape(18.dp),
+        colors = OutlinedTextFieldDefaults.colors(
+            focusedBorderColor = purple,
+            focusedLabelColor = purple
+        )
+    )
+
+    if (uiState.locationSuggestions.isNotEmpty()) {
+        Spacer(modifier = Modifier.height(12.dp))
+
+        LazyColumn(modifier = Modifier.heightIn(max = 190.dp)) {
+            items(uiState.locationSuggestions) { suggestion ->
+                SuggestionRow(
+                    suggestion = suggestion,
+                    onClick = { onSuggestionSelected(suggestion) }
+                )
+            }
+        }
+    }
+
+    uiState.errorMessage?.let {
+        Spacer(modifier = Modifier.height(8.dp))
+        Text(text = it, color = Color.Red)
+    }
+
+    Spacer(modifier = Modifier.height(16.dp))
+
+    Button(
+        onClick = onSearchClick,
+        modifier = Modifier
+            .fillMaxWidth()
+            .height(58.dp),
+        shape = RoundedCornerShape(22.dp),
+        colors = ButtonDefaults.buttonColors(
+            containerColor = purple,
+            contentColor = Color.White
+        )
+    ) {
+        Text("Search Ride", fontWeight = FontWeight.Bold)
+    }
+}
+
+@Composable
+private fun SuggestionRow(
+    suggestion: LocationSuggestion,
     onClick: () -> Unit
 ) {
-    val borderColor = if (isSelected) Color(0xFF7E57C2) else Color(0xFFE0E0E0)
-    val backgroundColor = if (isSelected) Color(0xFFF3EEFF) else MaterialTheme.colorScheme.surface
-
-    ElevatedCard(
+    Row(
         modifier = Modifier
             .fillMaxWidth()
-            .clip(RoundedCornerShape(16.dp))
-            .border(
-                width = 1.5.dp,
-                color = borderColor,
-                shape = RoundedCornerShape(16.dp)
+            .clickable { onClick() }
+            .padding(vertical = 10.dp),
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        Text("📍", modifier = Modifier.width(36.dp))
+
+        Column {
+            Text(
+                text = suggestion.title,
+                color = Color(0xFF111827),
+                fontWeight = FontWeight.Bold
             )
+
+            Text(
+                text = suggestion.fullAddress,
+                color = Color(0xFF777777),
+                style = MaterialTheme.typography.bodySmall
+            )
+        }
+    }
+}
+
+@Composable
+private fun RideSelectionContent(
+    uiState: MapUiState,
+    onRideSelected: (RideOption) -> Unit,
+    onConfirmRide: () -> Unit
+) {
+    val selectedRide = uiState.selectedRideOption ?: uiState.rideOptions.first()
+    val selectedColor = rideColor(selectedRide.title)
+
+    Text(
+        text = "Choose your ride",
+        color = Color(0xFF111827),
+        fontWeight = FontWeight.Bold,
+        style = MaterialTheme.typography.headlineSmall
+    )
+
+    Spacer(modifier = Modifier.height(12.dp))
+
+    LazyColumn(
+        modifier = Modifier.heightIn(max = 330.dp),
+        verticalArrangement = Arrangement.spacedBy(10.dp)
+    ) {
+        items(uiState.rideOptions) { option ->
+            CompactRideOptionCard(
+                option = option,
+                selected = option == selectedRide,
+                onClick = { onRideSelected(option) }
+            )
+        }
+    }
+
+    Spacer(modifier = Modifier.height(14.dp))
+
+    Button(
+        onClick = onConfirmRide,
+        modifier = Modifier
+            .fillMaxWidth()
+            .height(58.dp),
+        shape = RoundedCornerShape(22.dp),
+        colors = ButtonDefaults.buttonColors(
+            containerColor = selectedColor,
+            contentColor = Color.White
+        )
+    ) {
+        Text(
+            text = "Book ${selectedRide.title} — ${selectedRide.estimatedFare}",
+            fontWeight = FontWeight.Bold
+        )
+    }
+}
+
+@Composable
+private fun RideStatusContent(
+    uiState: MapUiState,
+    onCancelRide: () -> Unit
+) {
+    Text(
+        text = when (uiState.rideRequestStatus) {
+            RideRequestStatus.SEARCHING_DRIVER -> "Finding your driver..."
+            RideRequestStatus.DRIVER_FOUND -> "Driver found"
+            RideRequestStatus.DRIVER_ARRIVING -> "Driver is arriving"
+            RideRequestStatus.RIDE_STARTED -> "Ride started"
+            else -> "Ride status"
+        },
+        fontWeight = FontWeight.Bold,
+        style = MaterialTheme.typography.headlineSmall
+    )
+
+    Spacer(modifier = Modifier.height(12.dp))
+
+    uiState.rideConfirmedMessage?.let {
+        Text(text = it, color = Color(0xFF666666))
+    }
+
+    Spacer(modifier = Modifier.height(12.dp))
+
+    uiState.driver?.let {
+        DriverFoundCard(
+            driver = it,
+            onCancelClick = onCancelRide
+        )
+    }
+
+    Spacer(modifier = Modifier.height(12.dp))
+
+    Button(
+        onClick = onCancelRide,
+        modifier = Modifier.fillMaxWidth(),
+        colors = ButtonDefaults.buttonColors(
+            containerColor = Color(0xFFEF4444),
+            contentColor = Color.White
+        )
+    ) {
+        Text("Cancel Ride")
+    }
+}
+
+@Composable
+private fun CompactRideOptionCard(
+    option: RideOption,
+    selected: Boolean,
+    onClick: () -> Unit
+) {
+    val mainColor = rideColor(option.title)
+    val lightColor = rideLightColor(option.title)
+
+    Surface(
+        modifier = Modifier
+            .fillMaxWidth()
+            .height(94.dp)
+            .clickable { onClick() }
+            .border(
+                width = if (selected) 2.5.dp else 1.dp,
+                color = if (selected) mainColor else Color(0xFFE7E7E7),
+                shape = RoundedCornerShape(22.dp)
+            ),
+        shape = RoundedCornerShape(22.dp),
+        color = if (selected) lightColor else Color.White,
+        shadowElevation = if (selected) 7.dp else 2.dp
     ) {
         Row(
-            modifier = Modifier
-                .fillMaxWidth()
-                .background(backgroundColor)
-                .padding(14.dp),
-            horizontalArrangement = Arrangement.SpaceBetween,
+            modifier = Modifier.padding(horizontal = 12.dp, vertical = 10.dp),
             verticalAlignment = Alignment.CenterVertically
         ) {
-            Column(
-                modifier = Modifier.weight(1f)
-            ) {
+            VehicleDrawing(
+                color = if (selected) mainColor else Color(0xFFB8B8B8),
+                modifier = Modifier
+                    .width(92.dp)
+                    .height(56.dp)
+            )
+
+            Spacer(modifier = Modifier.width(12.dp))
+
+            Column(modifier = Modifier.weight(1f)) {
                 Text(
                     text = option.title,
-                    style = MaterialTheme.typography.titleSmall
+                    color = if (selected) mainColor else Color(0xFF111827),
+                    fontWeight = FontWeight.Bold,
+                    style = MaterialTheme.typography.titleLarge
                 )
+
                 Text(
                     text = option.subtitle,
+                    color = Color(0xFF8A8A8A),
                     style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                    maxLines = 1
+                )
+
+                Text(
+                    text = "⏱ ${option.estimatedTime} • 👤 ${seatsForRide(option.title)} seats",
+                    color = Color(0xFF999999),
+                    style = MaterialTheme.typography.bodySmall
                 )
             }
 
-            Column(
-                horizontalAlignment = Alignment.End
-            ) {
+            Column(horizontalAlignment = Alignment.End) {
                 Text(
                     text = option.estimatedFare,
-                    style = MaterialTheme.typography.titleSmall
+                    color = if (selected) mainColor else Color(0xFF111827),
+                    fontWeight = FontWeight.Bold
                 )
-                Text(
-                    text = option.estimatedTime,
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant
-                )
+
+                if (selected) {
+                    Spacer(modifier = Modifier.height(6.dp))
+                    Box(
+                        modifier = Modifier
+                            .size(30.dp)
+                            .clip(CircleShape)
+                            .background(mainColor),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Text("✓", color = Color.White)
+                    }
+                }
             }
         }
+    }
+}
 
-        TextButton(
-            onClick = onClick,
-            modifier = Modifier.fillMaxWidth()
-        ) {
-            Text(if (isSelected) "Selected" else "Select")
-        }
+@Composable
+private fun VehicleDrawing(
+    color: Color,
+    modifier: Modifier
+) {
+    Canvas(modifier = modifier) {
+        val w = size.width
+        val h = size.height
+
+        drawRoundRect(
+            color = color,
+            topLeft = Offset(w * 0.12f, h * 0.40f),
+            size = Size(w * 0.74f, h * 0.25f),
+            cornerRadius = CornerRadius(12f, 12f)
+        )
+
+        drawRoundRect(
+            color = color,
+            topLeft = Offset(w * 0.30f, h * 0.24f),
+            size = Size(w * 0.36f, h * 0.25f),
+            cornerRadius = CornerRadius(14f, 14f)
+        )
+
+        drawCircle(Color(0xFF29245C), h * 0.13f, Offset(w * 0.28f, h * 0.69f))
+        drawCircle(Color(0xFF29245C), h * 0.13f, Offset(w * 0.70f, h * 0.69f))
+    }
+}
+
+private fun rideColor(title: String): Color {
+    return when (title.lowercase()) {
+        "mini" -> Color(0xFF8A35F2)
+        "comfort" -> Color(0xFF2563EB)
+        "business" -> Color(0xFFE17A00)
+        else -> Color(0xFF8A35F2)
+    }
+}
+
+private fun rideLightColor(title: String): Color {
+    return when (title.lowercase()) {
+        "mini" -> Color(0xFFF1E8FF)
+        "comfort" -> Color(0xFFE4F0FF)
+        "business" -> Color(0xFFFFF1C9)
+        else -> Color(0xFFF1E8FF)
+    }
+}
+
+private fun seatsForRide(title: String): Int {
+    return when (title.lowercase()) {
+        "mini" -> 3
+        "comfort" -> 4
+        "business" -> 6
+        else -> 4
     }
 }

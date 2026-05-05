@@ -1,6 +1,5 @@
 package com.example.rideit.ui.screens
 
-import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -10,17 +9,12 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.Visibility
-import androidx.compose.material.icons.filled.VisibilityOff
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
-import androidx.compose.material3.CircularProgressIndicator
-import androidx.compose.material3.Icon
-import androidx.compose.material3.IconButton
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.OutlinedTextFieldDefaults
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -40,34 +34,16 @@ fun LoginScreen(
 ) {
     var email by remember { mutableStateOf("") }
     var password by remember { mutableStateOf("") }
-    var errorMessage by remember { mutableStateOf("") }
-    var loading by remember { mutableStateOf(false) }
     var passwordVisible by remember { mutableStateOf(false) }
+    var errorMessage by remember { mutableStateOf<String?>(null) }
+    var successMessage by remember { mutableStateOf<String?>(null) }
 
-    fun validateInputs(): Boolean {
-        if (email.isBlank() || password.isBlank()) {
-            errorMessage = "Please enter email and password"
-            return false
-        }
-
-        if (!email.contains("@") || !email.contains(".")) {
-            errorMessage = "Please enter a valid email address"
-            return false
-        }
-
-        if (password.length < 6) {
-            errorMessage = "Password must be at least 6 characters"
-            return false
-        }
-
-        return true
-    }
+    val purple = Color(0xFF7E57C2)
 
     Column(
         modifier = Modifier
             .fillMaxSize()
-            .background(Color(0xFFF5F5F5))
-            .padding(horizontal = 24.dp),
+            .padding(horizontal = 26.dp),
         verticalArrangement = Arrangement.Center,
         horizontalAlignment = Alignment.CenterHorizontally
     ) {
@@ -76,161 +52,171 @@ fun LoginScreen(
             color = Color.Black
         )
 
-        Spacer(modifier = Modifier.height(20.dp))
+        Spacer(modifier = Modifier.height(36.dp))
 
         OutlinedTextField(
             value = email,
             onValueChange = {
                 email = it
-                errorMessage = ""
+                errorMessage = null
+                successMessage = null
             },
-            label = { Text("Email", color = Color.Gray) },
-            singleLine = true,
+            label = { Text("Email") },
             modifier = Modifier.fillMaxWidth(),
-            shape = RoundedCornerShape(14.dp),
-            enabled = !loading,
+            singleLine = true,
+            shape = RoundedCornerShape(18.dp),
             colors = OutlinedTextFieldDefaults.colors(
-                focusedTextColor = Color.Black,
-                unfocusedTextColor = Color.Black,
-                focusedContainerColor = Color.White,
-                unfocusedContainerColor = Color.White,
-                focusedBorderColor = Color(0xFF7E57C2),
+                focusedBorderColor = Color.Gray,
                 unfocusedBorderColor = Color.Gray,
-                focusedLabelColor = Color(0xFF7E57C2),
-                unfocusedLabelColor = Color.Gray,
-                cursorColor = Color.Black
+                focusedLabelColor = Color.Gray,
+                unfocusedLabelColor = Color.Gray
             )
         )
 
-        Spacer(modifier = Modifier.height(16.dp))
+        Spacer(modifier = Modifier.height(22.dp))
 
         OutlinedTextField(
             value = password,
             onValueChange = {
                 password = it
-                errorMessage = ""
+                errorMessage = null
+                successMessage = null
             },
-            label = { Text("Password", color = Color.Gray) },
+            label = { Text("Password") },
+            modifier = Modifier.fillMaxWidth(),
             singleLine = true,
+            shape = RoundedCornerShape(18.dp),
             visualTransformation = if (passwordVisible) {
                 VisualTransformation.None
             } else {
                 PasswordVisualTransformation()
             },
             trailingIcon = {
-                IconButton(onClick = { passwordVisible = !passwordVisible }) {
-                    Icon(
-                        imageVector = if (passwordVisible) {
-                            Icons.Default.VisibilityOff
-                        } else {
-                            Icons.Default.Visibility
-                        },
-                        contentDescription = if (passwordVisible) {
-                            "Hide password"
-                        } else {
-                            "Show password"
-                        },
-                        tint = Color.Gray
+                TextButton(
+                    onClick = { passwordVisible = !passwordVisible }
+                ) {
+                    Text(
+                        text = if (passwordVisible) "Hide" else "Show",
+                        color = Color.Gray
                     )
                 }
             },
-            modifier = Modifier.fillMaxWidth(),
-            shape = RoundedCornerShape(14.dp),
-            enabled = !loading,
             colors = OutlinedTextFieldDefaults.colors(
-                focusedTextColor = Color.Black,
-                unfocusedTextColor = Color.Black,
-                focusedContainerColor = Color.White,
-                unfocusedContainerColor = Color.White,
-                focusedBorderColor = Color(0xFF7E57C2),
+                focusedBorderColor = Color.Gray,
                 unfocusedBorderColor = Color.Gray,
-                focusedLabelColor = Color(0xFF7E57C2),
-                unfocusedLabelColor = Color.Gray,
-                cursorColor = Color.Black
+                focusedLabelColor = Color.Gray,
+                unfocusedLabelColor = Color.Gray
             )
         )
 
-        Spacer(modifier = Modifier.height(20.dp))
+        TextButton(
+            onClick = {
+                if (email.isBlank()) {
+                    errorMessage = "Enter your email first"
+                    successMessage = null
+                    return@TextButton
+                }
+
+                FirebaseManager.resetPassword(
+                    email = email,
+                    onSuccess = {
+                        successMessage = "Password reset email sent"
+                        errorMessage = null
+                    },
+                    onError = {
+                        errorMessage = it
+                        successMessage = null
+                    }
+                )
+            },
+            modifier = Modifier.align(Alignment.End)
+        ) {
+            Text(
+                text = "Forgot password?",
+                color = purple
+            )
+        }
+
+        Spacer(modifier = Modifier.height(12.dp))
 
         Row(
-            modifier = Modifier.fillMaxWidth()
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.spacedBy(14.dp)
         ) {
             Button(
                 onClick = {
-                    if (!validateInputs()) return@Button
-
-                    loading = true
-                    errorMessage = ""
+                    if (email.isBlank() || password.isBlank()) {
+                        errorMessage = "Please enter email and password"
+                        successMessage = null
+                        return@Button
+                    }
 
                     FirebaseManager.login(
-                        email = email.trim(),
-                        password = password.trim(),
-                        onSuccess = {
-                            loading = false
-                            onLoginSuccess()
-                        },
-                        onError = { message ->
-                            loading = false
-                            errorMessage = message
+                        email = email,
+                        password = password,
+                        onSuccess = onLoginSuccess,
+                        onError = {
+                            errorMessage = it
+                            successMessage = null
                         }
                     )
                 },
-                modifier = Modifier.weight(1f),
-                shape = RoundedCornerShape(24.dp),
-                enabled = !loading,
+                modifier = Modifier
+                    .weight(1f)
+                    .height(56.dp),
+                shape = RoundedCornerShape(28.dp),
                 colors = ButtonDefaults.buttonColors(
-                    containerColor = Color(0xFF7E57C2),
+                    containerColor = purple,
                     contentColor = Color.White
                 )
             ) {
                 Text("Login")
             }
 
-            Spacer(modifier = Modifier.padding(horizontal = 6.dp))
-
             Button(
                 onClick = {
-                    if (!validateInputs()) return@Button
-
-                    loading = true
-                    errorMessage = ""
+                    if (email.isBlank() || password.isBlank()) {
+                        errorMessage = "Please enter email and password"
+                        successMessage = null
+                        return@Button
+                    }
 
                     FirebaseManager.signup(
-                        email = email.trim(),
-                        password = password.trim(),
-                        onSuccess = {
-                            loading = false
-                            onLoginSuccess()
-                        },
-                        onError = { message ->
-                            loading = false
-                            errorMessage = message
+                        email = email,
+                        password = password,
+                        onSuccess = onLoginSuccess,
+                        onError = {
+                            errorMessage = it
+                            successMessage = null
                         }
                     )
                 },
-                modifier = Modifier.weight(1f),
-                shape = RoundedCornerShape(24.dp),
-                enabled = !loading,
+                modifier = Modifier
+                    .weight(1f)
+                    .height(56.dp),
+                shape = RoundedCornerShape(28.dp),
                 colors = ButtonDefaults.buttonColors(
                     containerColor = Color.White,
-                    contentColor = Color(0xFF7E57C2)
+                    contentColor = purple
                 )
             ) {
                 Text("Create Account")
             }
         }
 
-        Spacer(modifier = Modifier.height(16.dp))
-
-        if (loading) {
-            CircularProgressIndicator(color = Color(0xFF7E57C2))
+        errorMessage?.let {
+            Spacer(modifier = Modifier.height(24.dp))
+            Text(
+                text = it,
+                color = Color.Red
+            )
         }
 
-        if (errorMessage.isNotEmpty()) {
-            Spacer(modifier = Modifier.height(12.dp))
+        successMessage?.let {
+            Spacer(modifier = Modifier.height(24.dp))
             Text(
-                text = errorMessage,
-                color = Color.Red
+                text = it,
+                color = Color(0xFF16A34A)
             )
         }
     }
