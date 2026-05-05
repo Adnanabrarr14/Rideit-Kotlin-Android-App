@@ -47,9 +47,7 @@ class MapViewModel : ViewModel() {
                 locationSuggestions = suggestions,
                 errorMessage = if (text.trim().length >= 2 && suggestions.isEmpty()) {
                     "No locations found"
-                } else {
-                    null
-                }
+                } else null
             )
         }
     }
@@ -111,7 +109,7 @@ class MapViewModel : ViewModel() {
         )
 
         driverJob = viewModelScope.launch {
-            delay(2500)
+            delay(2200)
 
             val driver = Driver(
                 id = "1",
@@ -128,9 +126,11 @@ class MapViewModel : ViewModel() {
             )
 
             val driverStart = LatLng(
-                pickup.latitude + 0.012,
-                pickup.longitude - 0.012
+                pickup.latitude + 0.018,
+                pickup.longitude - 0.018
             )
+
+            val driverRoute = repository.getRoutePoints(driverStart, pickup)
 
             _uiState.value = _uiState.value.copy(
                 rideRequestStatus = RideRequestStatus.DRIVER_FOUND,
@@ -146,37 +146,17 @@ class MapViewModel : ViewModel() {
                 rideConfirmedMessage = "Driver is arriving..."
             )
 
-            moveDriverToPickup(driverStart, pickup)
+            driverRoute.forEach { point ->
+                delay(180)
+                _uiState.value = _uiState.value.copy(driverLatLng = point)
+            }
 
             _uiState.value = _uiState.value.copy(
                 rideRequestStatus = RideRequestStatus.RIDE_STARTED,
+                driverLatLng = pickup,
                 rideConfirmedMessage = "Driver arrived. Ride started!"
             )
         }
-    }
-
-    private suspend fun moveDriverToPickup(
-        start: LatLng,
-        pickup: LatLng
-    ) {
-        var current = start
-
-        repeat(35) {
-            delay(350)
-
-            val newLat = current.latitude + (pickup.latitude - current.latitude) * 0.12
-            val newLng = current.longitude + (pickup.longitude - current.longitude) * 0.12
-
-            current = LatLng(newLat, newLng)
-
-            _uiState.value = _uiState.value.copy(
-                driverLatLng = current
-            )
-        }
-
-        _uiState.value = _uiState.value.copy(
-            driverLatLng = pickup
-        )
     }
 
     fun onCancelRideClicked() {

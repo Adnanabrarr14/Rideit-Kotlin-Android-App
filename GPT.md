@@ -230,3 +230,14 @@ This project is built step-by-step with focus on:
 **Next Plan:**
 - Build real location search (Google Places autocomplete)
 - Make Uber-style search experience
+
+## Phase 4
+- GPT.md file created for tracking progress
+- Project documentation structure added
+- Development workflow improved (phase-based tracking)
+
+## Phase 5
+- Premium ride status UI added
+- Searching driver animation added
+- Driver found / arriving / ride started UI improved
+- Cancel ride styling improved
