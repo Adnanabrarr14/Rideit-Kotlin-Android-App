@@ -47,7 +47,9 @@ class MapViewModel : ViewModel() {
                 locationSuggestions = suggestions,
                 errorMessage = if (text.trim().length >= 2 && suggestions.isEmpty()) {
                     "No locations found"
-                } else null
+                } else {
+                    null
+                }
             )
         }
     }

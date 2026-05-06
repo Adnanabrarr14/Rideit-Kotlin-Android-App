@@ -241,3 +241,38 @@ This project is built step-by-step with focus on:
 - Searching driver animation added
 - Driver found / arriving / ride started UI improved
 - Cancel ride styling improved
+## Phase 6.1
+- Added professional menu drawer
+- Added Profile, Trip History, Payment, Ratings, Settings placeholders
+- Moved logout into drawer
+- Improved app navigation structure
+
+## Phase 6.2
+- Added Profile screen
+- Connected Profile from menu drawer
+- Added user email from FirebaseAuth
+- Added account details and settings UI
+
+## Phase 6.3
+- Added Trip History screen
+- Connected Trip History from drawer
+- Added trip cards, route info, fare, status and driver details
+- Added trip stats summary UI
+
+## Phase 6.4
+- Added Payment Method screen
+- Connected Payment Methods from drawer
+- Added wallet card UI
+- Added Cash, Card and Wallet payment method cards
+- 
+## Phase 6.5
+- Added Notifications screen
+- Connected Notifications from drawer
+- Added promotional offer cards
+- Added ride, promo, trip and payment notification cards
+
+## Phase 6.6
+- Added Settings screen
+- Connected Settings from drawer
+- Added ride alerts, promotions and location toggles
+- Added language, ride preference, privacy, emergency contacts and about UI
