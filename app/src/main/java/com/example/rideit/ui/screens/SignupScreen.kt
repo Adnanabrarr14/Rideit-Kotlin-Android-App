@@ -45,37 +45,36 @@ import androidx.compose.ui.unit.dp
 import com.example.rideit.FirebaseManager
 
 @Composable
-fun LoginScreen(
+fun SignupScreen(
     accountRole: String,
     accountTitle: String,
     accountSubtitle: String,
     primaryButtonText: String,
-    createAccountText: String,
     accentColor: Color,
     onBackClick: () -> Unit,
-    onCreateAccountClick: () -> Unit,
-    onLoginSuccess: () -> Unit
+    onSignupSuccess: () -> Unit
 ) {
     var email by remember { mutableStateOf("") }
     var password by remember { mutableStateOf("") }
+    var confirmPassword by remember { mutableStateOf("") }
+
     var passwordVisible by remember { mutableStateOf(false) }
+    var confirmPasswordVisible by remember { mutableStateOf(false) }
 
     var isLoading by remember { mutableStateOf(false) }
     var loadingMessage by remember { mutableStateOf("") }
 
     var errorMessage by remember { mutableStateOf<String?>(null) }
-    var successMessage by remember { mutableStateOf<String?>(null) }
 
-    val purple = Color(0xFF6F55B6)
     val cardColor = Color(0xFF1B1B1D)
     val fieldBorder = Color(0xFF6B6A76)
 
     val isDriver = accountRole == FirebaseManager.ROLE_DRIVER
 
     val roleHelperText = if (isDriver) {
-        "Driver accounts open the Driver Dashboard only."
+        "This will create a Driver account and open Driver Dashboard."
     } else {
-        "Rider accounts open the Rider Map only."
+        "This will create a Rider account and open Rider Map."
     }
 
     Box(
@@ -133,7 +132,7 @@ fun LoginScreen(
                 color = Color(0xFF9CA3AF)
             )
 
-            Spacer(modifier = Modifier.height(34.dp))
+            Spacer(modifier = Modifier.height(30.dp))
 
             Surface(
                 modifier = Modifier.fillMaxWidth(),
@@ -153,7 +152,7 @@ fun LoginScreen(
                     Spacer(modifier = Modifier.height(8.dp))
 
                     Text(
-                        text = "Use your email and password to sign in",
+                        text = "Create your account with email and password",
                         color = Color(0xFF9CA3AF)
                     )
 
@@ -179,7 +178,6 @@ fun LoginScreen(
                         onValueChange = {
                             email = it
                             errorMessage = null
-                            successMessage = null
                         },
                         enabled = !isLoading,
                         modifier = Modifier.fillMaxWidth(),
@@ -206,14 +204,13 @@ fun LoginScreen(
                         )
                     )
 
-                    Spacer(modifier = Modifier.height(18.dp))
+                    Spacer(modifier = Modifier.height(16.dp))
 
                     OutlinedTextField(
                         value = password,
                         onValueChange = {
                             password = it
                             errorMessage = null
-                            successMessage = null
                         },
                         enabled = !isLoading,
                         modifier = Modifier.fillMaxWidth(),
@@ -258,45 +255,58 @@ fun LoginScreen(
                         )
                     )
 
-                    TextButton(
-                        enabled = !isLoading,
-                        onClick = {
-                            if (email.isBlank()) {
-                                errorMessage = "Enter your email first"
-                                successMessage = null
-                                return@TextButton
-                            }
+                    Spacer(modifier = Modifier.height(16.dp))
 
-                            isLoading = true
-                            loadingMessage = "Sending password reset email..."
+                    OutlinedTextField(
+                        value = confirmPassword,
+                        onValueChange = {
+                            confirmPassword = it
                             errorMessage = null
-                            successMessage = null
-
-                            FirebaseManager.resetPassword(
-                                email = email,
-                                onSuccess = {
-                                    isLoading = false
-                                    loadingMessage = ""
-                                    successMessage = "Password reset email sent"
-                                    errorMessage = null
-                                },
-                                onError = {
-                                    isLoading = false
-                                    loadingMessage = ""
-                                    errorMessage = it
-                                    successMessage = null
-                                }
+                        },
+                        enabled = !isLoading,
+                        modifier = Modifier.fillMaxWidth(),
+                        label = { Text("Confirm Password") },
+                        leadingIcon = {
+                            Text(
+                                text = "🔒",
+                                color = Color(0xFF6B6A76)
                             )
                         },
-                        modifier = Modifier.align(Alignment.End)
-                    ) {
-                        Text(
-                            text = "Forgot password?",
-                            color = Color(0xFF9CA3AF)
+                        trailingIcon = {
+                            TextButton(
+                                enabled = !isLoading,
+                                onClick = {
+                                    confirmPasswordVisible = !confirmPasswordVisible
+                                }
+                            ) {
+                                Text(
+                                    text = if (confirmPasswordVisible) "Hide" else "Show",
+                                    color = Color(0xFF8B8A96)
+                                )
+                            }
+                        },
+                        visualTransformation = if (confirmPasswordVisible) {
+                            VisualTransformation.None
+                        } else {
+                            PasswordVisualTransformation()
+                        },
+                        singleLine = true,
+                        shape = RoundedCornerShape(8.dp),
+                        colors = OutlinedTextFieldDefaults.colors(
+                            focusedTextColor = Color.White,
+                            unfocusedTextColor = Color.White,
+                            disabledTextColor = Color(0xFF9CA3AF),
+                            focusedBorderColor = fieldBorder,
+                            unfocusedBorderColor = fieldBorder,
+                            disabledBorderColor = fieldBorder.copy(alpha = 0.55f),
+                            focusedLabelColor = Color(0xFF9CA3AF),
+                            unfocusedLabelColor = Color(0xFF6B7280),
+                            disabledLabelColor = Color(0xFF6B7280),
+                            cursorColor = Color.White
                         )
-                    }
+                    )
 
-                    Spacer(modifier = Modifier.height(10.dp))
+                    Spacer(modifier = Modifier.height(18.dp))
 
                     AnimatedVisibility(
                         visible = isLoading,
@@ -316,7 +326,7 @@ fun LoginScreen(
                             Spacer(modifier = Modifier.height(10.dp))
 
                             Text(
-                                text = loadingMessage.ifBlank { "Checking account..." },
+                                text = loadingMessage.ifBlank { "Creating account..." },
                                 color = Color(0xFFB8BBC7),
                                 fontWeight = FontWeight.Medium
                             )
@@ -328,31 +338,42 @@ fun LoginScreen(
                     Button(
                         enabled = !isLoading,
                         onClick = {
-                            if (email.isBlank() || password.isBlank()) {
-                                errorMessage = "Please enter email and password"
-                                successMessage = null
+                            if (email.isBlank() || password.isBlank() || confirmPassword.isBlank()) {
+                                errorMessage = "Please fill all fields"
+                                return@Button
+                            }
+
+                            if (password.length < 6) {
+                                errorMessage = "Password must be at least 6 characters"
+                                return@Button
+                            }
+
+                            if (password != confirmPassword) {
+                                errorMessage = "Passwords do not match"
                                 return@Button
                             }
 
                             isLoading = true
-                            loadingMessage = "Signing in and checking account role..."
+                            loadingMessage = if (isDriver) {
+                                "Creating driver account and saving role..."
+                            } else {
+                                "Creating rider account and saving role..."
+                            }
                             errorMessage = null
-                            successMessage = null
 
-                            FirebaseManager.login(
+                            FirebaseManager.signup(
                                 email = email,
                                 password = password,
-                                expectedRole = accountRole,
+                                role = accountRole,
                                 onSuccess = {
                                     isLoading = false
                                     loadingMessage = ""
-                                    onLoginSuccess()
+                                    onSignupSuccess()
                                 },
                                 onError = {
                                     isLoading = false
                                     loadingMessage = ""
                                     errorMessage = it
-                                    successMessage = null
                                 }
                             )
                         },
@@ -373,43 +394,11 @@ fun LoginScreen(
                         )
                     }
 
-                    Spacer(modifier = Modifier.height(14.dp))
-
-                    Button(
-                        enabled = !isLoading,
-                        onClick = {
-                            onCreateAccountClick()
-                        },
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .height(50.dp),
-                        shape = RoundedCornerShape(25.dp),
-                        colors = ButtonDefaults.buttonColors(
-                            containerColor = purple,
-                            contentColor = Color.White,
-                            disabledContainerColor = purple.copy(alpha = 0.55f),
-                            disabledContentColor = Color.White.copy(alpha = 0.72f)
-                        )
-                    ) {
-                        Text(
-                            text = createAccountText,
-                            fontWeight = FontWeight.Bold
-                        )
-                    }
-
                     errorMessage?.let {
                         Spacer(modifier = Modifier.height(16.dp))
                         Text(
                             text = it,
                             color = Color(0xFFFF6B6B)
-                        )
-                    }
-
-                    successMessage?.let {
-                        Spacer(modifier = Modifier.height(16.dp))
-                        Text(
-                            text = it,
-                            color = Color(0xFF22C55E)
                         )
                     }
                 }

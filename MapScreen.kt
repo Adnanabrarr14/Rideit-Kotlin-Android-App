@@ -22,46 +22,130 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.geometry.CornerRadius
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Size
-import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.viewmodel.compose.viewModel
-import com.example.rideit.map.model.LocationSuggestion
-import com.example.rideit.map.model.MapUiState
-import com.example.rideit.map.model.RideOption
-import com.example.rideit.map.model.RideRequestStatus
+import com.example.rideit.map.model.*
 import com.example.rideit.map.viewmodel.MapViewModel
 import com.google.android.gms.maps.CameraUpdateFactory
-import com.google.android.gms.maps.model.BitmapDescriptorFactory
-import com.google.android.gms.maps.model.CameraPosition
-import com.google.android.gms.maps.model.LatLng
-import com.google.android.gms.maps.model.LatLngBounds
+import com.google.android.gms.maps.model.*
 import com.google.maps.android.compose.*
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
+import ui.components.PremiumDriverMiniCard
+import ui.components.PremiumMapPolishLayer
+import ui.components.PremiumRideCompletionSheet
+import ui.components.PremiumRouteSummaryCard
+import ui.components.PremiumSafetyQuickActions
+import ui.components.PremiumTripReceiptPreviewSheet
+import ui.components.PremiumTripStatusBanner
+import ui.components.RideitTripStatus
 
 @Composable
 fun MapScreen(
-    mapViewModel: MapViewModel = viewModel(),
-    onLogout: () -> Unit = {}
+    mapViewModel: MapViewModel = viewModel()
 ) {
     val uiState by mapViewModel.uiState.collectAsState()
-    var showPanel by remember { mutableStateOf(true) }
 
-    val drawerState = rememberDrawerState(initialValue = DrawerValue.Closed)
+    var showPanel by remember { mutableStateOf(true) }
+    var showRideCompletionSheet by remember { mutableStateOf(false) }
+    var showReceiptPreviewSheet by remember { mutableStateOf(false) }
+    var submittedRating by remember { mutableStateOf<Int?>(null) }
+
     val scope = rememberCoroutineScope()
+    val snackbarHostState = remember { SnackbarHostState() }
+
+    val defaultLocation = LatLng(33.6844, 73.0479)
 
     val cameraPositionState = rememberCameraPositionState {
-        position = CameraPosition.fromLatLngZoom(LatLng(33.6844, 73.0479), 14f)
+        position = CameraPosition.fromLatLngZoom(defaultLocation, 14f)
     }
 
-    LaunchedEffect(cameraPositionState.isMoving) {
-        if (cameraPositionState.isMoving) {
+    val currentTripStatus = when (uiState.rideRequestStatus) {
+        RideRequestStatus.SEARCHING_DRIVER -> RideitTripStatus.SearchingDriver
+        RideRequestStatus.DRIVER_FOUND -> RideitTripStatus.DriverFound
+        RideRequestStatus.DRIVER_ARRIVING -> RideitTripStatus.DriverArriving
+        RideRequestStatus.RIDE_STARTED -> RideitTripStatus.TripInProgress
+        else -> RideitTripStatus.Idle
+    }
+
+    val selectedRide = uiState.selectedRideOption ?: uiState.rideOptions.firstOrNull()
+
+    val overlayVisible = showRideCompletionSheet || showReceiptPreviewSheet
+
+    val hasPickupOrDropoffText =
+        uiState.pickupText.isNotBlank() || uiState.dropoffText.isNotBlank()
+
+    val hasPickupOrDropoffLocation =
+        uiState.pickupLatLng != null || uiState.dropoffLatLng != null
+
+    val hasActiveRoute =
+        uiState.routePoints.size >= 2
+
+    val hasActiveRideFlow =
+        currentTripStatus != RideitTripStatus.Idle
+
+    val shouldShowRouteSummary =
+        !overlayVisible &&
+                (
+                        hasPickupOrDropoffText ||
+                                hasPickupOrDropoffLocation ||
+                                hasActiveRoute ||
+                                hasActiveRideFlow ||
+                                uiState.selectedRideOption != null
+                        )
+
+    val driverMiniStatusText = when (uiState.rideRequestStatus) {
+        RideRequestStatus.SEARCHING_DRIVER -> "Matching you with a nearby driver"
+        RideRequestStatus.DRIVER_FOUND -> "Driver accepted your ride"
+        RideRequestStatus.DRIVER_ARRIVING -> "Driver is heading to pickup"
+        RideRequestStatus.RIDE_STARTED -> "Ride is currently in progress"
+        else -> "Driver status"
+    }
+
+    val driverMiniProgress = when (uiState.rideRequestStatus) {
+        RideRequestStatus.SEARCHING_DRIVER -> 0.25f
+        RideRequestStatus.DRIVER_FOUND -> 0.50f
+        RideRequestStatus.DRIVER_ARRIVING -> 0.78f
+        RideRequestStatus.RIDE_STARTED -> 1f
+        else -> 0f
+    }
+
+    val shouldShowDriverMiniCard =
+        uiState.driver != null &&
+                hasActiveRideFlow &&
+                !showPanel &&
+                !overlayVisible
+
+    val shouldShowSafetyActions =
+        !overlayVisible &&
+                (
+                        currentTripStatus == RideitTripStatus.DriverFound ||
+                                currentTripStatus == RideitTripStatus.DriverArriving ||
+                                currentTripStatus == RideitTripStatus.TripInProgress
+                        )
+
+    val premiumMapStatusText = when (currentTripStatus) {
+        RideitTripStatus.SearchingDriver -> "Finding driver"
+        RideitTripStatus.DriverFound -> "Driver assigned"
+        RideitTripStatus.DriverArriving -> "Driver arriving"
+        RideitTripStatus.TripInProgress -> "Trip tracking"
+        RideitTripStatus.TripCompleted -> "Trip completed"
+        RideitTripStatus.Cancelled -> "Ride cancelled"
+        RideitTripStatus.Idle -> "Map ready"
+    }
+
+    LaunchedEffect(cameraPositionState.isMoving, overlayVisible) {
+        if (overlayVisible) {
             showPanel = false
         } else {
-            delay(500)
-            showPanel = true
+            if (cameraPositionState.isMoving) {
+                showPanel = false
+            } else {
+                delay(500)
+                showPanel = true
+            }
         }
     }
 
@@ -70,8 +154,11 @@ fun MapScreen(
         uiState.dropoffLatLng,
         uiState.driverLatLng,
         uiState.routePoints,
-        uiState.rideRequestStatus
+        uiState.rideRequestStatus,
+        overlayVisible
     ) {
+        if (overlayVisible) return@LaunchedEffect
+
         delay(300)
 
         val builder = LatLngBounds.Builder()
@@ -108,227 +195,329 @@ fun MapScreen(
         }
     }
 
-    ModalNavigationDrawer(
-        drawerState = drawerState,
-        drawerContent = {
-            RideitDrawer(
-                onClose = {
-                    scope.launch { drawerState.close() }
-                },
-                onLogout = {
-                    scope.launch { drawerState.close() }
-                    onLogout()
+    Box(modifier = Modifier.fillMaxSize()) {
+        GoogleMap(
+            modifier = Modifier.fillMaxSize(),
+            cameraPositionState = cameraPositionState,
+            uiSettings = MapUiSettings(
+                zoomControlsEnabled = false,
+                myLocationButtonEnabled = false,
+                mapToolbarEnabled = false
+            )
+        ) {
+            uiState.pickupLatLng?.let {
+                Marker(state = MarkerState(it), title = "Pickup")
+            }
+
+            uiState.dropoffLatLng?.let {
+                Marker(state = MarkerState(it), title = "Dropoff")
+            }
+
+            uiState.driverLatLng?.let {
+                Marker(
+                    state = MarkerState(it),
+                    title = "Driver",
+                    icon = BitmapDescriptorFactory.defaultMarker(BitmapDescriptorFactory.HUE_AZURE)
+                )
+            }
+
+            if (uiState.routePoints.size >= 2) {
+                Polyline(
+                    points = uiState.routePoints,
+                    width = 8f,
+                    color = Color(0xFF8A35F2)
+                )
+            }
+        }
+
+        PremiumMapPolishLayer(
+            visible = !overlayVisible,
+            isMapMoving = cameraPositionState.isMoving,
+            hasRoute = hasActiveRoute,
+            hasDriver = uiState.driver != null,
+            tripStatusText = premiumMapStatusText,
+            modifier = Modifier.fillMaxSize()
+        )
+
+        PremiumTripStatusBanner(
+            status = currentTripStatus,
+            driverName = uiState.driver?.name,
+            etaText = uiState.driver?.arrivalTime,
+            vehicleText = uiState.driver?.vehicleName,
+            modifier = Modifier
+                .align(Alignment.TopCenter)
+                .statusBarsPadding()
+                .padding(top = 12.dp)
+        )
+
+        PremiumRouteSummaryCard(
+            visible = shouldShowRouteSummary,
+            pickupText = uiState.pickupText,
+            dropoffText = uiState.dropoffText,
+            rideTitle = selectedRide?.title,
+            estimatedFare = selectedRide?.estimatedFare,
+            estimatedTime = selectedRide?.estimatedTime,
+            modifier = Modifier
+                .align(Alignment.TopStart)
+                .statusBarsPadding()
+                .padding(
+                    top = if (currentTripStatus == RideitTripStatus.Idle) 18.dp else 150.dp,
+                    start = 16.dp,
+                    end = 104.dp
+                )
+        )
+
+        PremiumSafetyQuickActions(
+            visible = shouldShowSafetyActions,
+            modifier = Modifier
+                .align(Alignment.CenterEnd)
+                .padding(end = 16.dp),
+            onSafetyClick = {
+                scope.launch {
+                    snackbarHostState.showSnackbar(
+                        message = "Safety center ready. Driver and trip are being monitored."
+                    )
+                }
+            },
+            onShareTripClick = {
+                scope.launch {
+                    snackbarHostState.showSnackbar(
+                        message = "Share trip feature prepared. Real sharing can be connected later."
+                    )
+                }
+            },
+            onSupportClick = {
+                scope.launch {
+                    snackbarHostState.showSnackbar(
+                        message = "Rideit support is ready to help during your trip."
+                    )
+                }
+            },
+            onEmergencyInfoClick = {
+                scope.launch {
+                    snackbarHostState.showSnackbar(
+                        message = "Emergency info opened. Real emergency contact can be added later."
+                    )
+                }
+            }
+        )
+
+        uiState.driver?.let { driver ->
+            PremiumDriverMiniCard(
+                visible = shouldShowDriverMiniCard,
+                driverName = driver.name,
+                vehicleName = driver.vehicleName,
+                vehicleNumber = driver.vehicleNumber,
+                rating = driver.rating,
+                arrivalTime = driver.arrivalTime,
+                statusText = driverMiniStatusText,
+                progress = driverMiniProgress,
+                modifier = Modifier
+                    .align(Alignment.BottomCenter)
+                    .navigationBarsPadding()
+                    .padding(start = 16.dp, end = 16.dp, bottom = 24.dp)
+            )
+        }
+
+        PremiumMapControls(
+            modifier = Modifier
+                .align(Alignment.TopEnd)
+                .padding(top = 46.dp, end = 16.dp),
+            onRecenterClick = {
+                scope.launch {
+                    val target = uiState.driverLatLng
+                        ?: uiState.dropoffLatLng
+                        ?: uiState.pickupLatLng
+                        ?: defaultLocation
+
+                    cameraPositionState.animate(
+                        update = CameraUpdateFactory.newLatLngZoom(target, 15.5f),
+                        durationMs = 700
+                    )
+                }
+            },
+            onRouteFocusClick = {
+                scope.launch {
+                    val builder = LatLngBounds.Builder()
+                    var hasPoint = false
+
+                    uiState.pickupLatLng?.let {
+                        builder.include(it)
+                        hasPoint = true
+                    }
+
+                    uiState.dropoffLatLng?.let {
+                        builder.include(it)
+                        hasPoint = true
+                    }
+
+                    uiState.driverLatLng?.let {
+                        builder.include(it)
+                        hasPoint = true
+                    }
+
+                    uiState.routePoints.forEach {
+                        builder.include(it)
+                        hasPoint = true
+                    }
+
+                    if (hasPoint) {
+                        try {
+                            cameraPositionState.animate(
+                                update = CameraUpdateFactory.newLatLngBounds(builder.build(), 160),
+                                durationMs = 850
+                            )
+                        } catch (_: Exception) {
+                        }
+                    } else {
+                        cameraPositionState.animate(
+                            update = CameraUpdateFactory.newLatLngZoom(defaultLocation, 14f),
+                            durationMs = 700
+                        )
+                    }
+                }
+            }
+        )
+
+        AnimatedVisibility(
+            visible = showPanel && !overlayVisible,
+            enter = slideInVertically { it } + fadeIn(),
+            exit = slideOutVertically { it } + fadeOut(),
+            modifier = Modifier.align(Alignment.BottomCenter)
+        ) {
+            RideitBottomPanel(
+                uiState = uiState,
+                mapViewModel = mapViewModel,
+                onCompleteRideClicked = {
+                    showRideCompletionSheet = true
                 }
             )
         }
-    ) {
-        Box(modifier = Modifier.fillMaxSize()) {
-            GoogleMap(
-                modifier = Modifier.fillMaxSize(),
-                cameraPositionState = cameraPositionState,
-                uiSettings = MapUiSettings(
-                    zoomControlsEnabled = false,
-                    myLocationButtonEnabled = false,
-                    mapToolbarEnabled = false
-                )
-            ) {
-                uiState.pickupLatLng?.let {
-                    Marker(state = MarkerState(it), title = "Pickup")
-                }
 
-                uiState.dropoffLatLng?.let {
-                    Marker(state = MarkerState(it), title = "Dropoff")
-                }
+        PremiumRideCompletionSheet(
+            visible = showRideCompletionSheet,
+            driverName = uiState.driver?.name,
+            rideTitle = selectedRide?.title,
+            fareText = selectedRide?.estimatedFare,
+            modifier = Modifier.align(Alignment.Center),
+            onDismiss = {
+                showRideCompletionSheet = false
+            },
+            onSubmitRating = { rating, tags, feedback ->
+                submittedRating = rating
+                showRideCompletionSheet = false
+                showReceiptPreviewSheet = true
 
-                uiState.driverLatLng?.let {
-                    Marker(
-                        state = MarkerState(it),
-                        title = "Driver",
-                        icon = BitmapDescriptorFactory.defaultMarker(BitmapDescriptorFactory.HUE_AZURE)
+                scope.launch {
+                    val tagText = if (tags.isNotEmpty()) {
+                        " Tags: ${tags.joinToString(", ")}."
+                    } else {
+                        ""
+                    }
+
+                    val feedbackText = if (feedback.isNotBlank()) {
+                        " Feedback saved."
+                    } else {
+                        ""
+                    }
+
+                    snackbarHostState.showSnackbar(
+                        message = "Thanks! $rating-star rating submitted.$tagText$feedbackText"
                     )
                 }
+            }
+        )
 
-                if (uiState.routePoints.size >= 2) {
-                    Polyline(
-                        points = uiState.routePoints,
-                        width = 8f,
-                        color = Color(0xFF8A35F2)
+        PremiumTripReceiptPreviewSheet(
+            visible = showReceiptPreviewSheet,
+            driverName = uiState.driver?.name,
+            pickupText = uiState.pickupText,
+            dropoffText = uiState.dropoffText,
+            rideTitle = selectedRide?.title,
+            fareText = selectedRide?.estimatedFare,
+            rating = submittedRating,
+            modifier = Modifier.align(Alignment.Center),
+            onDoneClick = {
+                showReceiptPreviewSheet = false
+            },
+            onViewHistoryClick = {
+                showReceiptPreviewSheet = false
+
+                scope.launch {
+                    snackbarHostState.showSnackbar(
+                        message = "Trip History screen is already available. Real receipt navigation can be connected later."
                     )
                 }
             }
+        )
 
-            Button(
-                onClick = {
-                    scope.launch { drawerState.open() }
-                },
-                modifier = Modifier
-                    .align(Alignment.TopStart)
-                    .padding(top = 46.dp, start = 16.dp),
-                shape = RoundedCornerShape(18.dp),
-                colors = ButtonDefaults.buttonColors(
-                    containerColor = Color(0xFF111827),
-                    contentColor = Color.White
-                )
-            ) {
-                Text("☰", fontWeight = FontWeight.Bold)
-            }
-
-            AnimatedVisibility(
-                visible = showPanel,
-                enter = slideInVertically { it } + fadeIn(),
-                exit = slideOutVertically { it } + fadeOut(),
-                modifier = Modifier.align(Alignment.BottomCenter)
-            ) {
-                RideitBottomPanel(
-                    uiState = uiState,
-                    mapViewModel = mapViewModel
-                )
-            }
-        }
-    }
-}
-
-@Composable
-private fun RideitDrawer(
-    onClose: () -> Unit,
-    onLogout: () -> Unit
-) {
-    ModalDrawerSheet(
-        modifier = Modifier
-            .fillMaxHeight()
-            .widthIn(max = 310.dp),
-        drawerContainerColor = Color(0xFF111113)
-    ) {
-        Column(
+        SnackbarHost(
+            hostState = snackbarHostState,
             modifier = Modifier
-                .fillMaxSize()
-                .background(
-                    Brush.verticalGradient(
-                        colors = listOf(
-                            Color(0xFF111113),
-                            Color(0xFF1A1018),
-                            Color(0xFF090909)
-                        )
-                    )
-                )
-                .padding(22.dp)
-        ) {
-            Row(verticalAlignment = Alignment.CenterVertically) {
-                Box(
-                    modifier = Modifier
-                        .size(58.dp)
-                        .clip(CircleShape)
-                        .background(Color(0xFF8A35F2)),
-                    contentAlignment = Alignment.Center
-                ) {
-                    Text(
-                        text = "R",
-                        color = Color.White,
-                        fontWeight = FontWeight.Bold,
-                        style = MaterialTheme.typography.headlineMedium
-                    )
-                }
-
-                Spacer(modifier = Modifier.width(14.dp))
-
-                Column {
-                    Text(
-                        text = "Rideit",
-                        color = Color.White,
-                        fontWeight = FontWeight.Bold,
-                        style = MaterialTheme.typography.titleLarge
-                    )
-
-                    Text(
-                        text = "Premium Ride App",
-                        color = Color(0xFF9CA3AF),
-                        style = MaterialTheme.typography.bodySmall
-                    )
-                }
-            }
-
-            Spacer(modifier = Modifier.height(30.dp))
-
-            DrawerItem("👤", "Profile", "Manage your account", onClose)
-            DrawerItem("🧾", "Trip History", "View your previous rides", onClose)
-            DrawerItem("💳", "Payment Methods", "Cards, cash and wallet", onClose)
-            DrawerItem("⭐", "Ratings", "Rate your rides", onClose)
-            DrawerItem("⚙️", "Settings", "App preferences", onClose)
-
-            Spacer(modifier = Modifier.weight(1f))
-
-            Surface(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .clickable { onLogout() },
-                shape = RoundedCornerShape(20.dp),
-                color = Color(0xFF2A1111)
-            ) {
-                Row(
-                    modifier = Modifier.padding(16.dp),
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
-                    Text("🚪", style = MaterialTheme.typography.titleLarge)
-
-                    Spacer(modifier = Modifier.width(12.dp))
-
-                    Text(
-                        text = "Logout",
-                        color = Color(0xFFFF6B6B),
-                        fontWeight = FontWeight.Bold,
-                        style = MaterialTheme.typography.titleMedium
-                    )
-                }
-            }
-        }
+                .align(Alignment.BottomCenter)
+                .navigationBarsPadding()
+                .padding(start = 16.dp, end = 16.dp, bottom = 120.dp)
+        )
     }
 }
 
 @Composable
-private fun DrawerItem(
+private fun PremiumMapControls(
+    modifier: Modifier = Modifier,
+    onRecenterClick: () -> Unit,
+    onRouteFocusClick: () -> Unit
+) {
+    Column(
+        modifier = modifier,
+        verticalArrangement = Arrangement.spacedBy(12.dp),
+        horizontalAlignment = Alignment.End
+    ) {
+        PremiumMapButton(
+            icon = "⌖",
+            label = "Recenter",
+            onClick = onRecenterClick
+        )
+
+        PremiumMapButton(
+            icon = "⛶",
+            label = "Route",
+            onClick = onRouteFocusClick
+        )
+    }
+}
+
+@Composable
+private fun PremiumMapButton(
     icon: String,
-    title: String,
-    subtitle: String,
+    label: String,
     onClick: () -> Unit
 ) {
     Surface(
-        modifier = Modifier
-            .fillMaxWidth()
-            .padding(bottom = 12.dp)
-            .clickable { onClick() },
-        shape = RoundedCornerShape(20.dp),
-        color = Color(0xFF1D1D21)
+        modifier = Modifier.clickable { onClick() },
+        shape = RoundedCornerShape(18.dp),
+        color = Color.White.copy(alpha = 0.96f),
+        shadowElevation = 12.dp,
+        tonalElevation = 6.dp
     ) {
         Row(
-            modifier = Modifier.padding(14.dp),
+            modifier = Modifier.padding(horizontal = 12.dp, vertical = 10.dp),
             verticalAlignment = Alignment.CenterVertically
         ) {
-            Box(
-                modifier = Modifier
-                    .size(46.dp)
-                    .clip(RoundedCornerShape(16.dp))
-                    .background(Color(0xFF2A2138)),
-                contentAlignment = Alignment.Center
-            ) {
-                Text(icon)
-            }
+            Text(
+                text = icon,
+                color = Color(0xFF8A35F2),
+                fontWeight = FontWeight.Bold,
+                style = MaterialTheme.typography.titleMedium
+            )
 
-            Spacer(modifier = Modifier.width(12.dp))
+            Spacer(modifier = Modifier.width(6.dp))
 
-            Column {
-                Text(
-                    text = title,
-                    color = Color.White,
-                    fontWeight = FontWeight.Bold,
-                    style = MaterialTheme.typography.titleMedium
-                )
-
-                Text(
-                    text = subtitle,
-                    color = Color(0xFF9CA3AF),
-                    style = MaterialTheme.typography.bodySmall
-                )
-            }
+            Text(
+                text = label,
+                color = Color(0xFF111827),
+                fontWeight = FontWeight.Bold,
+                style = MaterialTheme.typography.bodySmall
+            )
         }
     }
 }
@@ -336,7 +525,8 @@ private fun DrawerItem(
 @Composable
 private fun RideitBottomPanel(
     uiState: MapUiState,
-    mapViewModel: MapViewModel
+    mapViewModel: MapViewModel,
+    onCompleteRideClicked: () -> Unit
 ) {
     Surface(
         modifier = Modifier
@@ -371,7 +561,8 @@ private fun RideitBottomPanel(
                         uiState.rideRequestStatus == RideRequestStatus.RIDE_STARTED -> {
                     PremiumRideStatusContent(
                         uiState = uiState,
-                        onCancelRide = mapViewModel::onCancelRideClicked
+                        onCancelRide = mapViewModel::onCancelRideClicked,
+                        onCompleteRideClicked = onCompleteRideClicked
                     )
                 }
 
@@ -536,7 +727,8 @@ private fun RideSelectionContent(
 @Composable
 private fun PremiumRideStatusContent(
     uiState: MapUiState,
-    onCancelRide: () -> Unit
+    onCancelRide: () -> Unit,
+    onCompleteRideClicked: () -> Unit
 ) {
     val statusColor = when (uiState.rideRequestStatus) {
         RideRequestStatus.SEARCHING_DRIVER -> Color(0xFF8A35F2)
@@ -605,13 +797,37 @@ private fun PremiumRideStatusContent(
                 Column(modifier = Modifier.weight(1f)) {
                     Text(driver.name, fontWeight = FontWeight.Bold)
                     Text("${driver.vehicleName} • ${driver.vehicleNumber}", color = Color.Gray)
-                    Text("⭐ ${driver.rating} • ${driver.arrivalTime}", color = statusColor, fontWeight = FontWeight.Bold)
+                    Text(
+                        "⭐ ${driver.rating} • ${driver.arrivalTime}",
+                        color = statusColor,
+                        fontWeight = FontWeight.Bold
+                    )
                 }
             }
         }
     }
 
     Spacer(modifier = Modifier.height(14.dp))
+
+    if (uiState.rideRequestStatus == RideRequestStatus.RIDE_STARTED) {
+        Button(
+            onClick = onCompleteRideClicked,
+            modifier = Modifier
+                .fillMaxWidth()
+                .height(54.dp),
+            shape = RoundedCornerShape(20.dp),
+            colors = ButtonDefaults.buttonColors(
+                containerColor = Color(0xFF16A34A)
+            )
+        ) {
+            Text(
+                text = "Complete Ride Demo",
+                fontWeight = FontWeight.Bold
+            )
+        }
+
+        Spacer(modifier = Modifier.height(10.dp))
+    }
 
     OutlinedButton(
         onClick = onCancelRide,
