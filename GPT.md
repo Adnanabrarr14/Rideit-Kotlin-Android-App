@@ -665,6 +665,54 @@ Phase 8.3 completed:
 - Existing rider booking flow preserved
 - No architecture rewrite
 
+Phase 8.4 completed:
+- Rider app now listens to the active Firebase ride request
+- Rider sees Firebase ride request status after booking
+- Rider sees “waiting for driver” after request is saved
+- Driver acceptance updates are detected on rider side
+- Rider sees Shameer Khan accepted the ride
+- Rider sees assigned driver name/email from Firebase
+- Existing rider map preserved
+- Existing ride selection UI preserved
+- Existing driver dashboard preserved
+- Firebase ride request flow now connects rider booking to driver acceptance
+- No architecture rewrite
+
+
+Phase 8.4.1 completed:
+- Added real Google Map preview inside Driver Active Trip screen
+- Replaced demo drawn map card with live GoogleMap card
+- Added driver marker
+- Added pickup marker
+- Added dropoff marker
+- Added route polyline preview
+- Camera focuses on pickup/dropoff based on trip step
+- Preserved existing DriverTripScreen layout
+- Preserved active trip steps:
+  - Go to pickup
+  - Arrived at pickup
+  - Trip in progress
+  - Trip completed
+- No driver dashboard changes
+- No wallet/history/documents/support changes
+- No rider map changes
+- No Firebase rules changes
+- No architecture rewrite
+
+
+
+Completed:
+- Phase 8.1 Firebase role system
+- Phase 8.1.1 Login loading polish
+- Phase 8.1.2 Separate signup flow
+- Phase 8.2 Rider trip request saves to Firebase
+- Phase 8.3 Driver reads Firebase ride requests
+- Phase 8.4 Rider sees driver accepted status
+- Phase 8.4.1 Driver active trip real map preview
+
+Next Phase:
+Phase 8.5 — Rider Cancel Ride Updates Firebase Status
+
 
 
 

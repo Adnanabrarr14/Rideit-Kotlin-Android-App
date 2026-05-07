@@ -9,7 +9,6 @@ import androidx.compose.animation.core.rememberInfiniteTransition
 import androidx.compose.animation.core.tween
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
-import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
@@ -41,6 +40,7 @@ import androidx.compose.material3.SnackbarHostState
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.remember
@@ -50,13 +50,21 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.draw.clip
-import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.graphics.StrokeCap
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
+import com.google.android.gms.maps.CameraUpdateFactory
+import com.google.android.gms.maps.model.BitmapDescriptorFactory
+import com.google.android.gms.maps.model.CameraPosition
+import com.google.android.gms.maps.model.LatLng
+import com.google.maps.android.compose.GoogleMap
+import com.google.maps.android.compose.MapUiSettings
+import com.google.maps.android.compose.Marker
+import com.google.maps.android.compose.MarkerState
+import com.google.maps.android.compose.Polyline
+import com.google.maps.android.compose.rememberCameraPositionState
 import kotlinx.coroutines.launch
 
 @Composable
@@ -112,7 +120,7 @@ fun DriverTripScreen(
 
             Spacer(modifier = Modifier.height(16.dp))
 
-            DriverTripMapPreviewCard(
+            DriverTripRealMapPreviewCard(
                 tripStep = tripStep
             )
 
@@ -340,73 +348,91 @@ private fun LiveDriverDot() {
 }
 
 @Composable
-private fun DriverTripMapPreviewCard(
+private fun DriverTripRealMapPreviewCard(
     tripStep: Int
 ) {
+    val pickupLocation = LatLng(33.6938, 73.0328)
+    val dropoffLocation = LatLng(33.7202, 73.0605)
+
+    val driverLocation = when (tripStep) {
+        0 -> LatLng(33.6844, 73.0479)
+        1 -> pickupLocation
+        2 -> LatLng(33.7067, 73.0469)
+        else -> dropoffLocation
+    }
+
+    val routePoints = listOf(
+        driverLocation,
+        pickupLocation,
+        LatLng(33.7048, 73.0437),
+        dropoffLocation
+    )
+
+    val cameraPositionState = rememberCameraPositionState {
+        position = CameraPosition.fromLatLngZoom(pickupLocation, 13.4f)
+    }
+
+    LaunchedEffect(tripStep) {
+        val focusPoint = when (tripStep) {
+            0 -> pickupLocation
+            1 -> pickupLocation
+            2 -> dropoffLocation
+            else -> dropoffLocation
+        }
+
+        cameraPositionState.animate(
+            update = CameraUpdateFactory.newLatLngZoom(focusPoint, 13.8f),
+            durationMs = 700
+        )
+    }
+
     Surface(
         modifier = Modifier
             .fillMaxWidth()
-            .height(220.dp),
+            .height(260.dp),
         shape = RoundedCornerShape(32.dp),
         color = Color.White,
         shadowElevation = 12.dp,
         tonalElevation = 6.dp
     ) {
         Box(
-            modifier = Modifier
-                .fillMaxSize()
-                .background(Color(0xFFEFF3FA))
+            modifier = Modifier.fillMaxSize()
         ) {
-            Canvas(
-                modifier = Modifier.fillMaxSize()
+            GoogleMap(
+                modifier = Modifier.fillMaxSize(),
+                cameraPositionState = cameraPositionState,
+                uiSettings = MapUiSettings(
+                    zoomControlsEnabled = false,
+                    myLocationButtonEnabled = false,
+                    mapToolbarEnabled = false,
+                    compassEnabled = false
+                )
             ) {
-                val width = size.width
-                val height = size.height
-
-                val start = Offset(width * 0.22f, height * 0.72f)
-                val middle = Offset(width * 0.48f, height * 0.42f)
-                val end = Offset(width * 0.78f, height * 0.28f)
-
-                drawLine(
-                    color = Color(0xFFD1D5DB),
-                    start = start,
-                    end = middle,
-                    strokeWidth = 12f,
-                    cap = StrokeCap.Round
+                Marker(
+                    state = MarkerState(driverLocation),
+                    title = "Driver",
+                    snippet = "Shameer Khan",
+                    icon = BitmapDescriptorFactory.defaultMarker(BitmapDescriptorFactory.HUE_AZURE)
                 )
 
-                drawLine(
-                    color = Color(0xFFD1D5DB),
-                    start = middle,
-                    end = end,
-                    strokeWidth = 12f,
-                    cap = StrokeCap.Round
+                Marker(
+                    state = MarkerState(pickupLocation),
+                    title = "Pickup",
+                    snippet = "F-10 Markaz, Islamabad",
+                    icon = BitmapDescriptorFactory.defaultMarker(BitmapDescriptorFactory.HUE_GREEN)
                 )
 
-                drawLine(
+                Marker(
+                    state = MarkerState(dropoffLocation),
+                    title = "Dropoff",
+                    snippet = "Blue Area, Islamabad",
+                    icon = BitmapDescriptorFactory.defaultMarker(BitmapDescriptorFactory.HUE_VIOLET)
+                )
+
+                Polyline(
+                    points = routePoints,
                     color = Color(0xFF8A35F2),
-                    start = start,
-                    end = if (tripStep <= 1) middle else end,
-                    strokeWidth = 8f,
-                    cap = StrokeCap.Round
-                )
-
-                drawCircle(
-                    color = Color(0xFF16A34A),
-                    radius = 16f,
-                    center = start
-                )
-
-                drawCircle(
-                    color = Color(0xFF8A35F2),
-                    radius = 16f,
-                    center = middle
-                )
-
-                drawCircle(
-                    color = Color(0xFF111827),
-                    radius = 16f,
-                    center = end
+                    width = 8f
                 )
             }
 
@@ -441,7 +467,7 @@ private fun DriverTripMapPreviewCard(
                 shadowElevation = 8.dp
             ) {
                 Text(
-                    text = "Demo map",
+                    text = "Live map",
                     modifier = Modifier.padding(horizontal = 13.dp, vertical = 8.dp),
                     style = MaterialTheme.typography.labelMedium,
                     fontWeight = FontWeight.Black,
