@@ -1,16 +1,9 @@
 package com.example.rideit.driver.ui
 
 import androidx.compose.animation.AnimatedVisibility
-import androidx.compose.animation.core.FastOutSlowInEasing
-import androidx.compose.animation.core.RepeatMode
-import androidx.compose.animation.core.animateFloat
-import androidx.compose.animation.core.infiniteRepeatable
-import androidx.compose.animation.core.rememberInfiniteTransition
-import androidx.compose.animation.core.tween
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
 import androidx.compose.foundation.background
-import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -43,23 +36,29 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
+import com.example.rideit.FirebaseManager
 import com.google.android.gms.maps.CameraUpdateFactory
 import com.google.android.gms.maps.model.BitmapDescriptorFactory
 import com.google.android.gms.maps.model.CameraPosition
 import com.google.android.gms.maps.model.LatLng
+import com.google.android.gms.maps.model.LatLngBounds
+import com.google.firebase.Timestamp
+import com.google.firebase.firestore.DocumentSnapshot
+import com.google.firebase.firestore.FirebaseFirestore
 import com.google.maps.android.compose.GoogleMap
+import com.google.maps.android.compose.MapProperties
 import com.google.maps.android.compose.MapUiSettings
 import com.google.maps.android.compose.Marker
 import com.google.maps.android.compose.MarkerState
@@ -70,31 +69,194 @@ import kotlinx.coroutines.launch
 @Composable
 fun DriverTripScreen(
     driverName: String = "Shameer Khan",
+    rideRequestId: String? = null,
     onBackToDriverHome: () -> Unit
 ) {
+    val defaultPickupLatLng = LatLng(33.6844, 73.0479)
+    val defaultDropoffLatLng = LatLng(33.7008, 73.0650)
+    val defaultDriverLatLng = LatLng(33.6920, 73.0560)
+
     var tripStep by remember { mutableIntStateOf(0) }
+    var isFirebaseActionLoading by remember { mutableStateOf(false) }
+    var firebaseTripMessage by remember { mutableStateOf<String?>(null) }
+    var firebaseTripError by remember { mutableStateOf<String?>(null) }
+
+    var riderEmail by remember { mutableStateOf("Rider") }
+    var pickupText by remember { mutableStateOf("Pickup location") }
+    var dropoffText by remember { mutableStateOf("Dropoff location") }
+    var rideType by remember { mutableStateOf("Rideit") }
+    var fareText by remember { mutableStateOf("Fare pending") }
+
+    var pickupLatLng by remember { mutableStateOf(defaultPickupLatLng) }
+    var dropoffLatLng by remember { mutableStateOf(defaultDropoffLatLng) }
+    var driverLatLng by remember { mutableStateOf(defaultDriverLatLng) }
+
+    var tripCancelledSafely by remember { mutableStateOf(false) }
 
     val snackbarHostState = remember { SnackbarHostState() }
     val scope = rememberCoroutineScope()
+    val firestore = remember { FirebaseFirestore.getInstance() }
 
-    val stepTitle = when (tripStep) {
-        0 -> "Go to pickup"
-        1 -> "Arrived at pickup"
-        2 -> "Trip in progress"
-        else -> "Trip completed"
+    LaunchedEffect(rideRequestId) {
+        val requestId = rideRequestId
+
+        if (requestId.isNullOrBlank()) {
+            firebaseTripError = "Firebase ride request ID not found."
+            return@LaunchedEffect
+        }
+
+        firestore.collection("ride_requests")
+            .document(requestId)
+            .get()
+            .addOnSuccessListener { document ->
+                riderEmail = document.safeText("riderEmail")
+                    .ifBlank { document.safeText("userEmail") }
+                    .ifBlank { document.safeText("email") }
+                    .ifBlank { "Rider" }
+
+                pickupText = document.safeText("pickupAddress")
+                    .ifBlank { document.safeText("pickupText") }
+                    .ifBlank { document.safeText("pickup") }
+                    .ifBlank { "Pickup location" }
+
+                dropoffText = document.safeText("dropoffAddress")
+                    .ifBlank { document.safeText("dropText") }
+                    .ifBlank { document.safeText("dropoffText") }
+                    .ifBlank { document.safeText("dropoff") }
+                    .ifBlank { document.safeText("destination") }
+                    .ifBlank { "Dropoff location" }
+
+                rideType = document.safeText("rideType")
+                    .ifBlank { document.safeText("selectedRideType") }
+                    .ifBlank { "Rideit" }
+
+                fareText = document.safeText("fareEstimate")
+                    .ifBlank { document.safeText("fare") }
+                    .ifBlank { document.safeText("estimatedFare") }
+                    .ifBlank { "Fare pending" }
+
+                pickupLatLng = document.safeLatLng(
+                    geoPointFields = listOf("pickupLatLng", "pickupLocation", "pickupGeoPoint"),
+                    latFields = listOf("pickupLat", "pickupLatitude", "pickup_lat", "pickup_latitude"),
+                    lngFields = listOf("pickupLng", "pickupLongitude", "pickup_lng", "pickup_longitude"),
+                    fallback = defaultPickupLatLng
+                )
+
+                dropoffLatLng = document.safeLatLng(
+                    geoPointFields = listOf("dropoffLatLng", "dropoffLocation", "dropoffGeoPoint", "destinationLatLng"),
+                    latFields = listOf("dropoffLat", "dropoffLatitude", "dropoff_lat", "dropoff_latitude", "destinationLat"),
+                    lngFields = listOf("dropoffLng", "dropoffLongitude", "dropoff_lng", "dropoff_longitude", "destinationLng"),
+                    fallback = defaultDropoffLatLng
+                )
+
+                driverLatLng = document.safeLatLng(
+                    geoPointFields = listOf("driverLatLng", "driverLocation", "driverGeoPoint"),
+                    latFields = listOf("driverLat", "driverLatitude", "driver_lat", "driver_latitude"),
+                    lngFields = listOf("driverLng", "driverLongitude", "driver_lng", "driver_longitude"),
+                    fallback = midpointLatLng(pickupLatLng, dropoffLatLng)
+                )
+
+                when (document.safeText("status").lowercase()) {
+                    "driver_arriving" -> tripStep = 1
+                    "ride_started" -> tripStep = 2
+                    "completed" -> tripStep = 3
+                    "cancelled_by_driver" -> {
+                        tripStep = 4
+                        tripCancelledSafely = true
+                    }
+                    else -> tripStep = 0
+                }
+
+                firebaseTripMessage = "Trip loaded."
+                firebaseTripError = null
+            }
+            .addOnFailureListener { exception ->
+                firebaseTripError = exception.message ?: "Failed to load trip."
+            }
     }
 
-    val stepSubtitle = when (tripStep) {
-        0 -> "Navigate to rider pickup point."
-        1 -> "Confirm rider pickup and start the trip."
-        2 -> "Follow the route to the dropoff location."
-        else -> "Trip completed successfully."
+    fun updateFirebaseTripStatus(
+        status: String,
+        successMessage: String,
+        stepAfterSuccess: Int,
+        snackbarMessage: String
+    ) {
+        val requestId = rideRequestId
+
+        if (requestId.isNullOrBlank()) {
+            firebaseTripMessage = null
+            firebaseTripError = "Firebase request ID not found."
+            return
+        }
+
+        if (isFirebaseActionLoading) return
+
+        isFirebaseActionLoading = true
+        firebaseTripError = null
+        firebaseTripMessage = "Updating trip status..."
+
+        val updateData = when (status) {
+            "driver_arriving" -> mapOf(
+                "status" to "driver_arriving",
+                "driverArrivedAt" to Timestamp.now(),
+                "updatedAt" to Timestamp.now()
+            )
+
+            "ride_started" -> mapOf(
+                "status" to "ride_started",
+                "rideStartedAt" to Timestamp.now(),
+                "updatedAt" to Timestamp.now()
+            )
+
+            else -> mapOf(
+                "status" to status,
+                "updatedAt" to Timestamp.now()
+            )
+        }
+
+        firestore.collection("ride_requests")
+            .document(requestId)
+            .update(updateData)
+            .addOnSuccessListener {
+                isFirebaseActionLoading = false
+                tripStep = stepAfterSuccess
+                firebaseTripMessage = successMessage
+                firebaseTripError = null
+
+                scope.launch {
+                    snackbarHostState.showSnackbar(snackbarMessage)
+                }
+            }
+            .addOnFailureListener { exception ->
+                isFirebaseActionLoading = false
+                firebaseTripMessage = null
+                firebaseTripError = exception.message ?: "Failed to update trip status."
+            }
     }
 
-    val progress = when (tripStep) {
-        0 -> 0.33f
-        1 -> 0.58f
-        2 -> 0.86f
+    val stepTitle = when {
+        tripCancelledSafely -> "Trip cancelled"
+        tripStep == 0 -> "Go to pickup"
+        tripStep == 1 -> "Arrived at pickup"
+        tripStep == 2 -> "Trip in progress"
+        tripStep == 3 -> "Trip completed"
+        else -> "Trip cancelled"
+    }
+
+    val stepSubtitle = when {
+        tripCancelledSafely -> "This trip was cancelled safely. You can return to Driver Home."
+        tripStep == 0 -> "Navigate safely to the rider pickup point."
+        tripStep == 1 -> "Confirm rider pickup and start the trip."
+        tripStep == 2 -> "Follow the route to the dropoff location."
+        tripStep == 3 -> "Trip completed successfully."
+        else -> "This trip was cancelled safely."
+    }
+
+    val progress = when {
+        tripCancelledSafely -> 1f
+        tripStep == 0 -> 0.33f
+        tripStep == 1 -> 0.58f
+        tripStep == 2 -> 0.86f
         else -> 1f
     }
 
@@ -115,52 +277,123 @@ fun DriverTripScreen(
                 driverName = driverName,
                 stepTitle = stepTitle,
                 stepSubtitle = stepSubtitle,
-                progress = progress
+                progress = progress,
+                cancelled = tripCancelledSafely
             )
 
             Spacer(modifier = Modifier.height(16.dp))
 
-            DriverTripRealMapPreviewCard(
-                tripStep = tripStep
+            DriverGoogleRouteMapCard(
+                tripStep = tripStep,
+                pickupText = pickupText,
+                dropoffText = dropoffText,
+                pickupLatLng = pickupLatLng,
+                dropoffLatLng = dropoffLatLng,
+                driverLatLng = driverLatLng,
+                cancelled = tripCancelledSafely
             )
 
             Spacer(modifier = Modifier.height(16.dp))
 
-            DriverTripRiderCard()
+            firebaseTripMessage?.let {
+                DriverTripMessageCard(
+                    message = it,
+                    success = true
+                )
+
+                Spacer(modifier = Modifier.height(16.dp))
+            }
+
+            firebaseTripError?.let {
+                DriverTripMessageCard(
+                    message = it,
+                    success = false
+                )
+
+                Spacer(modifier = Modifier.height(16.dp))
+            }
+
+            DriverTripRiderCard(
+                riderEmail = riderEmail
+            )
 
             Spacer(modifier = Modifier.height(16.dp))
 
-            DriverTripRouteCard()
+            DriverTripRouteCard(
+                pickupText = pickupText,
+                dropoffText = dropoffText
+            )
 
             Spacer(modifier = Modifier.height(16.dp))
 
-            DriverTripMetricsCard()
+            DriverTripMetricsCard(
+                rideType = rideType,
+                fareText = fareText
+            )
 
             Spacer(modifier = Modifier.height(16.dp))
 
             DriverTripActionCard(
                 tripStep = tripStep,
+                isFirebaseActionLoading = isFirebaseActionLoading,
+                tripCancelledSafely = tripCancelledSafely,
                 onPrimaryClick = {
-                    when (tripStep) {
-                        0 -> {
-                            tripStep = 1
-                            scope.launch {
-                                snackbarHostState.showSnackbar("Marked as arrived at pickup.")
-                            }
+                    when {
+                        tripCancelledSafely -> {
+                            onBackToDriverHome()
                         }
 
-                        1 -> {
-                            tripStep = 2
-                            scope.launch {
-                                snackbarHostState.showSnackbar("Trip started.")
-                            }
+                        tripStep == 0 -> {
+                            updateFirebaseTripStatus(
+                                status = "driver_arriving",
+                                successMessage = "Driver arrived at pickup. Firebase status updated.",
+                                stepAfterSuccess = 1,
+                                snackbarMessage = "Arrived at pickup."
+                            )
                         }
 
-                        2 -> {
-                            tripStep = 3
-                            scope.launch {
-                                snackbarHostState.showSnackbar("Trip completed. Earnings updated demo.")
+                        tripStep == 1 -> {
+                            updateFirebaseTripStatus(
+                                status = "ride_started",
+                                successMessage = "Trip started. Firebase status updated.",
+                                stepAfterSuccess = 2,
+                                snackbarMessage = "Trip started."
+                            )
+                        }
+
+                        tripStep == 2 -> {
+                            val requestId = rideRequestId
+
+                            if (requestId.isNullOrBlank()) {
+                                firebaseTripMessage = null
+                                firebaseTripError = "Firebase request ID not found."
+                                return@DriverTripActionCard
                             }
+
+                            if (isFirebaseActionLoading) return@DriverTripActionCard
+
+                            isFirebaseActionLoading = true
+                            firebaseTripError = null
+                            firebaseTripMessage = "Completing trip in Firebase..."
+
+                            FirebaseManager.completeDriverTrip(
+                                requestId = requestId,
+                                onSuccess = {
+                                    isFirebaseActionLoading = false
+                                    tripStep = 3
+                                    firebaseTripMessage = "Trip completed successfully in Firebase."
+                                    firebaseTripError = null
+
+                                    scope.launch {
+                                        snackbarHostState.showSnackbar("Trip completed in Firebase.")
+                                    }
+                                },
+                                onError = { error ->
+                                    isFirebaseActionLoading = false
+                                    firebaseTripError = error
+                                    firebaseTripMessage = null
+                                }
+                            )
                         }
 
                         else -> {
@@ -168,15 +401,41 @@ fun DriverTripScreen(
                         }
                     }
                 },
-                onSecondaryClick = {
+                onSupportClick = {
                     scope.launch {
                         snackbarHostState.showSnackbar("Driver support will be connected later.")
                     }
                 },
                 onCancelClick = {
-                    scope.launch {
-                        snackbarHostState.showSnackbar("Trip cancellation flow will be connected later.")
+                    val requestId = rideRequestId
+
+                    if (requestId.isNullOrBlank()) {
+                        firebaseTripMessage = null
+                        firebaseTripError = "Firebase request ID not found."
+                        return@DriverTripActionCard
                     }
+
+                    if (isFirebaseActionLoading) return@DriverTripActionCard
+
+                    isFirebaseActionLoading = true
+                    firebaseTripError = null
+                    firebaseTripMessage = "Cancelling trip in Firebase..."
+
+                    FirebaseManager.cancelDriverTrip(
+                        requestId = requestId,
+                        onSuccess = {
+                            isFirebaseActionLoading = false
+                            tripStep = 4
+                            tripCancelledSafely = true
+                            firebaseTripMessage = "Trip cancelled safely. Tap Back to Driver Home."
+                            firebaseTripError = null
+                        },
+                        onError = { error ->
+                            isFirebaseActionLoading = false
+                            firebaseTripError = error
+                            firebaseTripMessage = null
+                        }
+                    )
                 }
             )
 
@@ -198,8 +457,11 @@ private fun DriverTripHeader(
     driverName: String,
     stepTitle: String,
     stepSubtitle: String,
-    progress: Float
+    progress: Float,
+    cancelled: Boolean
 ) {
+    val mainColor = if (cancelled) Color(0xFFEF4444) else Color(0xFF8A35F2)
+
     Surface(
         modifier = Modifier.fillMaxWidth(),
         shape = RoundedCornerShape(32.dp),
@@ -215,7 +477,7 @@ private fun DriverTripHeader(
                         colors = listOf(
                             Color(0xFF111827),
                             Color(0xFF1F2937),
-                            Color(0xFF8A35F2)
+                            mainColor
                         )
                     )
                 )
@@ -233,7 +495,7 @@ private fun DriverTripHeader(
                     contentAlignment = Alignment.Center
                 ) {
                     Text(
-                        text = "S",
+                        text = driverName.firstOrNull()?.uppercase() ?: "D",
                         style = MaterialTheme.typography.headlineSmall,
                         fontWeight = FontWeight.Black,
                         color = Color.White
@@ -253,14 +515,25 @@ private fun DriverTripHeader(
                     )
 
                     Text(
-                        text = "Active driver trip",
+                        text = if (cancelled) "Cancelled driver trip" else "Active driver trip",
                         style = MaterialTheme.typography.bodySmall,
                         fontWeight = FontWeight.Medium,
                         color = Color.White.copy(alpha = 0.76f)
                     )
                 }
 
-                LiveDriverDot()
+                Surface(
+                    shape = RoundedCornerShape(50),
+                    color = Color.White.copy(alpha = 0.18f)
+                ) {
+                    Text(
+                        text = if (cancelled) "Cancelled" else "Live",
+                        modifier = Modifier.padding(horizontal = 12.dp, vertical = 7.dp),
+                        color = Color.White,
+                        fontWeight = FontWeight.Bold,
+                        style = MaterialTheme.typography.labelMedium
+                    )
+                }
             }
 
             Spacer(modifier = Modifier.height(22.dp))
@@ -297,7 +570,7 @@ private fun DriverTripHeader(
                             .fillMaxWidth()
                             .height(8.dp)
                             .clip(RoundedCornerShape(50)),
-                        color = Color(0xFF22C55E),
+                        color = if (cancelled) Color(0xFFEF4444) else Color(0xFF22C55E),
                         trackColor = Color.White.copy(alpha = 0.18f)
                     )
                 }
@@ -307,89 +580,54 @@ private fun DriverTripHeader(
 }
 
 @Composable
-private fun LiveDriverDot() {
-    val infiniteTransition = rememberInfiniteTransition(label = "driver_trip_live_dot")
-
-    val alpha by infiniteTransition.animateFloat(
-        initialValue = 0.35f,
-        targetValue = 1f,
-        animationSpec = infiniteRepeatable(
-            animation = tween(
-                durationMillis = 850,
-                easing = FastOutSlowInEasing
-            ),
-            repeatMode = RepeatMode.Reverse
-        ),
-        label = "driver_trip_live_alpha"
-    )
-
-    Row(
-        verticalAlignment = Alignment.CenterVertically
-    ) {
-        Box(
-            modifier = Modifier
-                .size(10.dp)
-                .alpha(alpha)
-                .background(
-                    color = Color(0xFF22C55E),
-                    shape = CircleShape
-                )
-        )
-
-        Spacer(modifier = Modifier.width(7.dp))
-
-        Text(
-            text = "Live",
-            style = MaterialTheme.typography.labelMedium,
-            fontWeight = FontWeight.Bold,
-            color = Color.White
-        )
-    }
-}
-
-@Composable
-private fun DriverTripRealMapPreviewCard(
-    tripStep: Int
+private fun DriverGoogleRouteMapCard(
+    tripStep: Int,
+    pickupText: String,
+    dropoffText: String,
+    pickupLatLng: LatLng,
+    dropoffLatLng: LatLng,
+    driverLatLng: LatLng,
+    cancelled: Boolean
 ) {
-    val pickupLocation = LatLng(33.6938, 73.0328)
-    val dropoffLocation = LatLng(33.7202, 73.0605)
-
-    val driverLocation = when (tripStep) {
-        0 -> LatLng(33.6844, 73.0479)
-        1 -> pickupLocation
-        2 -> LatLng(33.7067, 73.0469)
-        else -> dropoffLocation
+    val statusText = when {
+        cancelled -> "Trip cancelled"
+        tripStep == 0 -> "Go to pickup"
+        tripStep == 1 -> "At pickup"
+        tripStep == 2 -> "12 min to dropoff"
+        else -> "Completed"
     }
-
-    val routePoints = listOf(
-        driverLocation,
-        pickupLocation,
-        LatLng(33.7048, 73.0437),
-        dropoffLocation
-    )
 
     val cameraPositionState = rememberCameraPositionState {
-        position = CameraPosition.fromLatLngZoom(pickupLocation, 13.4f)
+        position = CameraPosition.fromLatLngZoom(driverLatLng, 12f)
     }
 
-    LaunchedEffect(tripStep) {
-        val focusPoint = when (tripStep) {
-            0 -> pickupLocation
-            1 -> pickupLocation
-            2 -> dropoffLocation
-            else -> dropoffLocation
-        }
+    LaunchedEffect(pickupLatLng, dropoffLatLng, driverLatLng) {
+        try {
+            val bounds = LatLngBounds.Builder()
+                .include(pickupLatLng)
+                .include(dropoffLatLng)
+                .include(driverLatLng)
+                .build()
 
-        cameraPositionState.animate(
-            update = CameraUpdateFactory.newLatLngZoom(focusPoint, 13.8f),
-            durationMs = 700
-        )
+            cameraPositionState.animate(
+                update = CameraUpdateFactory.newLatLngBounds(bounds, 120),
+                durationMs = 800
+            )
+        } catch (_: Exception) {
+            try {
+                cameraPositionState.animate(
+                    update = CameraUpdateFactory.newLatLngZoom(driverLatLng, 13f),
+                    durationMs = 500
+                )
+            } catch (_: Exception) {
+            }
+        }
     }
 
     Surface(
         modifier = Modifier
             .fillMaxWidth()
-            .height(260.dp),
+            .height(300.dp),
         shape = RoundedCornerShape(32.dp),
         color = Color.White,
         shadowElevation = 12.dp,
@@ -401,6 +639,9 @@ private fun DriverTripRealMapPreviewCard(
             GoogleMap(
                 modifier = Modifier.fillMaxSize(),
                 cameraPositionState = cameraPositionState,
+                properties = MapProperties(
+                    isMyLocationEnabled = false
+                ),
                 uiSettings = MapUiSettings(
                     zoomControlsEnabled = false,
                     myLocationButtonEnabled = false,
@@ -408,31 +649,34 @@ private fun DriverTripRealMapPreviewCard(
                     compassEnabled = false
                 )
             ) {
-                Marker(
-                    state = MarkerState(driverLocation),
-                    title = "Driver",
-                    snippet = "Shameer Khan",
-                    icon = BitmapDescriptorFactory.defaultMarker(BitmapDescriptorFactory.HUE_AZURE)
+                Polyline(
+                    points = when {
+                        tripStep >= 2 -> listOf(driverLatLng, dropoffLatLng)
+                        else -> listOf(driverLatLng, pickupLatLng, dropoffLatLng)
+                    },
+                    color = if (cancelled) Color(0xFFEF4444) else Color(0xFF8A35F2),
+                    width = 10f
                 )
 
                 Marker(
-                    state = MarkerState(pickupLocation),
+                    state = MarkerState(position = pickupLatLng),
                     title = "Pickup",
-                    snippet = "F-10 Markaz, Islamabad",
+                    snippet = pickupText,
                     icon = BitmapDescriptorFactory.defaultMarker(BitmapDescriptorFactory.HUE_GREEN)
                 )
 
                 Marker(
-                    state = MarkerState(dropoffLocation),
+                    state = MarkerState(position = dropoffLatLng),
                     title = "Dropoff",
-                    snippet = "Blue Area, Islamabad",
+                    snippet = dropoffText,
                     icon = BitmapDescriptorFactory.defaultMarker(BitmapDescriptorFactory.HUE_VIOLET)
                 )
 
-                Polyline(
-                    points = routePoints,
-                    color = Color(0xFF8A35F2),
-                    width = 8f
+                Marker(
+                    state = MarkerState(position = driverLatLng),
+                    title = "Driver",
+                    snippet = "Current driver position",
+                    icon = BitmapDescriptorFactory.defaultMarker(BitmapDescriptorFactory.HUE_AZURE)
                 )
             }
 
@@ -445,41 +689,77 @@ private fun DriverTripRealMapPreviewCard(
                 shadowElevation = 8.dp
             ) {
                 Text(
-                    text = when (tripStep) {
-                        0 -> "3 min to pickup"
-                        1 -> "At pickup"
-                        2 -> "12 min to dropoff"
-                        else -> "Completed"
-                    },
+                    text = statusText,
                     modifier = Modifier.padding(horizontal = 13.dp, vertical = 8.dp),
                     style = MaterialTheme.typography.labelMedium,
                     fontWeight = FontWeight.Black,
-                    color = Color(0xFF111827)
+                    color = if (cancelled) Color(0xFFEF4444) else Color(0xFF111827)
                 )
             }
 
             Surface(
                 modifier = Modifier
-                    .align(Alignment.BottomEnd)
+                    .align(Alignment.BottomStart)
                     .padding(16.dp),
-                shape = RoundedCornerShape(50),
-                color = Color(0xFF8A35F2),
+                shape = RoundedCornerShape(22.dp),
+                color = Color.White.copy(alpha = 0.96f),
                 shadowElevation = 8.dp
             ) {
-                Text(
-                    text = "Live map",
-                    modifier = Modifier.padding(horizontal = 13.dp, vertical = 8.dp),
-                    style = MaterialTheme.typography.labelMedium,
-                    fontWeight = FontWeight.Black,
-                    color = Color.White
-                )
+                Column(
+                    modifier = Modifier.padding(horizontal = 14.dp, vertical = 11.dp)
+                ) {
+                    Text(
+                        text = pickupText,
+                        style = MaterialTheme.typography.labelSmall,
+                        fontWeight = FontWeight.Black,
+                        color = Color(0xFF16A34A),
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis
+                    )
+
+                    Spacer(modifier = Modifier.height(3.dp))
+
+                    Text(
+                        text = dropoffText,
+                        style = MaterialTheme.typography.labelSmall,
+                        fontWeight = FontWeight.Black,
+                        color = if (cancelled) Color(0xFFEF4444) else Color(0xFF8A35F2),
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis
+                    )
+                }
             }
         }
     }
 }
 
 @Composable
-private fun DriverTripRiderCard() {
+private fun DriverTripMessageCard(
+    message: String,
+    success: Boolean
+) {
+    Surface(
+        modifier = Modifier.fillMaxWidth(),
+        shape = RoundedCornerShape(22.dp),
+        color = if (success) Color(0xFFE8FFF1) else Color(0xFFFFE5E5),
+        shadowElevation = 6.dp
+    ) {
+        Text(
+            text = message,
+            modifier = Modifier.padding(15.dp),
+            color = if (success) Color(0xFF16A34A) else Color(0xFFEF4444),
+            fontWeight = FontWeight.Bold,
+            style = MaterialTheme.typography.bodyMedium
+        )
+    }
+}
+
+@Composable
+private fun DriverTripRiderCard(
+    riderEmail: String
+) {
+    val riderInitial = riderEmail.firstOrNull()?.uppercase() ?: "R"
+
     Surface(
         modifier = Modifier.fillMaxWidth(),
         shape = RoundedCornerShape(30.dp),
@@ -499,7 +779,7 @@ private fun DriverTripRiderCard() {
                 contentAlignment = Alignment.Center
             ) {
                 Text(
-                    text = "A",
+                    text = riderInitial,
                     style = MaterialTheme.typography.titleLarge,
                     fontWeight = FontWeight.Black,
                     color = Color(0xFF8A35F2)
@@ -510,7 +790,7 @@ private fun DriverTripRiderCard() {
 
             Column(modifier = Modifier.weight(1f)) {
                 Text(
-                    text = "Adnan Rider",
+                    text = "Rider",
                     style = MaterialTheme.typography.titleMedium,
                     fontWeight = FontWeight.Black,
                     color = Color(0xFF111827)
@@ -519,23 +799,12 @@ private fun DriverTripRiderCard() {
                 Spacer(modifier = Modifier.height(3.dp))
 
                 Text(
-                    text = "⭐ 4.8 • Verified rider",
+                    text = riderEmail,
                     style = MaterialTheme.typography.bodySmall,
                     fontWeight = FontWeight.Bold,
-                    color = Color(0xFF6B7280)
-                )
-            }
-
-            Surface(
-                shape = RoundedCornerShape(50),
-                color = Color(0xFF16A34A).copy(alpha = 0.12f)
-            ) {
-                Text(
-                    text = "Call",
-                    modifier = Modifier.padding(horizontal = 13.dp, vertical = 8.dp),
-                    style = MaterialTheme.typography.labelMedium,
-                    fontWeight = FontWeight.Black,
-                    color = Color(0xFF16A34A)
+                    color = Color(0xFF6B7280),
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis
                 )
             }
         }
@@ -543,7 +812,10 @@ private fun DriverTripRiderCard() {
 }
 
 @Composable
-private fun DriverTripRouteCard() {
+private fun DriverTripRouteCard(
+    pickupText: String,
+    dropoffText: String
+) {
     Surface(
         modifier = Modifier.fillMaxWidth(),
         shape = RoundedCornerShape(30.dp),
@@ -566,7 +838,7 @@ private fun DriverTripRouteCard() {
             DriverRoutePoint(
                 dotColor = Color(0xFF16A34A),
                 label = "Pickup",
-                value = "F-10 Markaz, Islamabad"
+                value = pickupText
             )
 
             Spacer(modifier = Modifier.height(16.dp))
@@ -574,7 +846,7 @@ private fun DriverTripRouteCard() {
             DriverRoutePoint(
                 dotColor = Color(0xFF8A35F2),
                 label = "Dropoff",
-                value = "Blue Area, Islamabad"
+                value = dropoffText
             )
         }
     }
@@ -612,7 +884,7 @@ private fun DriverRoutePoint(
                 style = MaterialTheme.typography.bodyMedium,
                 fontWeight = FontWeight.Black,
                 color = Color(0xFF111827),
-                maxLines = 1,
+                maxLines = 2,
                 overflow = TextOverflow.Ellipsis
             )
         }
@@ -620,7 +892,10 @@ private fun DriverRoutePoint(
 }
 
 @Composable
-private fun DriverTripMetricsCard() {
+private fun DriverTripMetricsCard(
+    rideType: String,
+    fareText: String
+) {
     Surface(
         modifier = Modifier.fillMaxWidth(),
         shape = RoundedCornerShape(30.dp),
@@ -632,20 +907,9 @@ private fun DriverTripMetricsCard() {
             modifier = Modifier.padding(18.dp),
             horizontalArrangement = Arrangement.SpaceBetween
         ) {
-            DriverTripMetric(
-                title = "Fare",
-                value = "₨ 850"
-            )
-
-            DriverTripMetric(
-                title = "Distance",
-                value = "8.4 km"
-            )
-
-            DriverTripMetric(
-                title = "ETA",
-                value = "15 min"
-            )
+            DriverTripMetric(title = "Fare", value = normalizeFareText(fareText))
+            DriverTripMetric(title = "Ride", value = rideType)
+            DriverTripMetric(title = "ETA", value = "15 min")
         }
     }
 }
@@ -669,7 +933,9 @@ private fun DriverTripMetric(
             text = value,
             style = MaterialTheme.typography.bodyLarge,
             fontWeight = FontWeight.Black,
-            color = Color(0xFF111827)
+            color = Color(0xFF111827),
+            maxLines = 1,
+            overflow = TextOverflow.Ellipsis
         )
     }
 }
@@ -677,8 +943,10 @@ private fun DriverTripMetric(
 @Composable
 private fun DriverTripActionCard(
     tripStep: Int,
+    isFirebaseActionLoading: Boolean,
+    tripCancelledSafely: Boolean,
     onPrimaryClick: () -> Unit,
-    onSecondaryClick: () -> Unit,
+    onSupportClick: () -> Unit,
     onCancelClick: () -> Unit
 ) {
     Surface(
@@ -691,27 +959,57 @@ private fun DriverTripActionCard(
         Column(
             modifier = Modifier.padding(18.dp)
         ) {
+            if (isFirebaseActionLoading) {
+                LinearProgressIndicator(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .height(7.dp)
+                        .clip(RoundedCornerShape(50)),
+                    color = Color(0xFF8A35F2),
+                    trackColor = Color(0xFFE5E7EB)
+                )
+
+                Spacer(modifier = Modifier.height(10.dp))
+
+                Text(
+                    text = "Updating Firebase trip status...",
+                    color = Color(0xFF6B7280),
+                    fontWeight = FontWeight.Medium
+                )
+
+                Spacer(modifier = Modifier.height(14.dp))
+            }
+
             Button(
+                enabled = !isFirebaseActionLoading,
                 onClick = onPrimaryClick,
                 modifier = Modifier
                     .fillMaxWidth()
                     .height(58.dp),
                 shape = RoundedCornerShape(22.dp),
                 colors = ButtonDefaults.buttonColors(
-                    containerColor = when (tripStep) {
-                        0 -> Color(0xFF8A35F2)
-                        1 -> Color(0xFF16A34A)
-                        2 -> Color(0xFF111827)
-                        else -> Color(0xFF8A35F2)
+                    containerColor = if (tripCancelledSafely) {
+                        Color(0xFF8A35F2)
+                    } else {
+                        when (tripStep) {
+                            0 -> Color(0xFF8A35F2)
+                            1 -> Color(0xFF16A34A)
+                            2 -> Color(0xFF111827)
+                            else -> Color(0xFF8A35F2)
+                        }
                     }
                 )
             ) {
                 Text(
-                    text = when (tripStep) {
-                        0 -> "Arrived at Pickup"
-                        1 -> "Start Trip"
-                        2 -> "Complete Trip"
-                        else -> "Back to Driver Home"
+                    text = if (tripCancelledSafely) {
+                        "Back to Driver Home"
+                    } else {
+                        when (tripStep) {
+                            0 -> "Arrived at Pickup"
+                            1 -> "Start Trip"
+                            2 -> "Complete Trip"
+                            else -> "Back to Driver Home"
+                        }
                     },
                     fontWeight = FontWeight.Black
                 )
@@ -720,7 +1018,8 @@ private fun DriverTripActionCard(
             Spacer(modifier = Modifier.height(11.dp))
 
             OutlinedButton(
-                onClick = onSecondaryClick,
+                enabled = !isFirebaseActionLoading,
+                onClick = onSupportClick,
                 modifier = Modifier
                     .fillMaxWidth()
                     .height(54.dp),
@@ -733,7 +1032,7 @@ private fun DriverTripActionCard(
             }
 
             AnimatedVisibility(
-                visible = tripStep < 3,
+                visible = !tripCancelledSafely && tripStep < 3,
                 enter = fadeIn(),
                 exit = fadeOut()
             ) {
@@ -741,6 +1040,7 @@ private fun DriverTripActionCard(
                     Spacer(modifier = Modifier.height(11.dp))
 
                     OutlinedButton(
+                        enabled = !isFirebaseActionLoading,
                         onClick = onCancelClick,
                         modifier = Modifier
                             .fillMaxWidth()
@@ -751,7 +1051,7 @@ private fun DriverTripActionCard(
                         )
                     ) {
                         Text(
-                            text = "Cancel Trip Demo",
+                            text = "Cancel Trip",
                             fontWeight = FontWeight.Bold
                         )
                     }
@@ -759,4 +1059,92 @@ private fun DriverTripActionCard(
             }
         }
     }
+}
+
+private fun DocumentSnapshot.safeText(field: String): String {
+    return try {
+        val value = get(field)
+        when (value) {
+            null -> ""
+            is String -> value
+            is Number -> value.toString()
+            is Boolean -> value.toString()
+            else -> value.toString()
+        }
+    } catch (_: Exception) {
+        ""
+    }
+}
+
+private fun DocumentSnapshot.safeNumber(field: String): Double? {
+    return try {
+        val value = get(field)
+        when (value) {
+            is Number -> value.toDouble()
+            is String -> value.toDoubleOrNull()
+            else -> null
+        }
+    } catch (_: Exception) {
+        null
+    }
+}
+
+private fun DocumentSnapshot.safeLatLng(
+    geoPointFields: List<String>,
+    latFields: List<String>,
+    lngFields: List<String>,
+    fallback: LatLng
+): LatLng {
+    return try {
+        geoPointFields.forEach { field ->
+            val geoPoint = getGeoPoint(field)
+            if (geoPoint != null) {
+                return LatLng(geoPoint.latitude, geoPoint.longitude)
+            }
+        }
+
+        var lat: Double? = null
+        var lng: Double? = null
+
+        latFields.forEach { field ->
+            if (lat == null) {
+                lat = safeNumber(field)
+            }
+        }
+
+        lngFields.forEach { field ->
+            if (lng == null) {
+                lng = safeNumber(field)
+            }
+        }
+
+        if (lat != null && lng != null) {
+            LatLng(lat ?: fallback.latitude, lng ?: fallback.longitude)
+        } else {
+            fallback
+        }
+    } catch (_: Exception) {
+        fallback
+    }
+}
+
+private fun midpointLatLng(
+    first: LatLng,
+    second: LatLng
+): LatLng {
+    return LatLng(
+        (first.latitude + second.latitude) / 2.0,
+        (first.longitude + second.longitude) / 2.0
+    )
+}
+
+private fun normalizeFareText(fare: String): String {
+    val cleanFare = fare.trim()
+
+    if (cleanFare.isBlank()) return "₨ 0"
+
+    return cleanFare
+        .replace("Rs.", "₨")
+        .replace("Rs", "₨")
+        .replace("PKR", "₨")
 }

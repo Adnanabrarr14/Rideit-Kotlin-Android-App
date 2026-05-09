@@ -1,5 +1,8 @@
 package com.example.rideit.driver.ui
 
+import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
@@ -29,8 +32,12 @@ import androidx.compose.material3.SnackbarHostState
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.DisposableEffect
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -39,10 +46,20 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
+import com.example.rideit.FirebaseManager
+import com.google.firebase.Timestamp
+import com.google.firebase.firestore.FirebaseFirestore
+import com.google.firebase.firestore.ListenerRegistration
 import kotlinx.coroutines.launch
+import java.text.SimpleDateFormat
+import java.util.Date
+import java.util.Locale
+import kotlin.math.roundToInt
 
 private data class DriverTripHistoryItem(
+    val requestId: String,
     val riderName: String,
+    val riderEmail: String,
     val pickup: String,
     val dropoff: String,
     val fare: String,
@@ -50,7 +67,10 @@ private data class DriverTripHistoryItem(
     val date: String,
     val distance: String,
     val rating: String,
-    val status: String
+    val feedback: String,
+    val status: String,
+    val statusColor: Color,
+    val sortTimeMillis: Long
 )
 
 @Composable
@@ -61,65 +81,153 @@ fun DriverTripHistoryScreen(
     val snackbarHostState = remember { SnackbarHostState() }
     val scope = rememberCoroutineScope()
 
-    val trips = remember {
-        listOf(
-            DriverTripHistoryItem(
-                riderName = "Adnan Rider",
-                pickup = "F-10 Markaz, Islamabad",
-                dropoff = "Blue Area, Islamabad",
-                fare = "₨ 850",
-                time = "18 min",
-                date = "Today, 8:45 PM",
-                distance = "8.4 km",
-                rating = "5.0",
-                status = "Completed"
-            ),
-            DriverTripHistoryItem(
-                riderName = "Hassan Ali",
-                pickup = "G-11 Markaz, Islamabad",
-                dropoff = "Centaurus Mall",
-                fare = "₨ 720",
-                time = "16 min",
-                date = "Today, 6:20 PM",
-                distance = "6.8 km",
-                rating = "4.9",
-                status = "Completed"
-            ),
-            DriverTripHistoryItem(
-                riderName = "Sara Khan",
-                pickup = "I-8 Markaz, Islamabad",
-                dropoff = "Faisal Mosque",
-                fare = "₨ 940",
-                time = "22 min",
-                date = "Today, 4:10 PM",
-                distance = "10.1 km",
-                rating = "5.0",
-                status = "Completed"
-            ),
-            DriverTripHistoryItem(
-                riderName = "Usman Malik",
-                pickup = "DHA Phase 2",
-                dropoff = "Bahria Town Phase 7",
-                fare = "₨ 1,250",
-                time = "28 min",
-                date = "Yesterday, 9:15 PM",
-                distance = "14.6 km",
-                rating = "4.8",
-                status = "Completed"
-            ),
-            DriverTripHistoryItem(
-                riderName = "Ayesha Noor",
-                pickup = "PWD Road",
-                dropoff = "Saddar Rawalpindi",
-                fare = "₨ 1,100",
-                time = "25 min",
-                date = "Yesterday, 5:40 PM",
-                distance = "12.9 km",
-                rating = "4.9",
-                status = "Completed"
-            )
-        )
+    var isLoading by remember { mutableStateOf(true) }
+    var firebaseError by remember { mutableStateOf<String?>(null) }
+    var trips by remember { mutableStateOf<List<DriverTripHistoryItem>>(emptyList()) }
+
+    val driverId = remember { FirebaseManager.currentUserId().orEmpty() }
+    val firestore = remember { FirebaseFirestore.getInstance() }
+
+    DisposableEffect(driverId) {
+        var listenerRegistration: ListenerRegistration? = null
+
+        if (driverId.isBlank()) {
+            isLoading = false
+            firebaseError = "Driver account not found. Please login again."
+        } else {
+            isLoading = true
+            firebaseError = null
+
+            listenerRegistration = firestore.collection("ride_requests")
+                .whereEqualTo("driverId", driverId)
+                .limit(50)
+                .addSnapshotListener { snapshots, error ->
+                    if (error != null) {
+                        isLoading = false
+                        firebaseError = error.message ?: "Failed to load driver trip history."
+                        trips = emptyList()
+                        return@addSnapshotListener
+                    }
+
+                    val completedStatuses = setOf(
+                        "completed",
+                        "cancelled_by_driver",
+                        "cancelled_by_rider"
+                    )
+
+                    val historyTrips = snapshots
+                        ?.documents
+                        ?.mapNotNull { document ->
+                            val statusRaw = document.getString("status").orEmpty().lowercase()
+
+                            if (statusRaw !in completedStatuses) {
+                                return@mapNotNull null
+                            }
+
+                            val pickup = document.getString("pickupAddress")
+                                ?: document.getString("pickupText")
+                                ?: "Pickup location"
+
+                            val dropoff = document.getString("dropoffAddress")
+                                ?: document.getString("dropText")
+                                ?: document.getString("dropoffText")
+                                ?: "Dropoff location"
+
+                            val riderEmail = document.getString("riderEmail")
+                                ?: document.getString("userEmail")
+                                ?: "Rider"
+
+                            val riderName = riderEmail
+                                .substringBefore("@")
+                                .replace(".", " ")
+                                .replace("_", " ")
+                                .split(" ")
+                                .filter { it.isNotBlank() }
+                                .joinToString(" ") { word ->
+                                    word.replaceFirstChar { char ->
+                                        if (char.isLowerCase()) char.titlecase() else char.toString()
+                                    }
+                                }
+                                .ifBlank { "Rideit Rider" }
+
+                            val fare = document.getString("fareEstimate")
+                                ?: document.getString("fare")
+                                ?: "Fare pending"
+
+                            val completedAt = document.getTimestamp("completedAt")
+                            val cancelledAt = document.getTimestamp("cancelledAt")
+                            val updatedAt = document.getTimestamp("updatedAt")
+                            val createdAt = document.getTimestamp("createdAt")
+
+                            val finalTimestamp = completedAt
+                                ?: cancelledAt
+                                ?: updatedAt
+                                ?: createdAt
+
+                            val statusText = when (statusRaw) {
+                                "completed" -> "Completed"
+                                "cancelled_by_driver" -> "Cancelled by you"
+                                "cancelled_by_rider" -> "Cancelled by rider"
+                                else -> statusRaw
+                            }
+
+                            val statusColor = when (statusRaw) {
+                                "completed" -> Color(0xFF16A34A)
+                                "cancelled_by_driver" -> Color(0xFFEF4444)
+                                "cancelled_by_rider" -> Color(0xFFE17A00)
+                                else -> Color(0xFF6B7280)
+                            }
+
+                            val ratingValue = document.getLong("riderRating")?.toString()
+                                ?: document.getDouble("riderRating")?.toString()
+                                ?: "—"
+
+                            val feedback = document.getString("riderFeedback").orEmpty()
+
+                            DriverTripHistoryItem(
+                                requestId = document.id,
+                                riderName = riderName,
+                                riderEmail = riderEmail,
+                                pickup = pickup,
+                                dropoff = dropoff,
+                                fare = normalizeFareText(fare),
+                                time = estimateTripTimeText(createdAt, finalTimestamp),
+                                date = formatTripDate(finalTimestamp),
+                                distance = document.getString("distance")
+                                    ?: document.getString("distanceText")
+                                    ?: "—",
+                                rating = ratingValue,
+                                feedback = feedback,
+                                status = statusText,
+                                statusColor = statusColor,
+                                sortTimeMillis = finalTimestamp?.toDate()?.time ?: 0L
+                            )
+                        }
+                        ?.sortedByDescending { it.sortTimeMillis }
+                        .orEmpty()
+
+                    trips = historyTrips
+                    isLoading = false
+                    firebaseError = null
+                }
+        }
+
+        onDispose {
+            listenerRegistration?.remove()
+        }
     }
+
+    val completedTrips = trips.count { it.status == "Completed" }
+    val cancelledTrips = trips.count { it.status != "Completed" }
+    val totalEarnings = trips
+        .filter { it.status == "Completed" }
+        .sumOf { extractFareAmount(it.fare) }
+
+    val averageRating = trips
+        .mapNotNull { it.rating.toDoubleOrNull() }
+        .takeIf { it.isNotEmpty() }
+        ?.average()
+        ?: 0.0
 
     Box(
         modifier = Modifier
@@ -136,21 +244,30 @@ fun DriverTripHistoryScreen(
         ) {
             DriverTripHistoryHeader(
                 driverName = driverName,
+                totalTrips = trips.size,
                 onBackClick = onBackClick
             )
 
             Spacer(modifier = Modifier.height(16.dp))
 
-            DriverTripHistorySummaryCard()
+            DriverTripHistorySummaryCard(
+                completedTrips = completedTrips,
+                cancelledTrips = cancelledTrips,
+                totalEarnings = totalEarnings,
+                averageRating = averageRating
+            )
 
             Spacer(modifier = Modifier.height(16.dp))
 
-            DriverTripHistoryPerformanceCard()
+            DriverTripHistoryPerformanceCard(
+                completedTrips = completedTrips,
+                totalTrips = trips.size
+            )
 
             Spacer(modifier = Modifier.height(16.dp))
 
             Text(
-                text = "Recent driver trips",
+                text = "Firebase driver trips",
                 style = MaterialTheme.typography.titleLarge,
                 fontWeight = FontWeight.Black,
                 color = Color(0xFF111827)
@@ -158,19 +275,57 @@ fun DriverTripHistoryScreen(
 
             Spacer(modifier = Modifier.height(12.dp))
 
-            trips.forEach { trip ->
-                DriverTripHistoryCard(
-                    trip = trip,
-                    onClick = {
-                        scope.launch {
-                            snackbarHostState.showSnackbar(
-                                message = "Trip receipt demo for ${trip.riderName}. Real details will be connected later."
-                            )
-                        }
-                    }
+            if (isLoading) {
+                DriverTripHistoryLoadingCard()
+            }
+
+            firebaseError?.let { error ->
+                DriverTripHistoryMessageCard(
+                    title = "Unable to load trips",
+                    message = error,
+                    success = false
                 )
 
                 Spacer(modifier = Modifier.height(12.dp))
+            }
+
+            if (!isLoading && firebaseError == null && trips.isEmpty()) {
+                DriverTripHistoryMessageCard(
+                    title = "No Firebase trips yet",
+                    message = "Complete or cancel a real ride request, then it will appear here automatically.",
+                    success = true
+                )
+
+                Spacer(modifier = Modifier.height(12.dp))
+            }
+
+            AnimatedVisibility(
+                visible = trips.isNotEmpty(),
+                enter = fadeIn(),
+                exit = fadeOut()
+            ) {
+                Column {
+                    trips.forEach { trip ->
+                        DriverTripHistoryCard(
+                            trip = trip,
+                            onClick = {
+                                scope.launch {
+                                    val feedbackText = if (trip.feedback.isNotBlank()) {
+                                        " Rider feedback: ${trip.feedback}"
+                                    } else {
+                                        ""
+                                    }
+
+                                    snackbarHostState.showSnackbar(
+                                        message = "${trip.status} trip with ${trip.riderName}.$feedbackText"
+                                    )
+                                }
+                            }
+                        )
+
+                        Spacer(modifier = Modifier.height(12.dp))
+                    }
+                }
             }
 
             Spacer(modifier = Modifier.height(24.dp))
@@ -189,6 +344,7 @@ fun DriverTripHistoryScreen(
 @Composable
 private fun DriverTripHistoryHeader(
     driverName: String,
+    totalTrips: Int,
     onBackClick: () -> Unit
 ) {
     Surface(
@@ -260,7 +416,7 @@ private fun DriverTripHistoryHeader(
                     color = Color.White.copy(alpha = 0.14f)
                 ) {
                     Text(
-                        text = "68 trips",
+                        text = "$totalTrips trips",
                         modifier = Modifier.padding(horizontal = 12.dp, vertical = 7.dp),
                         color = Color.White,
                         fontWeight = FontWeight.Bold,
@@ -272,7 +428,7 @@ private fun DriverTripHistoryHeader(
             Spacer(modifier = Modifier.height(20.dp))
 
             Text(
-                text = "Track completed trips, rider ratings, distance, time, and earnings from your driver activity.",
+                text = "Real completed and cancelled Firebase trips from your driver account appear here.",
                 style = MaterialTheme.typography.bodyMedium,
                 color = Color.White.copy(alpha = 0.78f),
                 fontWeight = FontWeight.Medium
@@ -282,7 +438,12 @@ private fun DriverTripHistoryHeader(
 }
 
 @Composable
-private fun DriverTripHistorySummaryCard() {
+private fun DriverTripHistorySummaryCard(
+    completedTrips: Int,
+    cancelledTrips: Int,
+    totalEarnings: Int,
+    averageRating: Double
+) {
     Surface(
         modifier = Modifier.fillMaxWidth(),
         shape = RoundedCornerShape(32.dp),
@@ -298,16 +459,16 @@ private fun DriverTripHistorySummaryCard() {
                 horizontalArrangement = Arrangement.spacedBy(12.dp)
             ) {
                 HistoryMetricBox(
-                    title = "Today",
-                    value = "14",
+                    title = "Completed",
+                    value = completedTrips.toString(),
                     subtitle = "Trips",
                     modifier = Modifier.weight(1f)
                 )
 
                 HistoryMetricBox(
                     title = "Earned",
-                    value = "₨ 6,850",
-                    subtitle = "Today",
+                    value = formatRupees(totalEarnings),
+                    subtitle = "Firebase",
                     modifier = Modifier.weight(1f)
                 )
             }
@@ -319,15 +480,19 @@ private fun DriverTripHistorySummaryCard() {
                 horizontalArrangement = Arrangement.spacedBy(12.dp)
             ) {
                 HistoryMetricBox(
-                    title = "Distance",
-                    value = "84 km",
-                    subtitle = "Covered",
+                    title = "Cancelled",
+                    value = cancelledTrips.toString(),
+                    subtitle = "Trips",
                     modifier = Modifier.weight(1f)
                 )
 
                 HistoryMetricBox(
                     title = "Rating",
-                    value = "4.9",
+                    value = if (averageRating > 0.0) {
+                        String.format(Locale.US, "%.1f", averageRating)
+                    } else {
+                        "—"
+                    },
                     subtitle = "Average",
                     modifier = Modifier.weight(1f)
                 )
@@ -382,7 +547,18 @@ private fun HistoryMetricBox(
 }
 
 @Composable
-private fun DriverTripHistoryPerformanceCard() {
+private fun DriverTripHistoryPerformanceCard(
+    completedTrips: Int,
+    totalTrips: Int
+) {
+    val progress = if (totalTrips == 0) {
+        0f
+    } else {
+        (completedTrips.toFloat() / totalTrips.toFloat()).coerceIn(0f, 1f)
+    }
+
+    val percent = (progress * 100).roundToInt()
+
     Surface(
         modifier = Modifier.fillMaxWidth(),
         shape = RoundedCornerShape(30.dp),
@@ -399,7 +575,7 @@ private fun DriverTripHistoryPerformanceCard() {
             ) {
                 Column(modifier = Modifier.weight(1f)) {
                     Text(
-                        text = "Weekly completion",
+                        text = "Firebase completion",
                         style = MaterialTheme.typography.titleMedium,
                         fontWeight = FontWeight.Black,
                         color = Color(0xFF111827)
@@ -408,7 +584,7 @@ private fun DriverTripHistoryPerformanceCard() {
                     Spacer(modifier = Modifier.height(4.dp))
 
                     Text(
-                        text = "68 of 90 weekly trip target completed",
+                        text = "$completedTrips of $totalTrips history trips completed",
                         style = MaterialTheme.typography.bodySmall,
                         fontWeight = FontWeight.Medium,
                         color = Color(0xFF6B7280)
@@ -420,7 +596,7 @@ private fun DriverTripHistoryPerformanceCard() {
                     color = Color(0xFF8A35F2).copy(alpha = 0.10f)
                 ) {
                     Text(
-                        text = "76%",
+                        text = "$percent%",
                         modifier = Modifier.padding(horizontal = 12.dp, vertical = 7.dp),
                         style = MaterialTheme.typography.labelLarge,
                         fontWeight = FontWeight.Black,
@@ -432,7 +608,7 @@ private fun DriverTripHistoryPerformanceCard() {
             Spacer(modifier = Modifier.height(14.dp))
 
             LinearProgressIndicator(
-                progress = { 0.76f },
+                progress = { progress },
                 modifier = Modifier
                     .fillMaxWidth()
                     .height(8.dp)
@@ -440,6 +616,99 @@ private fun DriverTripHistoryPerformanceCard() {
                 color = Color(0xFF8A35F2),
                 trackColor = Color(0xFFE5E7EB)
             )
+        }
+    }
+}
+
+@Composable
+private fun DriverTripHistoryLoadingCard() {
+    Surface(
+        modifier = Modifier.fillMaxWidth(),
+        shape = RoundedCornerShape(28.dp),
+        color = Color.White,
+        shadowElevation = 8.dp,
+        tonalElevation = 4.dp
+    ) {
+        Column(
+            modifier = Modifier.padding(18.dp)
+        ) {
+            Text(
+                text = "Loading Firebase trips...",
+                style = MaterialTheme.typography.titleMedium,
+                fontWeight = FontWeight.Black,
+                color = Color(0xFF111827)
+            )
+
+            Spacer(modifier = Modifier.height(12.dp))
+
+            LinearProgressIndicator(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .height(8.dp)
+                    .clip(RoundedCornerShape(50)),
+                color = Color(0xFF8A35F2),
+                trackColor = Color(0xFFE5E7EB)
+            )
+        }
+    }
+}
+
+@Composable
+private fun DriverTripHistoryMessageCard(
+    title: String,
+    message: String,
+    success: Boolean
+) {
+    Surface(
+        modifier = Modifier.fillMaxWidth(),
+        shape = RoundedCornerShape(28.dp),
+        color = if (success) Color.White else Color(0xFFFFE5E5),
+        shadowElevation = 8.dp,
+        tonalElevation = 4.dp
+    ) {
+        Row(
+            modifier = Modifier.padding(18.dp),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Box(
+                modifier = Modifier
+                    .size(46.dp)
+                    .clip(CircleShape)
+                    .background(
+                        if (success) {
+                            Color(0xFF8A35F2).copy(alpha = 0.12f)
+                        } else {
+                            Color(0xFFEF4444).copy(alpha = 0.12f)
+                        }
+                    ),
+                contentAlignment = Alignment.Center
+            ) {
+                Text(
+                    text = if (success) "↗" else "!",
+                    color = if (success) Color(0xFF8A35F2) else Color(0xFFEF4444),
+                    fontWeight = FontWeight.Black
+                )
+            }
+
+            Spacer(modifier = Modifier.width(13.dp))
+
+            Column(modifier = Modifier.weight(1f)) {
+                Text(
+                    text = title,
+                    style = MaterialTheme.typography.titleMedium,
+                    fontWeight = FontWeight.Black,
+                    color = Color(0xFF111827)
+                )
+
+                Spacer(modifier = Modifier.height(3.dp))
+
+                Text(
+                    text = message,
+                    style = MaterialTheme.typography.bodySmall,
+                    fontWeight = FontWeight.Medium,
+                    color = if (success) Color(0xFF6B7280) else Color(0xFFEF4444)
+                )
+            }
         }
     }
 }
@@ -509,21 +778,21 @@ private fun DriverTripHistoryCard(
                         text = trip.fare,
                         style = MaterialTheme.typography.titleMedium,
                         fontWeight = FontWeight.Black,
-                        color = Color(0xFF16A34A)
+                        color = if (trip.status == "Completed") Color(0xFF16A34A) else Color(0xFF6B7280)
                     )
 
                     Spacer(modifier = Modifier.height(4.dp))
 
                     Surface(
                         shape = RoundedCornerShape(50),
-                        color = Color(0xFF16A34A).copy(alpha = 0.10f)
+                        color = trip.statusColor.copy(alpha = 0.10f)
                     ) {
                         Text(
                             text = trip.status,
                             modifier = Modifier.padding(horizontal = 9.dp, vertical = 4.dp),
                             style = MaterialTheme.typography.labelSmall,
                             fontWeight = FontWeight.Bold,
-                            color = Color(0xFF16A34A)
+                            color = trip.statusColor
                         )
                     }
                 }
@@ -549,6 +818,38 @@ private fun DriverTripHistoryCard(
                 value = trip.dropoff
             )
 
+            if (trip.feedback.isNotBlank()) {
+                Spacer(modifier = Modifier.height(14.dp))
+
+                Surface(
+                    modifier = Modifier.fillMaxWidth(),
+                    shape = RoundedCornerShape(20.dp),
+                    color = Color(0xFFF8FAFC)
+                ) {
+                    Column(
+                        modifier = Modifier.padding(13.dp)
+                    ) {
+                        Text(
+                            text = "Rider feedback",
+                            style = MaterialTheme.typography.labelSmall,
+                            fontWeight = FontWeight.Bold,
+                            color = Color(0xFF6B7280)
+                        )
+
+                        Spacer(modifier = Modifier.height(4.dp))
+
+                        Text(
+                            text = trip.feedback,
+                            style = MaterialTheme.typography.bodySmall,
+                            fontWeight = FontWeight.Medium,
+                            color = Color(0xFF111827),
+                            maxLines = 3,
+                            overflow = TextOverflow.Ellipsis
+                        )
+                    }
+                }
+            }
+
             Spacer(modifier = Modifier.height(14.dp))
 
             Row(
@@ -567,7 +868,7 @@ private fun DriverTripHistoryCard(
 
                 MiniTripInfo(
                     title = "Rating",
-                    value = "⭐ ${trip.rating}"
+                    value = if (trip.rating == "—") "⭐ —" else "⭐ ${trip.rating}"
                 )
             }
         }
@@ -632,7 +933,56 @@ private fun MiniTripInfo(
             text = value,
             style = MaterialTheme.typography.bodyMedium,
             fontWeight = FontWeight.Black,
-            color = Color(0xFF111827)
+            color = Color(0xFF111827),
+            maxLines = 1,
+            overflow = TextOverflow.Ellipsis
         )
     }
+}
+
+private fun normalizeFareText(fare: String): String {
+    val cleanFare = fare.trim()
+
+    if (cleanFare.isBlank()) return "₨ 0"
+
+    return cleanFare
+        .replace("Rs.", "₨")
+        .replace("Rs", "₨")
+        .replace("PKR", "₨")
+}
+
+private fun extractFareAmount(fare: String): Int {
+    return fare
+        .filter { it.isDigit() }
+        .toIntOrNull()
+        ?: 0
+}
+
+private fun formatRupees(amount: Int): String {
+    if (amount <= 0) return "₨ 0"
+
+    return "₨ ${String.format(Locale.US, "%,d", amount)}"
+}
+
+private fun formatTripDate(timestamp: Timestamp?): String {
+    if (timestamp == null) return "Date pending"
+
+    return try {
+        val formatter = SimpleDateFormat("MMM dd, h:mm a", Locale.getDefault())
+        formatter.format(timestamp.toDate())
+    } catch (_: Exception) {
+        "Date pending"
+    }
+}
+
+private fun estimateTripTimeText(
+    startedAt: Timestamp?,
+    endedAt: Timestamp?
+): String {
+    if (startedAt == null || endedAt == null) return "—"
+
+    val diffMillis = endedAt.toDate().time - startedAt.toDate().time
+    val diffMinutes = (diffMillis / 60000L).coerceAtLeast(1L)
+
+    return "${diffMinutes} min"
 }

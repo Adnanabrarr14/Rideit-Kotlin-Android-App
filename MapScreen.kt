@@ -9,13 +9,43 @@ import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
-import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.heightIn
+import androidx.compose.foundation.layout.navigationBarsPadding
+import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.statusBarsPadding
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.material3.*
-import androidx.compose.runtime.*
+import androidx.compose.material3.Button
+import androidx.compose.material3.ButtonDefaults
+import androidx.compose.material3.LinearProgressIndicator
+import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.OutlinedButton
+import androidx.compose.material3.OutlinedTextField
+import androidx.compose.material3.OutlinedTextFieldDefaults
+import androidx.compose.material3.SnackbarHost
+import androidx.compose.material3.SnackbarHostState
+import androidx.compose.material3.Surface
+import androidx.compose.material3.Text
+import androidx.compose.runtime.Composable
+import androidx.compose.runtime.DisposableEffect
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.collectAsState
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -26,11 +56,25 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.viewmodel.compose.viewModel
-import com.example.rideit.map.model.*
+import com.example.rideit.FirebaseManager
+import com.example.rideit.map.model.LocationSuggestion
+import com.example.rideit.map.model.MapUiState
+import com.example.rideit.map.model.RideOption
+import com.example.rideit.map.model.RideRequestStatus
 import com.example.rideit.map.viewmodel.MapViewModel
 import com.google.android.gms.maps.CameraUpdateFactory
-import com.google.android.gms.maps.model.*
-import com.google.maps.android.compose.*
+import com.google.android.gms.maps.model.BitmapDescriptorFactory
+import com.google.android.gms.maps.model.CameraPosition
+import com.google.android.gms.maps.model.LatLng
+import com.google.android.gms.maps.model.LatLngBounds
+import com.google.firebase.firestore.FirebaseFirestore
+import com.google.firebase.firestore.ListenerRegistration
+import com.google.maps.android.compose.GoogleMap
+import com.google.maps.android.compose.MapUiSettings
+import com.google.maps.android.compose.Marker
+import com.google.maps.android.compose.MarkerState
+import com.google.maps.android.compose.Polyline
+import com.google.maps.android.compose.rememberCameraPositionState
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import ui.components.PremiumDriverMiniCard
@@ -52,6 +96,82 @@ fun MapScreen(
     var showRideCompletionSheet by remember { mutableStateOf(false) }
     var showReceiptPreviewSheet by remember { mutableStateOf(false) }
     var submittedRating by remember { mutableStateOf<Int?>(null) }
+
+    var activeRideRequestId by remember { mutableStateOf<String?>(null) }
+    var isSavingRideRequest by remember { mutableStateOf(false) }
+    var isCancellingRideRequest by remember { mutableStateOf(false) }
+    var firebaseRideMessage by remember { mutableStateOf<String?>(null) }
+    var firebaseRideError by remember { mutableStateOf<String?>(null) }
+    var firebaseDriverName by remember { mutableStateOf<String?>(null) }
+    var firebaseDriverEmail by remember { mutableStateOf<String?>(null) }
+
+    val firestore = remember { FirebaseFirestore.getInstance() }
+
+    DisposableEffect(activeRideRequestId) {
+        var listenerRegistration: ListenerRegistration? = null
+
+        val requestId = activeRideRequestId
+
+        if (!requestId.isNullOrBlank()) {
+            listenerRegistration = firestore.collection("ride_requests")
+                .document(requestId)
+                .addSnapshotListener { snapshot, error ->
+                    if (error != null) {
+                        firebaseRideError = error.message ?: "Unable to listen for ride status."
+                        return@addSnapshotListener
+                    }
+
+                    if (snapshot == null || !snapshot.exists()) {
+                        firebaseRideError = "Ride request not found."
+                        return@addSnapshotListener
+                    }
+
+                    val status = snapshot.getString("status").orEmpty()
+                    val driverName = snapshot.getString("driverName")
+                    val driverEmail = snapshot.getString("driverEmail")
+
+                    when (status.lowercase()) {
+                        "accepted" -> {
+                            firebaseDriverName = driverName ?: "Your driver"
+                            firebaseDriverEmail = driverEmail
+                            firebaseRideMessage = "${driverName ?: "Your driver"} accepted your ride."
+                            firebaseRideError = null
+                        }
+
+                        "declined" -> {
+                            firebaseDriverName = null
+                            firebaseDriverEmail = null
+                            firebaseRideMessage = "This request was declined. Please book another ride."
+                            firebaseRideError = null
+                        }
+
+                        "cancelled_by_rider" -> {
+                            firebaseDriverName = null
+                            firebaseDriverEmail = null
+                            firebaseRideMessage = "Ride cancelled successfully."
+                            firebaseRideError = null
+                        }
+
+                        "pending", "requested" -> {
+                            firebaseDriverName = null
+                            firebaseDriverEmail = null
+                            firebaseRideMessage = "Ride request saved. Waiting for a driver to accept."
+                            firebaseRideError = null
+                        }
+
+                        else -> {
+                            if (status.isNotBlank()) {
+                                firebaseRideMessage = "Ride status: $status"
+                            }
+                        }
+                    }
+                }
+        }
+
+        onDispose {
+            listenerRegistration?.remove()
+        }
+    }
 
     val scope = rememberCoroutineScope()
     val snackbarHostState = remember { SnackbarHostState() }
@@ -98,7 +218,8 @@ fun MapScreen(
 
     val driverMiniStatusText = when (uiState.rideRequestStatus) {
         RideRequestStatus.SEARCHING_DRIVER -> "Matching you with a nearby driver"
-        RideRequestStatus.DRIVER_FOUND -> "Driver accepted your ride"
+        RideRequestStatus.DRIVER_FOUND -> firebaseDriverName?.let { "$it accepted your ride" }
+            ?: "Driver accepted your ride"
         RideRequestStatus.DRIVER_ARRIVING -> "Driver is heading to pickup"
         RideRequestStatus.RIDE_STARTED -> "Ride is currently in progress"
         else -> "Driver status"
@@ -216,7 +337,7 @@ fun MapScreen(
             uiState.driverLatLng?.let {
                 Marker(
                     state = MarkerState(it),
-                    title = "Driver",
+                    title = firebaseDriverName ?: "Driver",
                     icon = BitmapDescriptorFactory.defaultMarker(BitmapDescriptorFactory.HUE_AZURE)
                 )
             }
@@ -241,7 +362,7 @@ fun MapScreen(
 
         PremiumTripStatusBanner(
             status = currentTripStatus,
-            driverName = uiState.driver?.name,
+            driverName = firebaseDriverName ?: uiState.driver?.name,
             etaText = uiState.driver?.arrivalTime,
             vehicleText = uiState.driver?.vehicleName,
             modifier = Modifier
@@ -305,7 +426,7 @@ fun MapScreen(
         uiState.driver?.let { driver ->
             PremiumDriverMiniCard(
                 visible = shouldShowDriverMiniCard,
-                driverName = driver.name,
+                driverName = firebaseDriverName ?: driver.name,
                 vehicleName = driver.vehicleName,
                 vehicleNumber = driver.vehicleNumber,
                 rating = driver.rating,
@@ -388,6 +509,84 @@ fun MapScreen(
             RideitBottomPanel(
                 uiState = uiState,
                 mapViewModel = mapViewModel,
+                isSavingRideRequest = isSavingRideRequest,
+                isCancellingRideRequest = isCancellingRideRequest,
+                firebaseRideMessage = firebaseRideMessage,
+                firebaseRideError = firebaseRideError,
+                firebaseDriverName = firebaseDriverName,
+                firebaseDriverEmail = firebaseDriverEmail,
+                onConfirmRideWithFirebase = {
+                    if (isSavingRideRequest) return@RideitBottomPanel
+
+                    val ride = uiState.selectedRideOption ?: uiState.rideOptions.firstOrNull()
+
+                    if (ride == null) {
+                        firebaseRideError = "Please select a ride first."
+                        return@RideitBottomPanel
+                    }
+
+                    isSavingRideRequest = true
+                    firebaseRideError = null
+                    firebaseRideMessage = "Saving your ride request..."
+
+                    FirebaseManager.saveRideRequest(
+                        pickupAddress = uiState.pickupText.ifBlank { "Selected pickup location" },
+                        dropoffAddress = uiState.dropoffText.ifBlank { "Selected dropoff location" },
+                        rideType = ride.title,
+                        fareEstimate = ride.estimatedFare,
+                        onSuccess = { requestId ->
+                            activeRideRequestId = requestId
+                            isSavingRideRequest = false
+                            firebaseRideError = null
+                            firebaseRideMessage = "Ride request saved. Waiting for a driver to accept."
+                            mapViewModel.onConfirmRideClicked()
+                        },
+                        onError = { error ->
+                            isSavingRideRequest = false
+                            firebaseRideError = error
+                            firebaseRideMessage = null
+                        }
+                    )
+                },
+                onCancelRideWithFirebase = {
+                    val requestId = activeRideRequestId
+
+                    if (requestId.isNullOrBlank()) {
+                        activeRideRequestId = null
+                        firebaseRideMessage = null
+                        firebaseRideError = null
+                        firebaseDriverName = null
+                        firebaseDriverEmail = null
+                        mapViewModel.onCancelRideClicked()
+                        return@RideitBottomPanel
+                    }
+
+                    if (isCancellingRideRequest) return@RideitBottomPanel
+
+                    isCancellingRideRequest = true
+                    firebaseRideError = null
+                    firebaseRideMessage = "Cancelling ride request..."
+
+                    FirebaseManager.cancelRideRequest(
+                        requestId = requestId,
+                        onSuccess = {
+                            isCancellingRideRequest = false
+                            activeRideRequestId = null
+                            firebaseDriverName = null
+                            firebaseDriverEmail = null
+                            firebaseRideMessage = "Ride cancelled successfully."
+                            mapViewModel.onCancelRideClicked()
+
+                            scope.launch {
+                                snackbarHostState.showSnackbar("Ride cancelled successfully.")
+                            }
+                        },
+                        onError = { error ->
+                            isCancellingRideRequest = false
+                            firebaseRideError = error
+                        }
+                    )
+                },
                 onCompleteRideClicked = {
                     showRideCompletionSheet = true
                 }
@@ -396,7 +595,7 @@ fun MapScreen(
 
         PremiumRideCompletionSheet(
             visible = showRideCompletionSheet,
-            driverName = uiState.driver?.name,
+            driverName = firebaseDriverName ?: uiState.driver?.name,
             rideTitle = selectedRide?.title,
             fareText = selectedRide?.estimatedFare,
             modifier = Modifier.align(Alignment.Center),
@@ -430,7 +629,7 @@ fun MapScreen(
 
         PremiumTripReceiptPreviewSheet(
             visible = showReceiptPreviewSheet,
-            driverName = uiState.driver?.name,
+            driverName = firebaseDriverName ?: uiState.driver?.name,
             pickupText = uiState.pickupText,
             dropoffText = uiState.dropoffText,
             rideTitle = selectedRide?.title,
@@ -526,6 +725,14 @@ private fun PremiumMapButton(
 private fun RideitBottomPanel(
     uiState: MapUiState,
     mapViewModel: MapViewModel,
+    isSavingRideRequest: Boolean,
+    isCancellingRideRequest: Boolean,
+    firebaseRideMessage: String?,
+    firebaseRideError: String?,
+    firebaseDriverName: String?,
+    firebaseDriverEmail: String?,
+    onConfirmRideWithFirebase: () -> Unit,
+    onCancelRideWithFirebase: () -> Unit,
     onCompleteRideClicked: () -> Unit
 ) {
     Surface(
@@ -561,7 +768,12 @@ private fun RideitBottomPanel(
                         uiState.rideRequestStatus == RideRequestStatus.RIDE_STARTED -> {
                     PremiumRideStatusContent(
                         uiState = uiState,
-                        onCancelRide = mapViewModel::onCancelRideClicked,
+                        isCancellingRideRequest = isCancellingRideRequest,
+                        firebaseRideMessage = firebaseRideMessage,
+                        firebaseRideError = firebaseRideError,
+                        firebaseDriverName = firebaseDriverName,
+                        firebaseDriverEmail = firebaseDriverEmail,
+                        onCancelRide = onCancelRideWithFirebase,
                         onCompleteRideClicked = onCompleteRideClicked
                     )
                 }
@@ -569,8 +781,11 @@ private fun RideitBottomPanel(
                 uiState.showRideOptions && uiState.rideOptions.isNotEmpty() -> {
                     RideSelectionContent(
                         uiState = uiState,
+                        isSavingRideRequest = isSavingRideRequest,
+                        firebaseRideMessage = firebaseRideMessage,
+                        firebaseRideError = firebaseRideError,
                         onRideSelected = mapViewModel::onRideOptionSelected,
-                        onConfirmRide = mapViewModel::onConfirmRideClicked
+                        onConfirmRide = onConfirmRideWithFirebase
                     )
                 }
 
@@ -680,6 +895,9 @@ private fun SearchContent(
 @Composable
 private fun RideSelectionContent(
     uiState: MapUiState,
+    isSavingRideRequest: Boolean,
+    firebaseRideMessage: String?,
+    firebaseRideError: String?,
     onRideSelected: (RideOption) -> Unit,
     onConfirmRide: () -> Unit
 ) {
@@ -702,23 +920,66 @@ private fun RideSelectionContent(
             CompactRideOptionCard(
                 option = option,
                 selected = option == selectedRide,
-                onClick = { onRideSelected(option) }
+                onClick = {
+                    if (!isSavingRideRequest) {
+                        onRideSelected(option)
+                    }
+                }
             )
         }
+    }
+
+    firebaseRideMessage?.let {
+        Spacer(modifier = Modifier.height(10.dp))
+        FirebaseMessageCard(message = it, success = true)
+    }
+
+    firebaseRideError?.let {
+        Spacer(modifier = Modifier.height(10.dp))
+        FirebaseMessageCard(message = it, success = false)
+    }
+
+    if (isSavingRideRequest) {
+        Spacer(modifier = Modifier.height(12.dp))
+
+        LinearProgressIndicator(
+            modifier = Modifier
+                .fillMaxWidth()
+                .height(7.dp)
+                .clip(RoundedCornerShape(50)),
+            color = selectedColor,
+            trackColor = Color(0xFFE5E7EB)
+        )
+
+        Spacer(modifier = Modifier.height(8.dp))
+
+        Text(
+            text = "Saving your ride request...",
+            color = Color(0xFF6B7280),
+            fontWeight = FontWeight.Medium
+        )
     }
 
     Spacer(modifier = Modifier.height(14.dp))
 
     Button(
+        enabled = !isSavingRideRequest,
         onClick = onConfirmRide,
         modifier = Modifier
             .fillMaxWidth()
             .height(58.dp),
         shape = RoundedCornerShape(22.dp),
-        colors = ButtonDefaults.buttonColors(containerColor = selectedColor)
+        colors = ButtonDefaults.buttonColors(
+            containerColor = selectedColor,
+            disabledContainerColor = selectedColor.copy(alpha = 0.55f)
+        )
     ) {
         Text(
-            text = "Book ${selectedRide.title} — ${selectedRide.estimatedFare}",
+            text = if (isSavingRideRequest) {
+                "Saving Ride..."
+            } else {
+                "Book ${selectedRide.title} — ${selectedRide.estimatedFare}"
+            },
             fontWeight = FontWeight.Bold
         )
     }
@@ -727,6 +988,11 @@ private fun RideSelectionContent(
 @Composable
 private fun PremiumRideStatusContent(
     uiState: MapUiState,
+    isCancellingRideRequest: Boolean,
+    firebaseRideMessage: String?,
+    firebaseRideError: String?,
+    firebaseDriverName: String?,
+    firebaseDriverEmail: String?,
     onCancelRide: () -> Unit,
     onCompleteRideClicked: () -> Unit
 ) {
@@ -739,11 +1005,12 @@ private fun PremiumRideStatusContent(
     }
 
     Text(
-        text = when (uiState.rideRequestStatus) {
-            RideRequestStatus.SEARCHING_DRIVER -> "Finding your driver"
-            RideRequestStatus.DRIVER_FOUND -> "Driver found"
-            RideRequestStatus.DRIVER_ARRIVING -> "Driver is arriving"
-            RideRequestStatus.RIDE_STARTED -> "Ride started"
+        text = when {
+            firebaseDriverName != null -> "Driver accepted"
+            uiState.rideRequestStatus == RideRequestStatus.SEARCHING_DRIVER -> "Finding your driver"
+            uiState.rideRequestStatus == RideRequestStatus.DRIVER_FOUND -> "Driver found"
+            uiState.rideRequestStatus == RideRequestStatus.DRIVER_ARRIVING -> "Driver is arriving"
+            uiState.rideRequestStatus == RideRequestStatus.RIDE_STARTED -> "Ride started"
             else -> "Ride status"
         },
         fontWeight = FontWeight.Bold,
@@ -751,6 +1018,27 @@ private fun PremiumRideStatusContent(
     )
 
     Spacer(modifier = Modifier.height(12.dp))
+
+    firebaseRideMessage?.let {
+        FirebaseMessageCard(message = it, success = true)
+        Spacer(modifier = Modifier.height(10.dp))
+    }
+
+    firebaseRideError?.let {
+        FirebaseMessageCard(message = it, success = false)
+        Spacer(modifier = Modifier.height(10.dp))
+    }
+
+    firebaseDriverEmail?.let {
+        Text(
+            text = it,
+            color = Color(0xFF16A34A),
+            fontWeight = FontWeight.Bold,
+            style = MaterialTheme.typography.bodySmall
+        )
+
+        Spacer(modifier = Modifier.height(10.dp))
+    }
 
     LinearProgressIndicator(
         progress = {
@@ -766,7 +1054,7 @@ private fun PremiumRideStatusContent(
             .fillMaxWidth()
             .height(8.dp)
             .clip(RoundedCornerShape(50)),
-        color = statusColor,
+        color = if (firebaseDriverName != null) Color(0xFF16A34A) else statusColor,
         trackColor = Color(0xFFE5E7EB)
     )
 
@@ -786,7 +1074,7 @@ private fun PremiumRideStatusContent(
                     modifier = Modifier
                         .size(54.dp)
                         .clip(CircleShape)
-                        .background(statusColor),
+                        .background(if (firebaseDriverName != null) Color(0xFF16A34A) else statusColor),
                     contentAlignment = Alignment.Center
                 ) {
                     Text("👨")
@@ -795,11 +1083,11 @@ private fun PremiumRideStatusContent(
                 Spacer(modifier = Modifier.width(14.dp))
 
                 Column(modifier = Modifier.weight(1f)) {
-                    Text(driver.name, fontWeight = FontWeight.Bold)
+                    Text(firebaseDriverName ?: driver.name, fontWeight = FontWeight.Bold)
                     Text("${driver.vehicleName} • ${driver.vehicleNumber}", color = Color.Gray)
                     Text(
                         "⭐ ${driver.rating} • ${driver.arrivalTime}",
-                        color = statusColor,
+                        color = if (firebaseDriverName != null) Color(0xFF16A34A) else statusColor,
                         fontWeight = FontWeight.Bold
                     )
                 }
@@ -809,8 +1097,30 @@ private fun PremiumRideStatusContent(
 
     Spacer(modifier = Modifier.height(14.dp))
 
+    if (isCancellingRideRequest) {
+        LinearProgressIndicator(
+            modifier = Modifier
+                .fillMaxWidth()
+                .height(7.dp)
+                .clip(RoundedCornerShape(50)),
+            color = Color(0xFFEF4444),
+            trackColor = Color(0xFFE5E7EB)
+        )
+
+        Spacer(modifier = Modifier.height(8.dp))
+
+        Text(
+            text = "Cancelling ride request...",
+            color = Color(0xFF6B7280),
+            fontWeight = FontWeight.Medium
+        )
+
+        Spacer(modifier = Modifier.height(10.dp))
+    }
+
     if (uiState.rideRequestStatus == RideRequestStatus.RIDE_STARTED) {
         Button(
+            enabled = !isCancellingRideRequest,
             onClick = onCompleteRideClicked,
             modifier = Modifier
                 .fillMaxWidth()
@@ -830,6 +1140,7 @@ private fun PremiumRideStatusContent(
     }
 
     OutlinedButton(
+        enabled = !isCancellingRideRequest,
         onClick = onCancelRide,
         modifier = Modifier
             .fillMaxWidth()
@@ -837,7 +1148,29 @@ private fun PremiumRideStatusContent(
         shape = RoundedCornerShape(20.dp),
         colors = ButtonDefaults.outlinedButtonColors(contentColor = Color(0xFFEF4444))
     ) {
-        Text("Cancel Ride", fontWeight = FontWeight.Bold)
+        Text(
+            text = if (isCancellingRideRequest) "Cancelling..." else "Cancel Ride",
+            fontWeight = FontWeight.Bold
+        )
+    }
+}
+
+@Composable
+private fun FirebaseMessageCard(
+    message: String,
+    success: Boolean
+) {
+    Surface(
+        modifier = Modifier.fillMaxWidth(),
+        shape = RoundedCornerShape(18.dp),
+        color = if (success) Color(0xFFE8FFF1) else Color(0xFFFFE5E5)
+    ) {
+        Text(
+            text = message,
+            modifier = Modifier.padding(13.dp),
+            color = if (success) Color(0xFF16A34A) else Color(0xFFEF4444),
+            fontWeight = FontWeight.Bold
+        )
     }
 }
 

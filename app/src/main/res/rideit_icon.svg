@@ -1,0 +1,86 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="512" height="512" viewBox="0 0 512 512">
+
+  <!-- Background -->
+  <rect width="512" height="512" rx="115" fill="#0A0A12"/>
+  <rect width="512" height="512" rx="115" fill="none" stroke="#8A35F2" stroke-width="4"/>
+
+  <!-- Ground shadow -->
+  <ellipse cx="256" cy="420" rx="160" ry="16" fill="#8A35F2" opacity="0.15"/>
+
+  <!-- Car body bottom -->
+  <rect x="96" y="300" width="320" height="100" rx="22" fill="#1C1C2E"/>
+  <rect x="102" y="306" width="308" height="88" rx="18" fill="#252538"/>
+
+  <!-- Car roof/top -->
+  <path d="M136 300 Q155 245 196 232 L316 232 Q357 245 376 300 Z" fill="#1C1C2E"/>
+  <path d="M142 300 Q159 250 198 238 L314 238 Q353 250 370 300 Z" fill="#22223A"/>
+
+  <!-- Left window -->
+  <rect x="160" y="245" width="82" height="52" rx="10" fill="#0D2137"/>
+  <rect x="164" y="249" width="74" height="44" rx="8" fill="#1A4A7A" opacity="0.85"/>
+  <rect x="164" y="268" width="74" height="2" rx="1" fill="#2A6AAA" opacity="0.5"/>
+
+  <!-- Right window -->
+  <rect x="270" y="245" width="82" height="52" rx="10" fill="#0D2137"/>
+  <rect x="274" y="249" width="74" height="44" rx="8" fill="#1A4A7A" opacity="0.85"/>
+  <rect x="274" y="268" width="74" height="2" rx="1" fill="#2A6AAA" opacity="0.5"/>
+
+  <!-- Window divider -->
+  <line x1="244" y1="245" x2="270" y2="245" stroke="#0A0A12" stroke-width="6"/>
+
+  <!-- Left headlight -->
+  <rect x="98" y="308" width="26" height="18" rx="9" fill="#FF1212" opacity="0.95"/>
+  <ellipse cx="111" cy="317" rx="10" ry="6" fill="#FF4444" opacity="0.6"/>
+
+  <!-- Right headlight -->
+  <rect x="388" y="308" width="26" height="18" rx="9" fill="#FF1212" opacity="0.95"/>
+  <ellipse cx="401" cy="317" rx="10" ry="6" fill="#FF4444" opacity="0.6"/>
+
+  <!-- Left indicator -->
+  <rect x="98" y="334" width="18" height="10" rx="5" fill="#FF6600" opacity="0.8"/>
+
+  <!-- Right indicator -->
+  <rect x="396" y="334" width="18" height="10" rx="5" fill="#FF6600" opacity="0.8"/>
+
+  <!-- Purple accent line -->
+  <rect x="102" y="326" width="308" height="7" rx="3" fill="#8A35F2" opacity="0.7"/>
+
+  <!-- RIDEIT badge on car -->
+  <rect x="206" y="312" width="100" height="26" rx="8" fill="#1A1A2E"/>
+  <rect x="209" y="315" width="94" height="20" rx="6" fill="#8A35F2" opacity="0.18"/>
+  <text x="256" y="329" text-anchor="middle" font-family="Arial, sans-serif" font-size="11" font-weight="700" fill="#8A35F2" letter-spacing="2">RIDEIT</text>
+
+  <!-- Left door line -->
+  <rect x="96" y="300" width="18" height="90" rx="8" fill="#151525"/>
+
+  <!-- Right door line -->
+  <rect x="398" y="300" width="18" height="90" rx="8" fill="#151525"/>
+
+  <!-- Left wheel -->
+  <circle cx="168" cy="400" r="32" fill="#0A0A12"/>
+  <circle cx="168" cy="400" r="32" stroke="#8A35F2" stroke-width="6" fill="none"/>
+  <circle cx="168" cy="400" r="17" fill="#1A1A2E"/>
+  <circle cx="168" cy="400" r="17" stroke="#6A25D2" stroke-width="2" fill="none"/>
+  <circle cx="168" cy="400" r="6" fill="#8A35F2"/>
+
+  <!-- Right wheel -->
+  <circle cx="344" cy="400" r="32" fill="#0A0A12"/>
+  <circle cx="344" cy="400" r="32" stroke="#8A35F2" stroke-width="6" fill="none"/>
+  <circle cx="344" cy="400" r="17" fill="#1A1A2E"/>
+  <circle cx="344" cy="400" r="17" stroke="#6A25D2" stroke-width="2" fill="none"/>
+  <circle cx="344" cy="400" r="6" fill="#8A35F2"/>
+
+  <!-- Wheel connector -->
+  <rect x="200" y="388" width="112" height="24" rx="8" fill="#151525"/>
+
+  <!-- Location pin -->
+  <ellipse cx="256" cy="110" rx="30" ry="30" fill="#8A35F2" opacity="0.25"/>
+  <ellipse cx="256" cy="110" rx="20" ry="20" fill="#8A35F2" opacity="0.5"/>
+  <ellipse cx="256" cy="110" rx="11" ry="11" fill="#8A35F2"/>
+  <path d="M256 121 L248 148 Q256 156 264 148 Z" fill="#8A35F2"/>
+  <circle cx="256" cy="110" r="4" fill="#0A0A12"/>
+
+  <!-- App name -->
+  <text x="256" y="478" text-anchor="middle" font-family="Arial, sans-serif" font-size="42" font-weight="700" fill="white" letter-spacing="5">RIDEIT</text>
+
+</svg>

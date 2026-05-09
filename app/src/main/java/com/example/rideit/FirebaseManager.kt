@@ -32,10 +32,8 @@ object FirebaseManager {
                     return@addOnSuccessListener
                 }
 
-                val uid = user.uid
-
                 firestore.collection("users")
-                    .document(uid)
+                    .document(user.uid)
                     .get()
                     .addOnSuccessListener { snapshot ->
                         val savedRole = snapshot.getString("role")
@@ -43,7 +41,7 @@ object FirebaseManager {
                         when {
                             savedRole == null -> {
                                 createOrUpdateUserRole(
-                                    uid = uid,
+                                    uid = user.uid,
                                     email = cleanEmail,
                                     role = expectedRole,
                                     onSuccess = onSuccess,
@@ -170,32 +168,32 @@ object FirebaseManager {
             return
         }
 
-        val cleanPickup = pickupAddress.trim()
-        val cleanDropoff = dropoffAddress.trim()
-        val cleanRideType = rideType.trim()
-        val cleanFareEstimate = fareEstimate.trim()
-
-        if (cleanPickup.isBlank() || cleanDropoff.isBlank()) {
-            onError("Pickup and dropoff are required.")
-            return
-        }
-
-        if (cleanRideType.isBlank()) {
-            onError("Please select a ride type.")
-            return
-        }
-
         val requestRef = firestore.collection("ride_requests").document()
+
+        val cleanPickup = pickupAddress.trim().ifBlank { "Selected pickup location" }
+        val cleanDropoff = dropoffAddress.trim().ifBlank { "Selected dropoff location" }
+        val cleanRideType = rideType.trim().ifBlank { "Rideit" }
+        val cleanFareEstimate = fareEstimate.trim().ifBlank { "Fare pending" }
 
         val requestData = hashMapOf(
             "requestId" to requestRef.id,
+
             "riderId" to currentUser.uid,
             "riderEmail" to (currentUser.email ?: ""),
+
+            "userId" to currentUser.uid,
+            "userEmail" to (currentUser.email ?: ""),
+
             "pickupAddress" to cleanPickup,
             "dropoffAddress" to cleanDropoff,
+            "pickupText" to cleanPickup,
+            "dropText" to cleanDropoff,
+
             "rideType" to cleanRideType,
             "fareEstimate" to cleanFareEstimate,
-            "status" to "requested",
+            "fare" to cleanFareEstimate,
+
+            "status" to "pending",
             "createdAt" to Timestamp.now(),
             "updatedAt" to Timestamp.now()
         )
@@ -207,6 +205,229 @@ object FirebaseManager {
             }
             .addOnFailureListener { exception ->
                 onError(exception.message ?: "Failed to save ride request")
+            }
+    }
+
+    fun findLatestRestorableRiderRide(
+        onSuccess: (
+            requestId: String?,
+            status: String?,
+            driverName: String?,
+            driverEmail: String?,
+            feedbackSubmitted: Boolean
+        ) -> Unit,
+        onError: (String) -> Unit
+    ) {
+        val currentUser = auth.currentUser
+
+        if (currentUser == null) {
+            onSuccess(null, null, null, null, false)
+            return
+        }
+
+        firestore.collection("ride_requests")
+            .whereEqualTo("riderId", currentUser.uid)
+            .limit(25)
+            .get()
+            .addOnSuccessListener { snapshots ->
+                val restorableStatuses = setOf(
+                    "pending",
+                    "requested",
+                    "accepted",
+                    "completed"
+                )
+
+                val document = snapshots.documents
+                    .filter { doc ->
+                        val status = doc.getString("status").orEmpty().lowercase()
+                        val feedbackSubmitted = doc.getBoolean("feedbackSubmitted") ?: false
+
+                        status in restorableStatuses &&
+                                !(status == "completed" && feedbackSubmitted)
+                    }
+                    .maxByOrNull { doc ->
+                        doc.getTimestamp("createdAt")?.seconds ?: 0L
+                    }
+
+                if (document == null) {
+                    onSuccess(null, null, null, null, false)
+                    return@addOnSuccessListener
+                }
+
+                onSuccess(
+                    document.id,
+                    document.getString("status"),
+                    document.getString("driverName"),
+                    document.getString("driverEmail"),
+                    document.getBoolean("feedbackSubmitted") ?: false
+                )
+            }
+            .addOnFailureListener { exception ->
+                onError(exception.message ?: "Failed to restore active ride")
+            }
+    }
+
+    fun cancelRideRequest(
+        requestId: String,
+        onSuccess: () -> Unit,
+        onError: (String) -> Unit
+    ) {
+        val currentUser = auth.currentUser
+
+        if (currentUser == null) {
+            onError("You must be logged in to cancel a ride.")
+            return
+        }
+
+        if (requestId.isBlank()) {
+            onError("Ride request not found.")
+            return
+        }
+
+        firestore.collection("ride_requests")
+            .document(requestId)
+            .update(
+                mapOf(
+                    "status" to "cancelled_by_rider",
+                    "cancelledBy" to "rider",
+                    "cancelledByUserId" to currentUser.uid,
+                    "cancelledByUserEmail" to (currentUser.email ?: ""),
+                    "cancelledAt" to Timestamp.now(),
+                    "updatedAt" to Timestamp.now()
+                )
+            )
+            .addOnSuccessListener {
+                onSuccess()
+            }
+            .addOnFailureListener { exception ->
+                onError(exception.message ?: "Failed to cancel ride request")
+            }
+    }
+
+    fun completeDriverTrip(
+        requestId: String,
+        onSuccess: () -> Unit,
+        onError: (String) -> Unit
+    ) {
+        val currentUser = auth.currentUser
+
+        if (currentUser == null) {
+            onError("You must be logged in as driver to complete the trip.")
+            return
+        }
+
+        if (requestId.isBlank()) {
+            onError("Ride request not found.")
+            return
+        }
+
+        firestore.collection("ride_requests")
+            .document(requestId)
+            .update(
+                mapOf(
+                    "status" to "completed",
+                    "completedBy" to "driver",
+                    "completedByDriverId" to currentUser.uid,
+                    "completedByDriverEmail" to (currentUser.email ?: ""),
+                    "completedAt" to Timestamp.now(),
+                    "updatedAt" to Timestamp.now()
+                )
+            )
+            .addOnSuccessListener {
+                onSuccess()
+            }
+            .addOnFailureListener { exception ->
+                onError(exception.message ?: "Failed to complete trip")
+            }
+    }
+
+    fun cancelDriverTrip(
+        requestId: String,
+        onSuccess: () -> Unit,
+        onError: (String) -> Unit
+    ) {
+        val currentUser = auth.currentUser
+
+        if (currentUser == null) {
+            onError("You must be logged in as driver to cancel the trip.")
+            return
+        }
+
+        if (requestId.isBlank()) {
+            onError("Ride request not found.")
+            return
+        }
+
+        firestore.collection("ride_requests")
+            .document(requestId)
+            .update(
+                mapOf(
+                    "status" to "cancelled_by_driver",
+                    "cancelledBy" to "driver",
+                    "cancelledByDriverId" to currentUser.uid,
+                    "cancelledByDriverEmail" to (currentUser.email ?: ""),
+                    "cancelledAt" to Timestamp.now(),
+                    "updatedAt" to Timestamp.now()
+                )
+            )
+            .addOnSuccessListener {
+                onSuccess()
+            }
+            .addOnFailureListener { exception ->
+                onError(exception.message ?: "Failed to cancel trip")
+            }
+    }
+
+    fun saveRiderTripFeedback(
+        requestId: String,
+        rating: Int,
+        tags: List<String>,
+        feedback: String,
+        onSuccess: () -> Unit,
+        onError: (String) -> Unit
+    ) {
+        val currentUser = auth.currentUser
+
+        if (currentUser == null) {
+            onError("You must be logged in to submit feedback.")
+            return
+        }
+
+        if (requestId.isBlank()) {
+            onError("Completed ride request not found.")
+            return
+        }
+
+        val safeRating = rating.coerceIn(1, 5)
+
+        val cleanTags = tags
+            .map { it.trim() }
+            .filter { it.isNotBlank() }
+            .distinct()
+
+        val cleanFeedback = feedback.trim()
+
+        firestore.collection("ride_requests")
+            .document(requestId)
+            .set(
+                mapOf(
+                    "riderRating" to safeRating,
+                    "riderFeedbackTags" to cleanTags,
+                    "riderFeedback" to cleanFeedback,
+                    "feedbackSubmitted" to true,
+                    "feedbackSubmittedBy" to "rider",
+                    "feedbackSubmittedByUserId" to currentUser.uid,
+                    "feedbackSubmittedByUserEmail" to (currentUser.email ?: ""),
+                    "feedbackSubmittedAt" to Timestamp.now(),
+                    "updatedAt" to Timestamp.now()
+                ),
+                SetOptions.merge()
+            )
+            .addOnSuccessListener {
+                onSuccess()
+            }
+            .addOnFailureListener { exception ->
+                onError(exception.message ?: "Failed to save feedback")
             }
     }
 
@@ -236,10 +457,6 @@ object FirebaseManager {
         return auth.currentUser?.email
     }
 
-    /*
-     * Backward-compatible old functions.
-     * These keep old app code safe if any older screen still calls FirebaseManager.login/signup.
-     */
     fun login(
         email: String,
         password: String,

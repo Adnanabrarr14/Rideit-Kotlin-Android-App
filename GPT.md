@@ -714,6 +714,169 @@ Next Phase:
 Phase 8.5 — Rider Cancel Ride Updates Firebase Status
 
 
+Phase 8.5 completed:
+- Rider Cancel Ride now updates Firebase ride_requests status
+- Cancelled ride status becomes cancelled_by_rider
+- Added FirebaseManager.cancelRideRequest
+- Rider UI shows cancellation loading state
+- Rider UI returns safely after cancellation
+- Driver no longer sees cancelled request as pending/requested
+- Premium rider map UI preserved
+- Premium overlays, safety actions, completion sheet and receipt sheet preserved
+- No driver UI changes
+- No Firebase rules changes
+- No architecture rewrite
+
+
+Phase 8.6 completed:
+- Driver Complete Trip now updates Firebase ride_requests status
+- Completed trip status becomes completed
+- Driver Cancel Trip now updates Firebase ride_requests status
+- Cancelled driver trip status becomes cancelled_by_driver
+- Added FirebaseManager.completeDriverTrip
+- Added FirebaseManager.cancelDriverTrip
+- DriverTripScreen receives active rideRequestId
+- Driver accepted request ID is passed from DriverHomeScreen to DriverTripScreen
+- Firebase saves completedBy, completedByDriverId, completedByDriverEmail and completedAt
+- Firebase saves cancelledBy, cancelledByDriverId, cancelledByDriverEmail and cancelledAt
+- Existing driver dashboard preserved
+- Existing driver active trip real map preview preserved
+- Existing rider map preserved
+- No Firebase rules changes
+- No architecture rewrite
+
+Phase 8.7 rider map polish/fixes completed:
+- Removed right-side safety quick action panel from rider map
+- Big route summary card replaced with compact route chip
+- Rider map stays cleaner and route remains visible
+- Firebase completed/cancelled statuses preserved
+- After completed/cancelled flow, old route/markers can be cleared
+- PremiumRideCompletionSheet duplicate conflict fixed
+- Feedback sheet now supports star rating, selectable tags, and written feedback
+- No driver code changes
+- No Firebase rules changes
+- No architecture rewrite
+
+Phase 8.9 completed:
+- Rider active/completed ride can restore after logout/login
+- Added FirebaseManager.findLatestRestorableRiderRide
+- Removed Firestore composite index requirement by sorting latest rider ride inside app
+- Rider can now login again and see pending/accepted/completed ride state
+- Completed ride without feedback opens rating/feedback flow
+- Completed ride with feedbackSubmitted true is ignored
+- Cancelled/declined rides are ignored
+- Existing clean MapScreen UI preserved
+- Existing feedback save flow preserved
+- No driver UI changes
+- No Firebase rules changes
+
+
+Phase 8.10 completed:
+- Driver Trip History now loads real Firebase ride_requests data
+- Shows completed trips for current logged-in driver
+- Shows cancelled_by_driver and cancelled_by_rider trips
+- Calculates completed trip count, cancelled count, Firebase earnings, and average rating
+- Shows rider email/name, pickup, dropoff, fare, time, date, status, and rider feedback
+- Removed static/demo trip list from DriverTripHistoryScreen
+- DriverHomeScreen preserved
+- Rider MapScreen preserved
+- Firebase rules unchanged
+- No architecture rewrite
+
+Phase 8.11 completed:
+- Driver Wallet now loads real Firebase ride_requests data
+- Wallet shows current logged-in driver’s completed trip earnings
+- Available balance is calculated from completed trips
+- Rideit fee and net earnings are calculated dynamically
+- Today earnings and weekly earnings are calculated from Firebase timestamps
+- Completed/cancelled trip counts are shown
+- Recent wallet activity now shows real Firebase trips
+- Removed static/demo wallet numbers from DriverWalletScreen
+- DriverHomeScreen preserved
+- DriverTripHistoryScreen preserved
+- Rider MapScreen preserved
+- Firebase rules unchanged
+- No architecture rewrite
+
+Phase 8.12 completed:
+- Rider Trip History now loads real Firebase ride_requests data
+- Static/demo rider trip list removed
+- Shows current logged-in rider’s completed/cancelled/declined trips
+- Shows pickup, dropoff, ride type, fare, driver name, date, time, status
+- Shows rider rating and written feedback when available
+- Calculates real trip count, total spent, completed trips, cancelled trips, and average rating
+- Rider MapScreen preserved
+- Driver screens preserved
+- Firebase rules unchanged
+- No architecture rewrite
+
+
+Phase 8.13 completed:
+- Driver active accepted trip can restore after logout/login
+- DriverHomeScreen checks Firebase ride_requests for active driver trip
+- Restores accepted / driver_arriving / ride_started trip for current driver
+- DriverTripScreen fixed and now compiles correctly
+- DriverTripScreen receives real rideRequestId
+- Driver can complete/cancel restored Firebase trip
+- DriverTripScreen loads rider email, pickup, dropoff, ride type, and fare from Firebase
+- Driver wallet/history/rider map preserved
+- Firebase rules unchanged
+- No architecture rewrite
+
+Phase 8.14 completed:
+- DriverTripScreen now updates Firebase status on each trip step
+- Arrived at Pickup updates status to driver_arriving
+- Start Trip updates status to ride_started
+- Complete Trip still updates status to completed
+- Cancel Trip still updates status to cancelled_by_driver
+- DriverTripScreen restores correct UI step from Firebase status
+- Rider can see driver_arriving / ride_started status through existing listener
+- Driver active trip restore preserved
+- Driver wallet/history preserved
+- Rider map/history preserved
+- Firebase rules unchanged
+
+
+Phase 8.15 completed:
+- Rider MapScreen now understands Firebase driver_arriving status
+- Rider MapScreen now understands Firebase ride_started status
+- Rider sees Driver arrived at pickup when driver taps Arrived
+- Rider sees Trip in progress when driver taps Start Trip
+- Rider progress and live status text now update from Firebase status
+- Completion, cancellation, feedback, receipt, and route clearing preserved
+- Driver screens preserved
+- Firebase rules unchanged
+- No architecture rewrite
+
+Phase 8.16 completed:
+- Driver Dashboard now shows real Firebase stats
+- Removed static dashboard numbers from DriverHomeScreen
+- Today earnings now calculate from completed Firebase trips
+- Today completed trips now calculate from Firebase
+- Total completed trips now calculate from Firebase
+- Cancelled trips now calculate from Firebase
+- Average rider rating now calculates from submitted rider feedback
+- Accept rate now calculates from accepted/completed/cancelled vs declined Firebase rides
+- Weekly earnings now calculate from Firebase timestamps
+- Daily target progress is now dynamic
+- Driver active trip restore preserved
+- Driver ride request accept/decline flow preserved
+- Driver wallet/history preserved
+- Rider map/history preserved
+- Firebase rules unchanged
+- No architecture rewrite
+
+Phase 8 rider-side map stability fixed:
+- Removed risky custom bitmap marker from MapScreen.kt.
+- Restored stable default Google blue driver marker.
+- Fixed rider fresh-login issue where Searching Driver appeared automatically.
+- Driver marker now appears after booking/active ride status.
+- Driver arrived status text now updates correctly.
+
+
+
+
+
 
 
 
