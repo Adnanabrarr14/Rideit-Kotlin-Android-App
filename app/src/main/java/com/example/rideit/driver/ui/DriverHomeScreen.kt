@@ -48,6 +48,7 @@ import androidx.compose.material3.SwitchDefaults
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -114,6 +115,10 @@ fun DriverHomeScreen() {
 
     var pendingRideRequest by remember { mutableStateOf<PendingRideRequest?>(null) }
     var activeRideRequestId by remember { mutableStateOf<String?>(null) }
+    var activeTripStatus by remember { mutableStateOf<String?>(null) }
+    var activeTripRiderEmail by remember { mutableStateOf<String?>(null) }
+    var activeTripPickup by remember { mutableStateOf<String?>(null) }
+    var activeTripDropoff by remember { mutableStateOf<String?>(null) }
 
     var isRideActionLoading by remember { mutableStateOf(false) }
     var isCheckingRideRequest by remember { mutableStateOf(false) }
@@ -137,6 +142,81 @@ fun DriverHomeScreen() {
         isCheckingRideRequest = false
     }
 
+    fun setActiveTripFromDocument(document: DocumentSnapshot?) {
+        if (document == null) {
+            activeRideRequestId = null
+            activeTripStatus = null
+            activeTripRiderEmail = null
+            activeTripPickup = null
+            activeTripDropoff = null
+            return
+        }
+
+        activeRideRequestId = document.id
+        activeTripStatus = document.safeText("status").ifBlank { "accepted" }
+
+        activeTripRiderEmail = document.safeText("riderEmail")
+            .ifBlank { document.safeText("userEmail") }
+            .ifBlank { document.safeText("email") }
+            .ifBlank { "Rider" }
+
+        activeTripPickup = document.safeText("pickupAddress")
+            .ifBlank { document.safeText("pickupText") }
+            .ifBlank { document.safeText("pickup") }
+            .ifBlank { document.safeText("from") }
+            .ifBlank { "Pickup location" }
+
+        activeTripDropoff = document.safeText("dropoffAddress")
+            .ifBlank { document.safeText("dropText") }
+            .ifBlank { document.safeText("dropoffText") }
+            .ifBlank { document.safeText("dropoff") }
+            .ifBlank { document.safeText("destination") }
+            .ifBlank { document.safeText("to") }
+            .ifBlank { "Dropoff location" }
+
+        if (!showRideRequest) {
+            resetRideRequestUi()
+            firebaseStatusText = "Active trip found. Continue your accepted ride, or tap Check for new requests."
+        }
+    }
+
+    fun loadActiveDriverTrip() {
+        if (driverId.isBlank()) {
+            firebaseStatusText = "Driver account not found. Please login again."
+            return
+        }
+
+        firestore.collection("ride_requests")
+            .whereEqualTo("driverId", driverId)
+            .limit(100)
+            .get()
+            .addOnSuccessListener { snapshots ->
+                val activeDocument = snapshots.documents
+                    .filter { document ->
+                        val status = document.safeText("status").trim().lowercase()
+                        status == "accepted" ||
+                                status == "driver_arriving" ||
+                                status == "ride_started"
+                    }
+                    .maxByOrNull { document ->
+                        document.safeSortTime()
+                    }
+
+                if (activeDocument != null) {
+                    setActiveTripFromDocument(activeDocument)
+                } else if (activeRideRequestId.isNullOrBlank()) {
+                    firebaseStatusText = if (isOnline) {
+                        "You are Live. Tap Check to find ride requests."
+                    } else {
+                        "Driver is offline. Turn on Live to receive rides."
+                    }
+                }
+            }
+            .addOnFailureListener { exception ->
+                firebaseStatusText = exception.message ?: "Unable to check active trips."
+            }
+    }
+
     fun checkForPendingRideRequest() {
         if (!isOnline) {
             scope.launch {
@@ -154,81 +234,65 @@ fun DriverHomeScreen() {
         if (isCheckingRideRequest) return
 
         isCheckingRideRequest = true
-        firebaseStatusText = "Checking ride requests..."
+        firebaseStatusText = "Checking new ride requests..."
         pendingRideRequest = null
         showRideRequest = false
 
         firestore.collection("ride_requests")
-            .limit(150)
+            .limit(200)
             .get()
             .addOnSuccessListener { snapshots ->
                 try {
-                    val allDocuments = snapshots.documents
-
-                    val openRequest = allDocuments
+                    val requestDocument = snapshots.documents
                         .filter { document ->
                             val status = document.safeText("status").trim().lowercase()
+                            val existingDriverId = document.safeText("driverId").trim()
+                            val existingDriverEmail = document.safeText("driverEmail").trim()
 
-                            status.isBlank() ||
-                                    status == "pending" ||
-                                    status == "requested" ||
-                                    status == "searching" ||
-                                    status == "searching_driver" ||
-                                    status == "waiting" ||
-                                    status == "waiting_for_driver" ||
-                                    status == "driver_pending" ||
-                                    status == "looking_for_driver" ||
-                                    status == "new"
+                            val isFreshUnassignedRequest =
+                                existingDriverId.isBlank() && existingDriverEmail.isBlank()
+
+                            val isOpenRequest =
+                                status.isBlank() ||
+                                        status == "pending" ||
+                                        status == "requested" ||
+                                        status == "searching" ||
+                                        status == "searching_driver" ||
+                                        status == "waiting" ||
+                                        status == "waiting_for_driver" ||
+                                        status == "driver_pending" ||
+                                        status == "looking_for_driver" ||
+                                        status == "new"
+
+                            val isNotOldAcceptedOrClosed =
+                                status != "accepted" &&
+                                        status != "driver_arriving" &&
+                                        status != "ride_started" &&
+                                        status != "completed" &&
+                                        status != "cancelled" &&
+                                        status != "cancelled_by_driver" &&
+                                        status != "cancelled_by_rider" &&
+                                        status != "declined"
+
+                            isFreshUnassignedRequest && isOpenRequest && isNotOldAcceptedOrClosed
                         }
                         .maxByOrNull { document ->
                             document.safeSortTime()
                         }
 
-                    val latestNotClosedRequest = allDocuments
-                        .filter { document ->
-                            val status = document.safeText("status").trim().lowercase()
-
-                            status != "accepted" &&
-                                    status != "driver_arriving" &&
-                                    status != "ride_started" &&
-                                    status != "completed" &&
-                                    status != "cancelled" &&
-                                    status != "cancelled_by_driver" &&
-                                    status != "cancelled_by_rider" &&
-                                    status != "declined"
-                        }
-                        .maxByOrNull { document ->
-                            document.safeSortTime()
-                        }
-
-                    val latestAnyRiderRequest = allDocuments
-                        .filter { document ->
-                            document.safeText("riderEmail").isNotBlank() ||
-                                    document.safeText("userEmail").isNotBlank() ||
-                                    document.safeText("pickupAddress").isNotBlank() ||
-                                    document.safeText("pickupText").isNotBlank() ||
-                                    document.safeText("dropoffAddress").isNotBlank() ||
-                                    document.safeText("dropoffText").isNotBlank()
-                        }
-                        .maxByOrNull { document ->
-                            document.safeSortTime()
-                        }
-
-                    val selectedDocument = openRequest
-                        ?: latestNotClosedRequest
-                        ?: latestAnyRiderRequest
-
-                    if (selectedDocument == null) {
+                    if (requestDocument == null) {
                         pendingRideRequest = null
                         showRideRequest = false
                         firebaseStatusText =
-                            "No ride request found. Book a ride from rider account, then tap Check."
+                            if (!activeRideRequestId.isNullOrBlank()) {
+                                "No new ride request found. Active trip is still available below."
+                            } else {
+                                "No new ride request found. Ask rider to book a ride, then tap Check."
+                            }
                     } else {
-                        val request = selectedDocument.toPendingRideRequestSafely()
-                        pendingRideRequest = request
+                        pendingRideRequest = requestDocument.toPendingRideRequestSafely()
                         showRideRequest = true
-                        firebaseStatusText =
-                            "New ride request found. Status: ${request.status}."
+                        firebaseStatusText = "New ride request found. Accept or decline this new request."
                     }
                 } catch (exception: Exception) {
                     pendingRideRequest = null
@@ -250,10 +314,13 @@ fun DriverHomeScreen() {
 
     BackHandler(enabled = activeDestination != DriverHomeDestination.Home) {
         activeDestination = DriverHomeDestination.Home
-        activeRideRequestId = null
         resetRideRequestUi()
         isOnline = false
-        firebaseStatusText = "Driver is offline. Turn on Live to receive rides."
+        loadActiveDriverTrip()
+    }
+
+    LaunchedEffect(driverId) {
+        loadActiveDriverTrip()
     }
 
     DisposableEffect(driverId) {
@@ -277,6 +344,23 @@ fun DriverHomeScreen() {
 
                     try {
                         val documents = snapshots?.documents.orEmpty()
+
+                        val activeDocument = documents
+                            .filter { document ->
+                                val status = document.safeText("status").trim().lowercase()
+                                status == "accepted" ||
+                                        status == "driver_arriving" ||
+                                        status == "ride_started"
+                            }
+                            .maxByOrNull { document ->
+                                document.safeSortTime()
+                            }
+
+                        if (activeDocument != null) {
+                            setActiveTripFromDocument(activeDocument)
+                        } else if (!activeRideRequestId.isNullOrBlank()) {
+                            setActiveTripFromDocument(null)
+                        }
 
                         val completedDocs = documents.filter { document ->
                             document.safeText("status").lowercase() == "completed"
@@ -366,11 +450,10 @@ fun DriverHomeScreen() {
                 driverName = "Shameer Khan",
                 rideRequestId = activeRideRequestId,
                 onBackToDriverHome = {
-                    activeRideRequestId = null
                     resetRideRequestUi()
                     isOnline = false
                     activeDestination = DriverHomeDestination.Home
-                    firebaseStatusText = "Driver is offline. Turn on Live to receive rides."
+                    loadActiveDriverTrip()
 
                     scope.launch {
                         snackbarHostState.showSnackbar("Returned to Driver Home.")
@@ -446,15 +529,23 @@ fun DriverHomeScreen() {
                     resetRideRequestUi()
 
                     firebaseStatusText = if (newValue) {
-                        "You are Live. Tap Check to find ride requests."
+                        if (!activeRideRequestId.isNullOrBlank()) {
+                            "You are Live. Tap Check for new requests, or continue active trip below."
+                        } else {
+                            "You are Live. Tap Check to find ride requests."
+                        }
                     } else {
-                        "Driver is offline. Turn on Live to receive rides."
+                        if (!activeRideRequestId.isNullOrBlank()) {
+                            "Driver is offline. Active trip is still available below."
+                        } else {
+                            "Driver is offline. Turn on Live to receive rides."
+                        }
                     }
 
                     scope.launch {
                         snackbarHostState.showSnackbar(
                             message = if (newValue) {
-                                "You are live. Tap Check to find ride requests."
+                                "You are live. Tap Check for new ride requests."
                             } else {
                                 "You are offline."
                             }
@@ -473,21 +564,6 @@ fun DriverHomeScreen() {
                 onRefreshClick = {
                     checkForPendingRideRequest()
                 }
-            )
-
-            Spacer(modifier = Modifier.height(16.dp))
-
-            DriverStatsGrid(
-                stats = dashboardStats,
-                isLoading = isDashboardStatsLoading
-            )
-
-            Spacer(modifier = Modifier.height(16.dp))
-
-            DriverTodayEarningsCard(
-                stats = dashboardStats,
-                isLoading = isDashboardStatsLoading,
-                isOnline = isOnline
             )
 
             Spacer(modifier = Modifier.height(16.dp))
@@ -531,6 +607,11 @@ fun DriverHomeScreen() {
                                     showRideRequest = false
                                     pendingRideRequest = null
                                     activeRideRequestId = request.requestId
+                                    activeTripStatus = "accepted"
+                                    activeTripRiderEmail = request.riderEmail
+                                    activeTripPickup = request.pickup
+                                    activeTripDropoff = request.dropoff
+                                    firebaseStatusText = "Ride accepted. Opening active trip..."
                                     activeDestination = DriverHomeDestination.ActiveTrip
                                 }
                                 .addOnFailureListener { exception ->
@@ -588,6 +669,49 @@ fun DriverHomeScreen() {
             if (showRideRequest && pendingRideRequest != null) {
                 Spacer(modifier = Modifier.height(16.dp))
             }
+
+            AnimatedVisibility(
+                visible = !activeRideRequestId.isNullOrBlank() && !showRideRequest,
+                enter = fadeIn(animationSpec = tween(220)) + scaleIn(
+                    animationSpec = tween(240),
+                    initialScale = 0.94f
+                ),
+                exit = fadeOut(animationSpec = tween(180)) + scaleOut(
+                    animationSpec = tween(180),
+                    targetScale = 0.94f
+                )
+            ) {
+                ActiveTripFoundCard(
+                    riderEmail = activeTripRiderEmail ?: "Rider",
+                    pickup = activeTripPickup ?: "Pickup location",
+                    dropoff = activeTripDropoff ?: "Dropoff location",
+                    status = activeTripStatus ?: "accepted",
+                    onContinueClick = {
+                        if (!activeRideRequestId.isNullOrBlank()) {
+                            activeDestination = DriverHomeDestination.ActiveTrip
+                        }
+                    }
+                )
+            }
+
+            if (!activeRideRequestId.isNullOrBlank() && !showRideRequest) {
+                Spacer(modifier = Modifier.height(16.dp))
+            }
+
+            DriverStatsGrid(
+                stats = dashboardStats,
+                isLoading = isDashboardStatsLoading
+            )
+
+            Spacer(modifier = Modifier.height(16.dp))
+
+            DriverTodayEarningsCard(
+                stats = dashboardStats,
+                isLoading = isDashboardStatsLoading,
+                isOnline = isOnline
+            )
+
+            Spacer(modifier = Modifier.height(16.dp))
 
             DriverQuickActionsCard(
                 onActionClick = { action ->
@@ -712,9 +836,9 @@ private fun DriverHeaderCard(
 
                         Text(
                             text = if (isOnline) {
-                                "Tap Check to find ride requests."
+                                "Tap Check to find new ride requests."
                             } else {
-                                "Turn on Live to start receiving rides."
+                                "Turn on Live to receive new rides."
                             },
                             style = MaterialTheme.typography.bodySmall,
                             fontWeight = FontWeight.Medium,
@@ -739,9 +863,7 @@ private fun DriverHeaderCard(
 }
 
 @Composable
-private fun OnlinePulseDot(
-    active: Boolean
-) {
+private fun OnlinePulseDot(active: Boolean) {
     val infiniteTransition = rememberInfiniteTransition(label = "driver_online_dot")
 
     val pulseAlpha by infiniteTransition.animateFloat(
@@ -757,9 +879,7 @@ private fun OnlinePulseDot(
         label = "driver_online_alpha"
     )
 
-    Row(
-        verticalAlignment = Alignment.CenterVertically
-    ) {
+    Row(verticalAlignment = Alignment.CenterVertically) {
         Box(
             modifier = Modifier
                 .size(10.dp)
@@ -802,9 +922,7 @@ private fun DriverRideRequestStatusCard(
         shadowElevation = 8.dp,
         tonalElevation = 4.dp
     ) {
-        Column(
-            modifier = Modifier.padding(17.dp)
-        ) {
+        Column(modifier = Modifier.padding(17.dp)) {
             Row(
                 modifier = Modifier.fillMaxWidth(),
                 verticalAlignment = Alignment.CenterVertically
@@ -879,232 +997,108 @@ private fun DriverRideRequestStatusCard(
 }
 
 @Composable
-private fun DriverStatsGrid(
-    stats: DriverDashboardStats,
-    isLoading: Boolean
+private fun ActiveTripFoundCard(
+    riderEmail: String,
+    pickup: String,
+    dropoff: String,
+    status: String,
+    onContinueClick: () -> Unit
 ) {
-    Column(
-        verticalArrangement = Arrangement.spacedBy(12.dp)
-    ) {
-        Row(
-            modifier = Modifier.fillMaxWidth(),
-            horizontalArrangement = Arrangement.spacedBy(12.dp)
-        ) {
-            DriverStatCard(
-                title = "Today",
-                value = if (isLoading) "..." else formatRupees(stats.todayEarnings),
-                subtitle = "${stats.todayCompletedTrips} completed",
-                modifier = Modifier.weight(1f)
-            )
-
-            DriverStatCard(
-                title = "Trips",
-                value = if (isLoading) "..." else stats.totalCompletedTrips.toString(),
-                subtitle = "Completed",
-                modifier = Modifier.weight(1f)
-            )
-        }
-
-        Row(
-            modifier = Modifier.fillMaxWidth(),
-            horizontalArrangement = Arrangement.spacedBy(12.dp)
-        ) {
-            DriverStatCard(
-                title = "Rating",
-                value = if (isLoading) {
-                    "..."
-                } else if (stats.averageRating > 0.0) {
-                    String.format(Locale.US, "%.1f", stats.averageRating)
-                } else {
-                    "—"
-                },
-                subtitle = "Rider feedback",
-                modifier = Modifier.weight(1f)
-            )
-
-            DriverStatCard(
-                title = "Accept",
-                value = if (isLoading) "..." else "${stats.acceptRatePercent}%",
-                subtitle = "Firebase rate",
-                modifier = Modifier.weight(1f)
-            )
-        }
-    }
-}
-
-@Composable
-private fun DriverStatCard(
-    title: String,
-    value: String,
-    subtitle: String,
-    modifier: Modifier = Modifier
-) {
-    Surface(
-        modifier = modifier,
-        shape = RoundedCornerShape(26.dp),
-        color = Color.White,
-        shadowElevation = 8.dp,
-        tonalElevation = 4.dp
-    ) {
-        Column(
-            modifier = Modifier.padding(16.dp)
-        ) {
-            Text(
-                text = title,
-                style = MaterialTheme.typography.labelMedium,
-                fontWeight = FontWeight.Bold,
-                color = Color(0xFF6B7280)
-            )
-
-            Spacer(modifier = Modifier.height(7.dp))
-
-            Text(
-                text = value,
-                style = MaterialTheme.typography.headlineSmall,
-                fontWeight = FontWeight.Black,
-                color = Color(0xFF111827),
-                maxLines = 1,
-                overflow = TextOverflow.Ellipsis
-            )
-
-            Spacer(modifier = Modifier.height(3.dp))
-
-            Text(
-                text = subtitle,
-                style = MaterialTheme.typography.bodySmall,
-                fontWeight = FontWeight.Medium,
-                color = Color(0xFF8A35F2),
-                maxLines = 1,
-                overflow = TextOverflow.Ellipsis
-            )
-        }
-    }
-}
-
-@Composable
-private fun DriverTodayEarningsCard(
-    stats: DriverDashboardStats,
-    isLoading: Boolean,
-    isOnline: Boolean
-) {
-    val progress = if (stats.dailyTarget <= 0) {
-        0f
-    } else {
-        (stats.todayEarnings.toFloat() / stats.dailyTarget.toFloat()).coerceIn(0f, 1f)
-    }
-
-    val percent = (progress * 100f).roundToInt()
-
     Surface(
         modifier = Modifier.fillMaxWidth(),
-        shape = RoundedCornerShape(30.dp),
+        shape = RoundedCornerShape(32.dp),
         color = Color.White,
-        shadowElevation = 10.dp,
-        tonalElevation = 5.dp
+        shadowElevation = 16.dp,
+        tonalElevation = 8.dp
     ) {
-        Column(
-            modifier = Modifier.padding(18.dp)
-        ) {
+        Column(modifier = Modifier.padding(18.dp)) {
             Row(
                 modifier = Modifier.fillMaxWidth(),
                 verticalAlignment = Alignment.CenterVertically
             ) {
+                Box(
+                    modifier = Modifier
+                        .size(54.dp)
+                        .clip(CircleShape)
+                        .background(Color(0xFF16A34A).copy(alpha = 0.12f)),
+                    contentAlignment = Alignment.Center
+                ) {
+                    Text(
+                        text = "▶",
+                        color = Color(0xFF16A34A),
+                        fontWeight = FontWeight.Black,
+                        style = MaterialTheme.typography.titleLarge
+                    )
+                }
+
+                Spacer(modifier = Modifier.width(13.dp))
+
                 Column(modifier = Modifier.weight(1f)) {
                     Text(
-                        text = "Daily target",
+                        text = "Active trip found",
                         style = MaterialTheme.typography.titleMedium,
-                        fontWeight = FontWeight.Bold,
+                        fontWeight = FontWeight.Black,
                         color = Color(0xFF111827)
                     )
 
-                    Spacer(modifier = Modifier.height(4.dp))
+                    Spacer(modifier = Modifier.height(3.dp))
 
                     Text(
-                        text = if (isLoading) {
-                            "Loading dashboard..."
-                        } else {
-                            "${formatRupees(stats.todayEarnings)} of ${formatRupees(stats.dailyTarget)} completed"
-                        },
+                        text = riderEmail,
                         style = MaterialTheme.typography.bodySmall,
-                        fontWeight = FontWeight.Medium,
-                        color = Color(0xFF6B7280)
+                        fontWeight = FontWeight.Bold,
+                        color = Color(0xFF16A34A),
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis
                     )
                 }
 
                 Surface(
                     shape = RoundedCornerShape(50),
-                    color = Color(0xFF8A35F2).copy(alpha = 0.10f)
+                    color = Color(0xFF16A34F).copy(alpha = 0.12f)
                 ) {
                     Text(
-                        text = if (isLoading) "..." else "$percent%",
+                        text = cleanTripStatus(status),
                         modifier = Modifier.padding(horizontal = 12.dp, vertical = 7.dp),
-                        style = MaterialTheme.typography.labelLarge,
+                        style = MaterialTheme.typography.labelMedium,
                         fontWeight = FontWeight.Black,
-                        color = Color(0xFF8A35F2)
+                        color = Color(0xFF16A34A)
                     )
                 }
             }
 
             Spacer(modifier = Modifier.height(14.dp))
 
-            LinearProgressIndicator(
-                progress = { if (isLoading) 0f else progress },
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .height(8.dp)
-                    .clip(RoundedCornerShape(50)),
-                color = Color(0xFF8A35F2),
-                trackColor = Color(0xFFE5E7EB)
+            DriverRequestMiniMap(
+                pickup = pickup,
+                dropoff = dropoff
             )
 
             Spacer(modifier = Modifier.height(14.dp))
 
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.SpaceBetween
+            RideRoutePreview(
+                pickup = pickup,
+                dropoff = dropoff
+            )
+
+            Spacer(modifier = Modifier.height(16.dp))
+
+            Button(
+                onClick = onContinueClick,
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .height(56.dp),
+                shape = RoundedCornerShape(22.dp),
+                colors = ButtonDefaults.buttonColors(
+                    containerColor = Color(0xFF16A34A)
+                )
             ) {
-                EarningsMiniMetric(
-                    title = "Status",
-                    value = if (isOnline) "Live" else "Offline"
-                )
-
-                EarningsMiniMetric(
-                    title = "Week",
-                    value = formatRupees(stats.weekEarnings)
-                )
-
-                EarningsMiniMetric(
-                    title = "Cancelled",
-                    value = stats.totalCancelledTrips.toString()
+                Text(
+                    text = "Continue Trip",
+                    fontWeight = FontWeight.Black
                 )
             }
         }
-    }
-}
-
-@Composable
-private fun EarningsMiniMetric(
-    title: String,
-    value: String
-) {
-    Column {
-        Text(
-            text = title,
-            style = MaterialTheme.typography.labelSmall,
-            fontWeight = FontWeight.Bold,
-            color = Color(0xFF6B7280)
-        )
-
-        Spacer(modifier = Modifier.height(2.dp))
-
-        Text(
-            text = value,
-            style = MaterialTheme.typography.bodyMedium,
-            fontWeight = FontWeight.Black,
-            color = Color(0xFF111827),
-            maxLines = 1,
-            overflow = TextOverflow.Ellipsis
-        )
     }
 }
 
@@ -1122,9 +1116,7 @@ private fun IncomingRideRequestCard(
         shadowElevation = 16.dp,
         tonalElevation = 8.dp
     ) {
-        Column(
-            modifier = Modifier.padding(18.dp)
-        ) {
+        Column(modifier = Modifier.padding(18.dp)) {
             Row(
                 modifier = Modifier.fillMaxWidth(),
                 verticalAlignment = Alignment.CenterVertically
@@ -1148,7 +1140,7 @@ private fun IncomingRideRequestCard(
 
                 Column(modifier = Modifier.weight(1f)) {
                     Text(
-                        text = "Ride request",
+                        text = "New ride request",
                         style = MaterialTheme.typography.titleMedium,
                         fontWeight = FontWeight.Black,
                         color = Color(0xFF111827)
@@ -1405,9 +1397,7 @@ private fun RideRoutePreview(
         shape = RoundedCornerShape(24.dp),
         color = Color(0xFFF8FAFC)
     ) {
-        Column(
-            modifier = Modifier.padding(15.dp)
-        ) {
+        Column(modifier = Modifier.padding(15.dp)) {
             RouteLineItem(
                 dotColor = Color(0xFF16A34A),
                 label = "Pickup",
@@ -1465,6 +1455,230 @@ private fun RouteLineItem(
 }
 
 @Composable
+private fun DriverStatsGrid(
+    stats: DriverDashboardStats,
+    isLoading: Boolean
+) {
+    Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.spacedBy(12.dp)
+        ) {
+            DriverStatCard(
+                title = "Today",
+                value = if (isLoading) "..." else formatRupees(stats.todayEarnings),
+                subtitle = "${stats.todayCompletedTrips} completed",
+                modifier = Modifier.weight(1f)
+            )
+
+            DriverStatCard(
+                title = "Trips",
+                value = if (isLoading) "..." else stats.totalCompletedTrips.toString(),
+                subtitle = "Completed",
+                modifier = Modifier.weight(1f)
+            )
+        }
+
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.spacedBy(12.dp)
+        ) {
+            DriverStatCard(
+                title = "Rating",
+                value = if (isLoading) {
+                    "..."
+                } else if (stats.averageRating > 0.0) {
+                    String.format(Locale.US, "%.1f", stats.averageRating)
+                } else {
+                    "—"
+                },
+                subtitle = "Rider feedback",
+                modifier = Modifier.weight(1f)
+            )
+
+            DriverStatCard(
+                title = "Accept",
+                value = if (isLoading) "..." else "${stats.acceptRatePercent}%",
+                subtitle = "Ride rate",
+                modifier = Modifier.weight(1f)
+            )
+        }
+    }
+}
+
+@Composable
+private fun DriverStatCard(
+    title: String,
+    value: String,
+    subtitle: String,
+    modifier: Modifier = Modifier
+) {
+    Surface(
+        modifier = modifier,
+        shape = RoundedCornerShape(26.dp),
+        color = Color.White,
+        shadowElevation = 8.dp,
+        tonalElevation = 4.dp
+    ) {
+        Column(modifier = Modifier.padding(16.dp)) {
+            Text(
+                text = title,
+                style = MaterialTheme.typography.labelMedium,
+                fontWeight = FontWeight.Bold,
+                color = Color(0xFF6B7280)
+            )
+
+            Spacer(modifier = Modifier.height(7.dp))
+
+            Text(
+                text = value,
+                style = MaterialTheme.typography.headlineSmall,
+                fontWeight = FontWeight.Black,
+                color = Color(0xFF111827),
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis
+            )
+
+            Spacer(modifier = Modifier.height(3.dp))
+
+            Text(
+                text = subtitle,
+                style = MaterialTheme.typography.bodySmall,
+                fontWeight = FontWeight.Medium,
+                color = Color(0xFF8A35F2),
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis
+            )
+        }
+    }
+}
+
+@Composable
+private fun DriverTodayEarningsCard(
+    stats: DriverDashboardStats,
+    isLoading: Boolean,
+    isOnline: Boolean
+) {
+    val progress = if (stats.dailyTarget <= 0) {
+        0f
+    } else {
+        (stats.todayEarnings.toFloat() / stats.dailyTarget.toFloat()).coerceIn(0f, 1f)
+    }
+
+    val percent = (progress * 100f).roundToInt()
+
+    Surface(
+        modifier = Modifier.fillMaxWidth(),
+        shape = RoundedCornerShape(30.dp),
+        color = Color.White,
+        shadowElevation = 10.dp,
+        tonalElevation = 5.dp
+    ) {
+        Column(modifier = Modifier.padding(18.dp)) {
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Column(modifier = Modifier.weight(1f)) {
+                    Text(
+                        text = "Daily target",
+                        style = MaterialTheme.typography.titleMedium,
+                        fontWeight = FontWeight.Bold,
+                        color = Color(0xFF111827)
+                    )
+
+                    Spacer(modifier = Modifier.height(4.dp))
+
+                    Text(
+                        text = if (isLoading) {
+                            "Loading dashboard..."
+                        } else {
+                            "${formatRupees(stats.todayEarnings)} of ${formatRupees(stats.dailyTarget)} completed"
+                        },
+                        style = MaterialTheme.typography.bodySmall,
+                        fontWeight = FontWeight.Medium,
+                        color = Color(0xFF6B7280)
+                    )
+                }
+
+                Surface(
+                    shape = RoundedCornerShape(50),
+                    color = Color(0xFF8A35F2).copy(alpha = 0.10f)
+                ) {
+                    Text(
+                        text = if (isLoading) "..." else "$percent%",
+                        modifier = Modifier.padding(horizontal = 12.dp, vertical = 7.dp),
+                        style = MaterialTheme.typography.labelLarge,
+                        fontWeight = FontWeight.Black,
+                        color = Color(0xFF8A35F2)
+                    )
+                }
+            }
+
+            Spacer(modifier = Modifier.height(14.dp))
+
+            LinearProgressIndicator(
+                progress = { if (isLoading) 0f else progress },
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .height(8.dp)
+                    .clip(RoundedCornerShape(50)),
+                color = Color(0xFF8A35F2),
+                trackColor = Color(0xFFE5E7EB)
+            )
+
+            Spacer(modifier = Modifier.height(14.dp))
+
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween
+            ) {
+                EarningsMiniMetric(
+                    title = "Status",
+                    value = if (isOnline) "Live" else "Offline"
+                )
+
+                EarningsMiniMetric(
+                    title = "Week",
+                    value = formatRupees(stats.weekEarnings)
+                )
+
+                EarningsMiniMetric(
+                    title = "Cancelled",
+                    value = stats.totalCancelledTrips.toString()
+                )
+            }
+        }
+    }
+}
+
+@Composable
+private fun EarningsMiniMetric(
+    title: String,
+    value: String
+) {
+    Column {
+        Text(
+            text = title,
+            style = MaterialTheme.typography.labelSmall,
+            fontWeight = FontWeight.Bold,
+            color = Color(0xFF6B7280)
+        )
+
+        Spacer(modifier = Modifier.height(2.dp))
+
+        Text(
+            text = value,
+            style = MaterialTheme.typography.bodyMedium,
+            fontWeight = FontWeight.Black,
+            color = Color(0xFF111827),
+            maxLines = 1,
+            overflow = TextOverflow.Ellipsis
+        )
+    }
+}
+
+@Composable
 private fun DriverQuickActionsCard(
     onActionClick: (String) -> Unit
 ) {
@@ -1475,9 +1689,7 @@ private fun DriverQuickActionsCard(
         shadowElevation = 10.dp,
         tonalElevation = 5.dp
     ) {
-        Column(
-            modifier = Modifier.padding(18.dp)
-        ) {
+        Column(modifier = Modifier.padding(18.dp)) {
             Text(
                 text = "Driver tools",
                 style = MaterialTheme.typography.titleMedium,
@@ -1656,10 +1868,11 @@ private fun DocumentSnapshot.safeNumber(field: String): Double? {
 
 private fun DocumentSnapshot.safeSortTime(): Long {
     return try {
-        getTimestamp("createdAt")?.seconds
-            ?: getTimestamp("updatedAt")?.seconds
+        getTimestamp("updatedAt")?.seconds
             ?: getTimestamp("acceptedAt")?.seconds
-            ?: getTimestamp("completedAt")?.seconds
+            ?: getTimestamp("driverArrivedAt")?.seconds
+            ?: getTimestamp("rideStartedAt")?.seconds
+            ?: getTimestamp("createdAt")?.seconds
             ?: 0L
     } catch (_: Exception) {
         0L
@@ -1684,6 +1897,15 @@ private fun normalizeFareText(fare: String): String {
     }
 }
 
+private fun cleanTripStatus(status: String): String {
+    return when (status.lowercase()) {
+        "accepted" -> "Accepted"
+        "driver_arriving" -> "Arrived"
+        "ride_started" -> "Started"
+        else -> status.replace("_", " ").replaceFirstChar { it.uppercase() }
+    }
+}
+
 private fun extractFareAmount(fare: String): Int {
     return fare
         .filter { it.isDigit() }
@@ -1693,7 +1915,6 @@ private fun extractFareAmount(fare: String): Int {
 
 private fun formatRupees(amount: Int): String {
     if (amount <= 0) return "₨ 0"
-
     return "₨ ${String.format(Locale.US, "%,d", amount)}"
 }
 

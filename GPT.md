@@ -873,6 +873,14 @@ Phase 8 rider-side map stability fixed:
 - Driver marker now appears after booking/active ride status.
 - Driver arrived status text now updates correctly.
 
+Phase 8.18.2 completed:
+- Fixed rider compact active trip panel after driver accepts.
+- Added rider-side cancel ride button in compact panel.
+- Added driver phone number, car model, and vehicle number.
+- Removed confusing driver-coming blue line.
+- Removed Recenter and Route buttons from rider map.
+- Kept safe default Google driver marker to avoid crash.
+
 
 
 

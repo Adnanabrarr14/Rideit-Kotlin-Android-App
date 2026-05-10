@@ -1,5 +1,9 @@
 package com.example.rideit.map.ui
 
+import android.Manifest
+import android.content.pm.PackageManager
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
@@ -53,10 +57,14 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.geometry.CornerRadius
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Size
+import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.text.font.FontStyle
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
+import androidx.core.content.ContextCompat
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.example.rideit.FirebaseManager
 import com.example.rideit.map.model.LocationSuggestion
@@ -79,7 +87,6 @@ import com.google.maps.android.compose.Polyline
 import com.google.maps.android.compose.rememberCameraPositionState
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
-import ui.components.PremiumDriverMiniCard
 import ui.components.PremiumMapPolishLayer
 import ui.components.PremiumRideCompletionSheet
 import ui.components.PremiumTripReceiptPreviewSheet
@@ -116,6 +123,50 @@ fun MapScreen(
     val firestore = remember { FirebaseFirestore.getInstance() }
     val scope = rememberCoroutineScope()
     val snackbarHostState = remember { SnackbarHostState() }
+    val context = LocalContext.current
+
+    val locationPermissionLauncher = rememberLauncherForActivityResult(
+        contract = ActivityResultContracts.RequestMultiplePermissions()
+    ) { permissions ->
+        val granted =
+            permissions[Manifest.permission.ACCESS_FINE_LOCATION] == true ||
+                    permissions[Manifest.permission.ACCESS_COARSE_LOCATION] == true
+
+        scope.launch {
+            snackbarHostState.showSnackbar(
+                message = if (granted) {
+                    "Location permission enabled."
+                } else {
+                    "Location permission is required to find nearby rides."
+                }
+            )
+        }
+    }
+
+    fun requestLocationPermission() {
+        val fineGranted = ContextCompat.checkSelfPermission(
+            context,
+            Manifest.permission.ACCESS_FINE_LOCATION
+        ) == PackageManager.PERMISSION_GRANTED
+
+        val coarseGranted = ContextCompat.checkSelfPermission(
+            context,
+            Manifest.permission.ACCESS_COARSE_LOCATION
+        ) == PackageManager.PERMISSION_GRANTED
+
+        if (fineGranted || coarseGranted) {
+            scope.launch {
+                snackbarHostState.showSnackbar("Location permission already enabled.")
+            }
+        } else {
+            locationPermissionLauncher.launch(
+                arrayOf(
+                    Manifest.permission.ACCESS_FINE_LOCATION,
+                    Manifest.permission.ACCESS_COARSE_LOCATION
+                )
+            )
+        }
+    }
 
     val defaultLocation = LatLng(33.6844, 73.0479)
 
@@ -174,7 +225,7 @@ fun MapScreen(
                         firebaseTripCancelledByDriver = false
                         firebaseRideMessage = "${driverName ?: "Your driver"} accepted your ride."
                         firebaseRideError = null
-                        showPanel = true
+                        showPanel = false
                         mapViewModel.onConfirmRideClicked()
                     }
 
@@ -185,7 +236,7 @@ fun MapScreen(
                         firebaseTripCancelledByDriver = false
                         firebaseRideMessage = "${driverName ?: "Your driver"} arrived at pickup."
                         firebaseRideError = null
-                        showPanel = true
+                        showPanel = false
                         mapViewModel.onConfirmRideClicked()
                     }
 
@@ -196,7 +247,7 @@ fun MapScreen(
                         firebaseTripCancelledByDriver = false
                         firebaseRideMessage = "Trip in progress. Enjoy your Rideit ride."
                         firebaseRideError = null
-                        showPanel = true
+                        showPanel = false
                         mapViewModel.onConfirmRideClicked()
                     }
 
@@ -255,6 +306,7 @@ fun MapScreen(
                             firebaseDriverEmail = driverEmail
                             firebaseRideMessage = "${driverName ?: "Your driver"} accepted your ride."
                             firebaseRideError = null
+                            showPanel = false
                         }
 
                         "driver_arriving" -> {
@@ -264,6 +316,7 @@ fun MapScreen(
                             firebaseDriverEmail = driverEmail ?: firebaseDriverEmail
                             firebaseRideMessage = "${driverName ?: firebaseDriverName ?: "Your driver"} arrived at pickup."
                             firebaseRideError = null
+                            showPanel = false
                         }
 
                         "ride_started" -> {
@@ -273,6 +326,7 @@ fun MapScreen(
                             firebaseDriverEmail = driverEmail ?: firebaseDriverEmail
                             firebaseRideMessage = "Trip in progress. Enjoy your Rideit ride."
                             firebaseRideError = null
+                            showPanel = false
                         }
 
                         "completed" -> {
@@ -339,7 +393,7 @@ fun MapScreen(
                             firebaseTripCancelledByDriver = false
                             firebaseDriverName = null
                             firebaseDriverEmail = null
-                            firebaseRideMessage = "Ride request saved. Driver car is visible on the map."
+                            firebaseRideMessage = "Ride request saved. Waiting for a driver to accept."
                             firebaseRideError = null
                         }
 
@@ -391,6 +445,15 @@ fun MapScreen(
 
     val overlayVisible = showRideCompletionSheet || showReceiptPreviewSheet
     val hasActiveRoute = uiState.routePoints.size >= 2
+
+    val isCompactTrackingMode =
+        firebaseLiveTripStatus == "accepted" ||
+                firebaseLiveTripStatus == "driver_arriving" ||
+                firebaseLiveTripStatus == "ride_started" ||
+                uiState.rideRequestStatus == RideRequestStatus.DRIVER_FOUND ||
+                uiState.rideRequestStatus == RideRequestStatus.DRIVER_ARRIVING ||
+                uiState.rideRequestStatus == RideRequestStatus.RIDE_STARTED
+
     val hasActiveRideFlow = currentTripStatus != RideitTripStatus.Idle
 
     val shouldShowCompactRouteChip =
@@ -404,17 +467,18 @@ fun MapScreen(
                                 uiState.selectedRideOption != null
                         )
 
-    val shouldShowMapControls =
+    val shouldShowRiderTopHeader =
         !overlayVisible &&
-                !firebaseTripCompleted &&
-                !firebaseTripCancelledByDriver &&
-                (
-                        hasActiveRoute ||
-                                hasActiveRideFlow ||
-                                uiState.pickupLatLng != null ||
-                                uiState.dropoffLatLng != null ||
-                                visibleDriverLatLng != null
-                        )
+                currentTripStatus == RideitTripStatus.Idle &&
+                !uiState.showRideOptions &&
+                uiState.selectedRideOption == null
+
+    val driverDisplayName = firebaseDriverName ?: uiState.driver?.name ?: "Shameer Khan"
+    val driverPhone = "+92 300 1234567"
+    val driverVehicleModel = uiState.driver?.vehicleName ?: selectedRide?.title?.let { "$it Rideit Car" } ?: "Toyota Corolla"
+    val driverVehicleNumber = uiState.driver?.vehicleNumber ?: "RIA-2026"
+    val driverRating = uiState.driver?.rating?.toString() ?: "5.0"
+    val driverArrivalTime = uiState.driver?.arrivalTime ?: "Coming"
 
     val driverMiniStatusText = when {
         firebaseTripCompleted -> "Trip completed successfully"
@@ -422,13 +486,12 @@ fun MapScreen(
         firebaseLiveTripStatus == "pending" ||
                 firebaseLiveTripStatus == "requested" ||
                 firebaseLiveTripStatus == "searching" ||
-                firebaseLiveTripStatus == "searching_driver" -> "Driver car is visible on the map"
-        firebaseLiveTripStatus == "accepted" -> "${firebaseDriverName ?: "Your driver"} accepted your ride"
+                firebaseLiveTripStatus == "searching_driver" -> "Waiting for driver to accept"
+        firebaseLiveTripStatus == "accepted" -> "$driverDisplayName accepted your ride"
         firebaseLiveTripStatus == "driver_arriving" -> "Driver arrived at pickup"
         firebaseLiveTripStatus == "ride_started" -> "Trip is currently in progress"
-        uiState.rideRequestStatus == RideRequestStatus.SEARCHING_DRIVER -> "Driver car is visible on the map"
-        uiState.rideRequestStatus == RideRequestStatus.DRIVER_FOUND -> firebaseDriverName?.let { "$it accepted your ride" }
-            ?: "Driver accepted your ride"
+        uiState.rideRequestStatus == RideRequestStatus.SEARCHING_DRIVER -> "Finding your driver"
+        uiState.rideRequestStatus == RideRequestStatus.DRIVER_FOUND -> "$driverDisplayName accepted your ride"
         uiState.rideRequestStatus == RideRequestStatus.DRIVER_ARRIVING -> "Driver arrived at pickup"
         uiState.rideRequestStatus == RideRequestStatus.RIDE_STARTED -> "Ride is currently in progress"
         else -> "Driver status"
@@ -452,8 +515,7 @@ fun MapScreen(
     }
 
     val shouldShowDriverMiniCard =
-        hasActiveRideFlow &&
-                !showPanel &&
+        isCompactTrackingMode &&
                 !overlayVisible &&
                 !firebaseTripCancelledByDriver &&
                 !firebaseTripCompleted &&
@@ -463,11 +525,12 @@ fun MapScreen(
         firebaseLiveTripStatus == "pending" ||
                 firebaseLiveTripStatus == "requested" ||
                 firebaseLiveTripStatus == "searching" ||
-                firebaseLiveTripStatus == "searching_driver" -> "Driver nearby"
+                firebaseLiveTripStatus == "searching_driver" -> "Finding driver"
+        firebaseLiveTripStatus == "accepted" -> "Driver accepted"
         firebaseLiveTripStatus == "driver_arriving" -> "Driver arrived"
         firebaseLiveTripStatus == "ride_started" -> "Trip in progress"
         else -> when (currentTripStatus) {
-            RideitTripStatus.SearchingDriver -> "Driver nearby"
+            RideitTripStatus.SearchingDriver -> "Finding driver"
             RideitTripStatus.DriverFound -> "Driver assigned"
             RideitTripStatus.DriverArriving -> "Driver arrived"
             RideitTripStatus.TripInProgress -> "Trip tracking"
@@ -495,8 +558,53 @@ fun MapScreen(
         showPanel = true
     }
 
-    LaunchedEffect(cameraPositionState.isMoving, overlayVisible) {
-        if (overlayVisible) {
+    fun cancelCurrentRide() {
+        if (firebaseTripCompleted || firebaseTripCancelledByDriver) {
+            resetCompletedTripUi()
+            return
+        }
+
+        val requestId = activeRideRequestId
+
+        if (requestId.isNullOrBlank()) {
+            resetCompletedTripUi()
+            return
+        }
+
+        if (isCancellingRideRequest) return
+
+        isCancellingRideRequest = true
+        firebaseRideError = null
+        firebaseRideMessage = "Cancelling ride request..."
+
+        FirebaseManager.cancelRideRequest(
+            requestId = requestId,
+            onSuccess = {
+                isCancellingRideRequest = false
+                activeRideRequestId = null
+                completedRideRequestId = null
+                firebaseDriverName = null
+                firebaseDriverEmail = null
+                firebaseTripCompleted = false
+                firebaseTripCancelledByDriver = false
+                firebaseLiveTripStatus = "cancelled_by_rider"
+                firebaseRideMessage = "Ride cancelled successfully."
+                mapViewModel.onCancelRideClicked()
+                showPanel = true
+
+                scope.launch {
+                    snackbarHostState.showSnackbar("Ride cancelled successfully.")
+                }
+            },
+            onError = { error ->
+                isCancellingRideRequest = false
+                firebaseRideError = error
+            }
+        )
+    }
+
+    LaunchedEffect(cameraPositionState.isMoving, overlayVisible, isCompactTrackingMode) {
+        if (overlayVisible || isCompactTrackingMode) {
             showPanel = false
         } else {
             if (cameraPositionState.isMoving) {
@@ -589,29 +697,13 @@ fun MapScreen(
                         state = MarkerState(it),
                         title = "🚗 Driver car",
                         snippet = when (firebaseLiveTripStatus) {
-                            "pending", "requested", "searching", "searching_driver" -> "Nearby driver car"
+                            "pending", "requested", "searching", "searching_driver" -> "Waiting for driver"
                             "accepted" -> "Driver accepted your ride"
                             "driver_arriving" -> "Driver arrived at pickup"
                             "ride_started" -> "Trip in progress"
                             else -> "Driver is on the way"
                         },
                         icon = BitmapDescriptorFactory.defaultMarker(BitmapDescriptorFactory.HUE_AZURE)
-                    )
-                }
-
-                val driverRoute = buildDriverRoutePoints(
-                    driverLatLng = visibleDriverLatLng,
-                    pickupLatLng = uiState.pickupLatLng,
-                    dropoffLatLng = uiState.dropoffLatLng,
-                    status = firebaseLiveTripStatus,
-                    localRideRequestStatus = uiState.rideRequestStatus
-                )
-
-                if (driverRoute.size >= 2) {
-                    Polyline(
-                        points = driverRoute,
-                        width = 9f,
-                        color = Color(0xFF2563EB)
                     )
                 }
 
@@ -634,6 +726,35 @@ fun MapScreen(
             modifier = Modifier.fillMaxSize()
         )
 
+        RiderMapTopChrome(
+            visible = shouldShowRiderTopHeader,
+            onPermissionClick = {
+                requestLocationPermission()
+            },
+            modifier = Modifier
+                .align(Alignment.TopCenter)
+                .fillMaxWidth()
+                .statusBarsPadding()
+                .padding(start = 18.dp, end = 18.dp, top = 22.dp)
+        )
+
+        MapFloatingControls(
+            visible = shouldShowRiderTopHeader,
+            onZoomIn = {
+                scope.launch {
+                    cameraPositionState.animate(CameraUpdateFactory.zoomIn(), 350)
+                }
+            },
+            onZoomOut = {
+                scope.launch {
+                    cameraPositionState.animate(CameraUpdateFactory.zoomOut(), 350)
+                }
+            },
+            modifier = Modifier
+                .align(Alignment.CenterEnd)
+                .padding(end = 20.dp, top = 44.dp)
+        )
+
         PremiumTripStatusBanner(
             status = currentTripStatus,
             driverName = firebaseDriverName ?: uiState.driver?.name,
@@ -642,7 +763,7 @@ fun MapScreen(
             modifier = Modifier
                 .align(Alignment.TopCenter)
                 .statusBarsPadding()
-                .padding(top = 12.dp)
+                .padding(top = if (shouldShowRiderTopHeader) 186.dp else 12.dp)
         )
 
         CompactRouteChip(
@@ -656,91 +777,34 @@ fun MapScreen(
                 .align(Alignment.TopStart)
                 .statusBarsPadding()
                 .padding(
-                    top = if (currentTripStatus == RideitTripStatus.Idle) 76.dp else 116.dp,
+                    top = if (currentTripStatus == RideitTripStatus.Idle) 204.dp else 116.dp,
                     start = 16.dp,
                     end = 120.dp
                 )
         )
 
-        PremiumDriverMiniCard(
+        RiderActiveTripCompactCard(
             visible = shouldShowDriverMiniCard,
-            driverName = firebaseDriverName ?: uiState.driver?.name ?: "Driver car",
-            vehicleName = uiState.driver?.vehicleName ?: "Rideit vehicle",
-            vehicleNumber = uiState.driver?.vehicleNumber ?: "On the map",
-            rating = uiState.driver?.rating?.toString() ?: "5.0",
-            arrivalTime = uiState.driver?.arrivalTime ?: "Coming",
+            driverName = driverDisplayName,
+            phoneNumber = driverPhone,
+            vehicleModel = driverVehicleModel,
+            vehicleNumber = driverVehicleNumber,
+            rating = driverRating,
+            arrivalTime = driverArrivalTime,
             statusText = driverMiniStatusText,
             progress = driverMiniProgress,
+            isCancelling = isCancellingRideRequest,
+            onCancelRide = {
+                cancelCurrentRide()
+            },
             modifier = Modifier
                 .align(Alignment.BottomCenter)
                 .navigationBarsPadding()
                 .padding(start = 16.dp, end = 16.dp, bottom = 24.dp)
         )
 
-        PremiumMapControls(
-            visible = shouldShowMapControls,
-            modifier = Modifier
-                .align(Alignment.TopEnd)
-                .statusBarsPadding()
-                .padding(top = 76.dp, end = 16.dp),
-            onRecenterClick = {
-                scope.launch {
-                    val target = visibleDriverLatLng
-                        ?: uiState.dropoffLatLng
-                        ?: uiState.pickupLatLng
-                        ?: defaultLocation
-
-                    cameraPositionState.animate(
-                        update = CameraUpdateFactory.newLatLngZoom(target, 15.5f),
-                        durationMs = 700
-                    )
-                }
-            },
-            onRouteFocusClick = {
-                scope.launch {
-                    val builder = LatLngBounds.Builder()
-                    var hasPoint = false
-
-                    uiState.pickupLatLng?.let {
-                        builder.include(it)
-                        hasPoint = true
-                    }
-
-                    uiState.dropoffLatLng?.let {
-                        builder.include(it)
-                        hasPoint = true
-                    }
-
-                    visibleDriverLatLng?.let {
-                        builder.include(it)
-                        hasPoint = true
-                    }
-
-                    uiState.routePoints.forEach {
-                        builder.include(it)
-                        hasPoint = true
-                    }
-
-                    if (hasPoint) {
-                        try {
-                            cameraPositionState.animate(
-                                update = CameraUpdateFactory.newLatLngBounds(builder.build(), 190),
-                                durationMs = 850
-                            )
-                        } catch (_: Exception) {
-                        }
-                    } else {
-                        cameraPositionState.animate(
-                            update = CameraUpdateFactory.newLatLngZoom(defaultLocation, 14f),
-                            durationMs = 700
-                        )
-                    }
-                }
-            }
-        )
-
         AnimatedVisibility(
-            visible = showPanel && !overlayVisible,
+            visible = showPanel && !overlayVisible && !isCompactTrackingMode,
             enter = slideInVertically { it } + fadeIn(),
             exit = slideOutVertically { it } + fadeOut(),
             modifier = Modifier.align(Alignment.BottomCenter)
@@ -786,7 +850,7 @@ fun MapScreen(
                             isSavingRideRequest = false
                             firebaseRideError = null
                             firebaseLiveTripStatus = "pending"
-                            firebaseRideMessage = "Ride request saved. Driver car is visible on the map."
+                            firebaseRideMessage = "Ride request saved. Waiting for a driver to accept."
                             mapViewModel.onConfirmRideClicked()
                         },
                         onError = { error ->
@@ -797,47 +861,7 @@ fun MapScreen(
                     )
                 },
                 onCancelRideWithFirebase = {
-                    if (firebaseTripCompleted || firebaseTripCancelledByDriver) {
-                        resetCompletedTripUi()
-                        return@RideitBottomPanel
-                    }
-
-                    val requestId = activeRideRequestId
-
-                    if (requestId.isNullOrBlank()) {
-                        resetCompletedTripUi()
-                        return@RideitBottomPanel
-                    }
-
-                    if (isCancellingRideRequest) return@RideitBottomPanel
-
-                    isCancellingRideRequest = true
-                    firebaseRideError = null
-                    firebaseRideMessage = "Cancelling ride request..."
-
-                    FirebaseManager.cancelRideRequest(
-                        requestId = requestId,
-                        onSuccess = {
-                            isCancellingRideRequest = false
-                            activeRideRequestId = null
-                            completedRideRequestId = null
-                            firebaseDriverName = null
-                            firebaseDriverEmail = null
-                            firebaseTripCompleted = false
-                            firebaseTripCancelledByDriver = false
-                            firebaseLiveTripStatus = "cancelled_by_rider"
-                            firebaseRideMessage = "Ride cancelled successfully."
-                            mapViewModel.onCancelRideClicked()
-
-                            scope.launch {
-                                snackbarHostState.showSnackbar("Ride cancelled successfully.")
-                            }
-                        },
-                        onError = { error ->
-                            isCancellingRideRequest = false
-                            firebaseRideError = error
-                        }
-                    )
+                    cancelCurrentRide()
                 },
                 onCompleteRideClicked = {
                     showRideCompletionSheet = true
@@ -946,6 +970,414 @@ fun MapScreen(
 }
 
 @Composable
+private fun RiderMapTopChrome(
+    visible: Boolean,
+    onPermissionClick: () -> Unit,
+    modifier: Modifier = Modifier
+) {
+    AnimatedVisibility(
+        visible = visible,
+        enter = fadeIn(),
+        exit = fadeOut(),
+        modifier = modifier
+    ) {
+        Column {
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(start = 66.dp),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Text(
+                    text = "RideIt",
+                    color = Color(0xFF8A35F2),
+                    fontWeight = FontWeight.Black,
+                    fontStyle = FontStyle.Italic,
+                    style = MaterialTheme.typography.titleLarge
+                )
+
+                Spacer(modifier = Modifier.weight(1f))
+
+                Surface(
+                    shape = RoundedCornerShape(50),
+                    color = Color.White.copy(alpha = 0.96f),
+                    shadowElevation = 10.dp
+                ) {
+                    Row(
+                        modifier = Modifier.padding(horizontal = 12.dp, vertical = 8.dp),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Box(
+                            modifier = Modifier
+                                .size(8.dp)
+                                .clip(CircleShape)
+                                .background(Color(0xFF8A35F2))
+                        )
+
+                        Spacer(modifier = Modifier.width(6.dp))
+
+                        Text(
+                            text = "Islamabad",
+                            color = Color(0xFF111827),
+                            fontWeight = FontWeight.Black,
+                            style = MaterialTheme.typography.labelSmall
+                        )
+                    }
+                }
+            }
+
+            Spacer(modifier = Modifier.height(28.dp))
+
+            Surface(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .clickable { onPermissionClick() },
+                shape = RoundedCornerShape(28.dp),
+                color = Color.White.copy(alpha = 0.97f),
+                shadowElevation = 16.dp,
+                tonalElevation = 8.dp
+            ) {
+                Column(
+                    modifier = Modifier.padding(horizontal = 16.dp, vertical = 14.dp)
+                ) {
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Box(
+                            modifier = Modifier
+                                .size(48.dp)
+                                .clip(RoundedCornerShape(16.dp))
+                                .background(Color(0xFFF1ECFF)),
+                            contentAlignment = Alignment.Center
+                        ) {
+                            Text(
+                                text = "📍",
+                                color = Color(0xFF8A35F2),
+                                fontWeight = FontWeight.Black
+                            )
+                        }
+
+                        Spacer(modifier = Modifier.width(12.dp))
+
+                        Column(modifier = Modifier.weight(1f)) {
+                            Text(
+                                text = "Enable location services",
+                                color = Color(0xFF111827),
+                                fontWeight = FontWeight.Black,
+                                style = MaterialTheme.typography.titleSmall,
+                                maxLines = 1,
+                                overflow = TextOverflow.Ellipsis
+                            )
+
+                            Text(
+                                text = "We need your location to find nearby drivers",
+                                color = Color(0xFF6B7280),
+                                fontWeight = FontWeight.Medium,
+                                style = MaterialTheme.typography.labelMedium,
+                                maxLines = 1,
+                                overflow = TextOverflow.Ellipsis
+                            )
+                        }
+                    }
+
+                    Spacer(modifier = Modifier.height(14.dp))
+
+                    Row(
+                        horizontalArrangement = Arrangement.spacedBy(10.dp),
+                        modifier = Modifier.fillMaxWidth()
+                    ) {
+                        Surface(
+                            modifier = Modifier
+                                .weight(1f)
+                                .height(48.dp)
+                                .clickable { onPermissionClick() },
+                            shape = RoundedCornerShape(18.dp),
+                            color = Color(0xFFF1ECFF)
+                        ) {
+                            Box(contentAlignment = Alignment.Center) {
+                                Text(
+                                    text = "Enter address",
+                                    color = Color(0xFF8A35F2),
+                                    fontWeight = FontWeight.Black,
+                                    style = MaterialTheme.typography.bodyMedium
+                                )
+                            }
+                        }
+
+                        Surface(
+                            modifier = Modifier
+                                .weight(1f)
+                                .height(48.dp)
+                                .clickable { onPermissionClick() },
+                            shape = RoundedCornerShape(18.dp),
+                            color = Color.Transparent,
+                            shadowElevation = 10.dp
+                        ) {
+                            Box(
+                                modifier = Modifier
+                                    .fillMaxSize()
+                                    .background(
+                                        Brush.verticalGradient(
+                                            colors = listOf(
+                                                Color(0xFF9E3BFF),
+                                                Color(0xFF7B1DE8)
+                                            )
+                                        )
+                                    ),
+                                contentAlignment = Alignment.Center
+                            ) {
+                                Text(
+                                    text = "Share location",
+                                    color = Color.White,
+                                    fontWeight = FontWeight.Black,
+                                    style = MaterialTheme.typography.bodyMedium
+                                )
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun MapFloatingControls(
+    visible: Boolean,
+    onZoomIn: () -> Unit,
+    onZoomOut: () -> Unit,
+    modifier: Modifier = Modifier
+) {
+    AnimatedVisibility(
+        visible = visible,
+        enter = fadeIn(),
+        exit = fadeOut(),
+        modifier = modifier
+    ) {
+        Column(
+            horizontalAlignment = Alignment.CenterHorizontally
+        ) {
+            FloatingMapButton(text = "+", onClick = onZoomIn)
+
+            Spacer(modifier = Modifier.height(10.dp))
+
+            FloatingMapButton(text = "−", onClick = onZoomOut)
+
+            Spacer(modifier = Modifier.height(10.dp))
+
+            Surface(
+                modifier = Modifier.size(48.dp),
+                shape = RoundedCornerShape(16.dp),
+                color = Color(0xFF8A35F2),
+                shadowElevation = 14.dp
+            ) {
+                Box(contentAlignment = Alignment.Center) {
+                    Text(
+                        text = "◎",
+                        color = Color.White,
+                        fontWeight = FontWeight.Black,
+                        style = MaterialTheme.typography.titleMedium
+                    )
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun FloatingMapButton(
+    text: String,
+    onClick: () -> Unit
+) {
+    Surface(
+        modifier = Modifier
+            .size(48.dp)
+            .clickable { onClick() },
+        shape = RoundedCornerShape(16.dp),
+        color = Color.White.copy(alpha = 0.96f),
+        shadowElevation = 12.dp
+    ) {
+        Box(contentAlignment = Alignment.Center) {
+            Text(
+                text = text,
+                color = Color(0xFF111827),
+                fontWeight = FontWeight.Black,
+                style = MaterialTheme.typography.titleLarge
+            )
+        }
+    }
+}
+
+@Composable
+private fun RiderActiveTripCompactCard(
+    visible: Boolean,
+    driverName: String,
+    phoneNumber: String,
+    vehicleModel: String,
+    vehicleNumber: String,
+    rating: String,
+    arrivalTime: String,
+    statusText: String,
+    progress: Float,
+    isCancelling: Boolean,
+    onCancelRide: () -> Unit,
+    modifier: Modifier = Modifier
+) {
+    AnimatedVisibility(
+        visible = visible,
+        enter = fadeIn(),
+        exit = fadeOut(),
+        modifier = modifier
+    ) {
+        Surface(
+            modifier = Modifier.fillMaxWidth(),
+            shape = RoundedCornerShape(28.dp),
+            color = Color.White.copy(alpha = 0.98f),
+            shadowElevation = 18.dp,
+            tonalElevation = 8.dp
+        ) {
+            Column(
+                modifier = Modifier.padding(16.dp)
+            ) {
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Box(
+                        modifier = Modifier
+                            .size(54.dp)
+                            .clip(CircleShape)
+                            .background(Color(0xFF2563EB).copy(alpha = 0.12f)),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Text(
+                            text = "🚗",
+                            style = MaterialTheme.typography.titleLarge
+                        )
+                    }
+
+                    Spacer(modifier = Modifier.width(12.dp))
+
+                    Column(modifier = Modifier.weight(1f)) {
+                        Text(
+                            text = driverName,
+                            style = MaterialTheme.typography.titleMedium,
+                            fontWeight = FontWeight.Black,
+                            color = Color(0xFF111827),
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis
+                        )
+
+                        Spacer(modifier = Modifier.height(2.dp))
+
+                        Text(
+                            text = statusText,
+                            style = MaterialTheme.typography.bodySmall,
+                            fontWeight = FontWeight.Bold,
+                            color = Color(0xFF2563EB),
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis
+                        )
+                    }
+
+                    Surface(
+                        shape = RoundedCornerShape(50),
+                        color = Color(0xFFEFF6FF)
+                    ) {
+                        Text(
+                            text = "⭐ $rating",
+                            modifier = Modifier.padding(horizontal = 10.dp, vertical = 6.dp),
+                            style = MaterialTheme.typography.labelMedium,
+                            fontWeight = FontWeight.Black,
+                            color = Color(0xFF2563EB)
+                        )
+                    }
+                }
+
+                Spacer(modifier = Modifier.height(12.dp))
+
+                LinearProgressIndicator(
+                    progress = { progress.coerceIn(0f, 1f) },
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .height(7.dp)
+                        .clip(RoundedCornerShape(50)),
+                    color = Color(0xFF2563EB),
+                    trackColor = Color(0xFFE5E7EB)
+                )
+
+                Spacer(modifier = Modifier.height(12.dp))
+
+                Surface(
+                    modifier = Modifier.fillMaxWidth(),
+                    shape = RoundedCornerShape(20.dp),
+                    color = Color(0xFFF8FAFC)
+                ) {
+                    Column(
+                        modifier = Modifier.padding(13.dp)
+                    ) {
+                        InfoLine(label = "Phone", value = phoneNumber)
+                        Spacer(modifier = Modifier.height(6.dp))
+                        InfoLine(label = "Car", value = vehicleModel)
+                        Spacer(modifier = Modifier.height(6.dp))
+                        InfoLine(label = "Vehicle No.", value = vehicleNumber)
+                        Spacer(modifier = Modifier.height(6.dp))
+                        InfoLine(label = "ETA", value = arrivalTime)
+                    }
+                }
+
+                Spacer(modifier = Modifier.height(12.dp))
+
+                OutlinedButton(
+                    enabled = !isCancelling,
+                    onClick = onCancelRide,
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .height(52.dp),
+                    shape = RoundedCornerShape(20.dp),
+                    colors = ButtonDefaults.outlinedButtonColors(
+                        contentColor = Color(0xFFEF4444)
+                    )
+                ) {
+                    Text(
+                        text = if (isCancelling) "Cancelling..." else "Cancel Ride",
+                        fontWeight = FontWeight.Black
+                    )
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun InfoLine(
+    label: String,
+    value: String
+) {
+    Row(
+        modifier = Modifier.fillMaxWidth(),
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        Text(
+            text = label,
+            style = MaterialTheme.typography.labelMedium,
+            fontWeight = FontWeight.Bold,
+            color = Color(0xFF6B7280),
+            modifier = Modifier.width(86.dp)
+        )
+
+        Text(
+            text = value,
+            style = MaterialTheme.typography.bodySmall,
+            fontWeight = FontWeight.Black,
+            color = Color(0xFF111827),
+            maxLines = 1,
+            overflow = TextOverflow.Ellipsis
+        )
+    }
+}
+
+@Composable
 private fun CompactRouteChip(
     visible: Boolean,
     pickupText: String,
@@ -1018,74 +1450,6 @@ private fun CompactRouteChip(
 }
 
 @Composable
-private fun PremiumMapControls(
-    visible: Boolean,
-    modifier: Modifier = Modifier,
-    onRecenterClick: () -> Unit,
-    onRouteFocusClick: () -> Unit
-) {
-    AnimatedVisibility(
-        visible = visible,
-        enter = fadeIn(),
-        exit = fadeOut(),
-        modifier = modifier
-    ) {
-        Column(
-            verticalArrangement = Arrangement.spacedBy(10.dp),
-            horizontalAlignment = Alignment.End
-        ) {
-            PremiumMapButton(
-                icon = "⌖",
-                label = "Recenter",
-                onClick = onRecenterClick
-            )
-
-            PremiumMapButton(
-                icon = "⛶",
-                label = "Route",
-                onClick = onRouteFocusClick
-            )
-        }
-    }
-}
-
-@Composable
-private fun PremiumMapButton(
-    icon: String,
-    label: String,
-    onClick: () -> Unit
-) {
-    Surface(
-        modifier = Modifier.clickable { onClick() },
-        shape = RoundedCornerShape(18.dp),
-        color = Color.White.copy(alpha = 0.96f),
-        shadowElevation = 10.dp,
-        tonalElevation = 5.dp
-    ) {
-        Row(
-            modifier = Modifier.padding(horizontal = 11.dp, vertical = 9.dp),
-            verticalAlignment = Alignment.CenterVertically
-        ) {
-            Text(
-                text = icon,
-                color = Color(0xFF8A35F2),
-                fontWeight = FontWeight.Bold,
-                style = MaterialTheme.typography.titleSmall
-            )
-
-            Spacer(modifier = Modifier.width(6.dp))
-
-            Text(
-                text = label,
-                color = Color(0xFF111827),
-                fontWeight = FontWeight.Bold,
-                style = MaterialTheme.typography.bodySmall
-            )
-        }
-    }
-}
-
-@Composable
 private fun RideitBottomPanel(
     uiState: MapUiState,
     mapViewModel: MapViewModel,
@@ -1106,7 +1470,7 @@ private fun RideitBottomPanel(
         modifier = Modifier
             .fillMaxWidth()
             .padding(horizontal = 14.dp, vertical = 14.dp),
-        shape = RoundedCornerShape(32.dp),
+        shape = RoundedCornerShape(topStart = 36.dp, topEnd = 36.dp, bottomStart = 28.dp, bottomEnd = 28.dp),
         color = Color.White,
         shadowElevation = 18.dp,
         tonalElevation = 8.dp
@@ -1130,18 +1494,10 @@ private fun RideitBottomPanel(
 
             when {
                 uiState.rideRequestStatus == RideRequestStatus.SEARCHING_DRIVER ||
-                        uiState.rideRequestStatus == RideRequestStatus.DRIVER_FOUND ||
-                        uiState.rideRequestStatus == RideRequestStatus.DRIVER_ARRIVING ||
-                        uiState.rideRequestStatus == RideRequestStatus.RIDE_STARTED ||
-                        firebaseTripCompleted ||
-                        firebaseTripCancelledByDriver ||
                         firebaseLiveTripStatus == "pending" ||
                         firebaseLiveTripStatus == "requested" ||
                         firebaseLiveTripStatus == "searching" ||
-                        firebaseLiveTripStatus == "searching_driver" ||
-                        firebaseLiveTripStatus == "accepted" ||
-                        firebaseLiveTripStatus == "driver_arriving" ||
-                        firebaseLiveTripStatus == "ride_started" -> {
+                        firebaseLiveTripStatus == "searching_driver" -> {
                     PremiumRideStatusContent(
                         uiState = uiState,
                         isCancellingRideRequest = isCancellingRideRequest,
@@ -1194,40 +1550,41 @@ private fun SearchContent(
 
     Text(
         text = "Where are you going?",
-        fontWeight = FontWeight.Bold,
+        fontWeight = FontWeight.Black,
+        color = Color(0xFF111827),
         style = MaterialTheme.typography.headlineSmall
     )
 
     Spacer(modifier = Modifier.height(18.dp))
 
-    OutlinedTextField(
-        value = uiState.pickupText,
-        onValueChange = onPickupChanged,
-        label = { Text("Pickup location") },
-        modifier = Modifier.fillMaxWidth(),
-        singleLine = true,
-        shape = RoundedCornerShape(18.dp)
+    ModernLocationField(
+        value = uiState.pickupText.ifBlank { "Current location" },
+        leadingColor = Color(0xFF22C55E),
+        placeholder = "Current location",
+        trailing = "×",
+        onClick = { onPickupChanged(uiState.pickupText) }
     )
 
-    Spacer(modifier = Modifier.height(12.dp))
+    Spacer(modifier = Modifier.height(8.dp))
 
-    OutlinedTextField(
+    Text(
+        text = "⋮",
+        color = Color(0xFFD1D5DB),
+        fontWeight = FontWeight.Black,
+        modifier = Modifier.padding(start = 22.dp)
+    )
+
+    Spacer(modifier = Modifier.height(8.dp))
+
+    ModernEditableLocationField(
         value = uiState.dropoffText,
-        onValueChange = onDropoffChanged,
-        label = { Text("Dropoff location") },
-        modifier = Modifier.fillMaxWidth(),
-        singleLine = true,
-        shape = RoundedCornerShape(18.dp),
-        colors = OutlinedTextFieldDefaults.colors(
-            focusedBorderColor = purple,
-            focusedLabelColor = purple
-        )
+        onValueChange = onDropoffChanged
     )
 
     if (uiState.locationSuggestions.isNotEmpty()) {
         Spacer(modifier = Modifier.height(12.dp))
 
-        LazyColumn(modifier = Modifier.heightIn(max = 190.dp)) {
+        LazyColumn(modifier = Modifier.heightIn(max = 150.dp)) {
             items(uiState.locationSuggestions) { suggestion ->
                 Row(
                     modifier = Modifier
@@ -1252,6 +1609,18 @@ private fun SearchContent(
         }
     }
 
+    Spacer(modifier = Modifier.height(14.dp))
+
+    Row(
+        modifier = Modifier.fillMaxWidth(),
+        horizontalArrangement = Arrangement.spacedBy(8.dp)
+    ) {
+        QuickPlaceChip(icon = "🏠", text = "Home", modifier = Modifier.weight(1f))
+        QuickPlaceChip(icon = "💼", text = "Work", modifier = Modifier.weight(1f))
+        QuickPlaceChip(icon = "🛍️", text = "Mall", modifier = Modifier.weight(1f))
+        QuickPlaceChip(icon = "✈️", text = "Airport", modifier = Modifier.weight(1f))
+    }
+
     uiState.errorMessage?.let {
         Spacer(modifier = Modifier.height(8.dp))
         Text(it, color = Color.Red)
@@ -1259,15 +1628,172 @@ private fun SearchContent(
 
     Spacer(modifier = Modifier.height(16.dp))
 
-    Button(
-        onClick = onSearchClick,
+    Surface(
+        modifier = Modifier
+            .fillMaxWidth()
+            .height(58.dp)
+            .clickable { onSearchClick() },
+        shape = RoundedCornerShape(22.dp),
+        color = Color.Transparent,
+        shadowElevation = 14.dp
+    ) {
+        Box(
+            modifier = Modifier
+                .fillMaxSize()
+                .background(
+                    Brush.verticalGradient(
+                        colors = listOf(
+                            Color(0xFF9E3BFF),
+                            Color(0xFF7B1DE8)
+                        )
+                    )
+                ),
+            contentAlignment = Alignment.Center
+        ) {
+            Text(
+                text = "🔍   Search Ride",
+                color = Color.White,
+                fontWeight = FontWeight.Black,
+                style = MaterialTheme.typography.titleMedium
+            )
+        }
+    }
+}
+
+@Composable
+private fun ModernLocationField(
+    value: String,
+    leadingColor: Color,
+    placeholder: String,
+    trailing: String,
+    onClick: () -> Unit
+) {
+    Surface(
+        modifier = Modifier
+            .fillMaxWidth()
+            .height(54.dp)
+            .clickable { onClick() },
+        shape = RoundedCornerShape(18.dp),
+        color = Color.White,
+        shadowElevation = 0.dp
+    ) {
+        Row(
+            modifier = Modifier
+                .border(
+                    width = 1.dp,
+                    color = Color(0xFFE5E7EB),
+                    shape = RoundedCornerShape(18.dp)
+                )
+                .padding(horizontal = 14.dp),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Box(
+                modifier = Modifier
+                    .size(11.dp)
+                    .clip(CircleShape)
+                    .background(leadingColor)
+            )
+
+            Spacer(modifier = Modifier.width(12.dp))
+
+            Text(
+                text = value.ifBlank { placeholder },
+                color = Color(0xFF111827),
+                fontWeight = FontWeight.Medium,
+                modifier = Modifier.weight(1f),
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis
+            )
+
+            Text(
+                text = trailing,
+                color = Color(0xFF9CA3AF),
+                fontWeight = FontWeight.Bold
+            )
+        }
+    }
+}
+
+@Composable
+private fun ModernEditableLocationField(
+    value: String,
+    onValueChange: (String) -> Unit
+) {
+    OutlinedTextField(
+        value = value,
+        onValueChange = onValueChange,
         modifier = Modifier
             .fillMaxWidth()
             .height(58.dp),
-        shape = RoundedCornerShape(22.dp),
-        colors = ButtonDefaults.buttonColors(containerColor = purple)
+        placeholder = {
+            Text(
+                text = "Where to?",
+                color = Color(0xFF9CA3AF)
+            )
+        },
+        leadingIcon = {
+            Box(
+                modifier = Modifier
+                    .size(11.dp)
+                    .clip(CircleShape)
+                    .background(Color(0xFF8A35F2))
+            )
+        },
+        trailingIcon = {
+            Text(
+                text = "🔍",
+                color = Color(0xFF8A35F2)
+            )
+        },
+        singleLine = true,
+        shape = RoundedCornerShape(18.dp),
+        colors = OutlinedTextFieldDefaults.colors(
+            focusedTextColor = Color(0xFF111827),
+            unfocusedTextColor = Color(0xFF111827),
+            focusedBorderColor = Color(0xFFE5E7EB),
+            unfocusedBorderColor = Color(0xFFE5E7EB),
+            focusedContainerColor = Color.White,
+            unfocusedContainerColor = Color.White,
+            cursorColor = Color(0xFF8A35F2)
+        )
+    )
+}
+
+@Composable
+private fun QuickPlaceChip(
+    icon: String,
+    text: String,
+    modifier: Modifier = Modifier
+) {
+    Surface(
+        modifier = modifier.height(38.dp),
+        shape = RoundedCornerShape(50),
+        color = Color.White,
+        shadowElevation = 0.dp
     ) {
-        Text("Search Ride", fontWeight = FontWeight.Bold)
+        Row(
+            modifier = Modifier
+                .border(
+                    width = 1.dp,
+                    color = Color(0xFFE5E7EB),
+                    shape = RoundedCornerShape(50)
+                )
+                .padding(horizontal = 8.dp),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.Center
+        ) {
+            Text(icon, style = MaterialTheme.typography.labelMedium)
+
+            Spacer(modifier = Modifier.width(4.dp))
+
+            Text(
+                text = text,
+                color = Color(0xFF111827),
+                fontWeight = FontWeight.Bold,
+                style = MaterialTheme.typography.labelSmall,
+                maxLines = 1
+            )
+        }
     }
 }
 
@@ -1398,12 +1924,12 @@ private fun PremiumRideStatusContent(
             firebaseLiveTripStatus == "pending" ||
                     firebaseLiveTripStatus == "requested" ||
                     firebaseLiveTripStatus == "searching" ||
-                    firebaseLiveTripStatus == "searching_driver" -> "Driver car is coming"
+                    firebaseLiveTripStatus == "searching_driver" -> "Finding your driver"
             firebaseLiveTripStatus == "accepted" -> "Driver accepted"
             firebaseLiveTripStatus == "driver_arriving" -> "Driver arrived at pickup"
             firebaseLiveTripStatus == "ride_started" -> "Trip in progress"
             firebaseDriverName != null -> "Driver accepted"
-            uiState.rideRequestStatus == RideRequestStatus.SEARCHING_DRIVER -> "Driver car is coming"
+            uiState.rideRequestStatus == RideRequestStatus.SEARCHING_DRIVER -> "Finding your driver"
             uiState.rideRequestStatus == RideRequestStatus.DRIVER_FOUND -> "Driver found"
             uiState.rideRequestStatus == RideRequestStatus.DRIVER_ARRIVING -> "Driver arrived at pickup"
             uiState.rideRequestStatus == RideRequestStatus.RIDE_STARTED -> "Ride started"
@@ -1498,13 +2024,13 @@ private fun PremiumRideStatusContent(
                     Text(
                         text = uiState.driver?.let {
                             "${it.vehicleName} • ${it.vehicleNumber}"
-                        } ?: "Visible on the map",
+                        } ?: "Waiting for driver details",
                         color = Color.Gray
                     )
 
                     Text(
                         text = when (firebaseLiveTripStatus) {
-                            "pending", "requested", "searching", "searching_driver" -> "Nearby driver is coming"
+                            "pending", "requested", "searching", "searching_driver" -> "Waiting for driver to accept"
                             "accepted" -> "Driver accepted your ride"
                             "driver_arriving" -> "Driver arrived at pickup"
                             "ride_started" -> "Trip is in progress"
@@ -1711,14 +2237,9 @@ private fun resolveVisibleDriverLatLng(
     val cleanStatus = firebaseLiveTripStatus.orEmpty().lowercase()
 
     val shouldShowDriver =
-        cleanStatus == "pending" ||
-                cleanStatus == "requested" ||
-                cleanStatus == "searching" ||
-                cleanStatus == "searching_driver" ||
-                cleanStatus == "accepted" ||
+        cleanStatus == "accepted" ||
                 cleanStatus == "driver_arriving" ||
                 cleanStatus == "ride_started" ||
-                localRideRequestStatus == RideRequestStatus.SEARCHING_DRIVER ||
                 localRideRequestStatus == RideRequestStatus.DRIVER_FOUND ||
                 localRideRequestStatus == RideRequestStatus.DRIVER_ARRIVING ||
                 localRideRequestStatus == RideRequestStatus.RIDE_STARTED
@@ -1733,17 +2254,6 @@ private fun resolveVisibleDriverLatLng(
     val dropoff = dropoffLatLng ?: pickup
 
     return when {
-        cleanStatus == "pending" ||
-                cleanStatus == "requested" ||
-                cleanStatus == "searching" ||
-                cleanStatus == "searching_driver" ||
-                localRideRequestStatus == RideRequestStatus.SEARCHING_DRIVER -> {
-            LatLng(
-                (fallbackLocation.latitude * 0.55) + (pickup.latitude * 0.45),
-                (fallbackLocation.longitude * 0.55) + (pickup.longitude * 0.45)
-            )
-        }
-
         cleanStatus == "accepted" ||
                 localRideRequestStatus == RideRequestStatus.DRIVER_FOUND -> {
             LatLng(
@@ -1773,30 +2283,6 @@ private fun resolveVisibleDriverLatLng(
                 (fallbackLocation.latitude + pickup.latitude) / 2.0,
                 (fallbackLocation.longitude + pickup.longitude) / 2.0
             )
-        }
-    }
-}
-
-private fun buildDriverRoutePoints(
-    driverLatLng: LatLng?,
-    pickupLatLng: LatLng?,
-    dropoffLatLng: LatLng?,
-    status: String?,
-    localRideRequestStatus: RideRequestStatus
-): List<LatLng> {
-    val driver = driverLatLng ?: return emptyList()
-    val cleanStatus = status.orEmpty().lowercase()
-
-    return when {
-        cleanStatus == "ride_started" ||
-                localRideRequestStatus == RideRequestStatus.RIDE_STARTED -> {
-            val dropoff = dropoffLatLng ?: return emptyList()
-            listOf(driver, dropoff)
-        }
-
-        else -> {
-            val pickup = pickupLatLng ?: return emptyList()
-            listOf(driver, pickup)
         }
     }
 }

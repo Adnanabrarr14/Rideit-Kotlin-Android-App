@@ -440,7 +440,7 @@ private fun RiderMapWithDrawer(
                 },
                 modifier = Modifier
                     .align(Alignment.TopStart)
-                    .padding(top = 46.dp, start = 16.dp),
+                    .padding(top = 14.dp, start = 16.dp),
                 shape = RoundedCornerShape(18.dp),
                 colors = ButtonDefaults.buttonColors(
                     containerColor = Color(0xFF111827),
@@ -515,7 +515,7 @@ private fun DriverHomeWithDrawer(
                 },
                 modifier = Modifier
                     .align(Alignment.TopStart)
-                    .padding(top = 46.dp, start = 16.dp),
+                    .padding(top = 14.dp, start = 16.dp),
                 shape = RoundedCornerShape(18.dp),
                 colors = ButtonDefaults.buttonColors(
                     containerColor = Color(0xFF111827),
