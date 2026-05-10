@@ -78,7 +78,7 @@ fun LoginScreen(
             .background(Color(0xFF030307))
             .windowInsetsPadding(WindowInsets.statusBars)
             .windowInsetsPadding(WindowInsets.navigationBars)
-            .padding(horizontal = 20.dp),
+            .padding(horizontal = 18.dp),
         contentAlignment = Alignment.Center
     ) {
         Surface(
@@ -125,7 +125,7 @@ fun LoginScreen(
                 Surface(
                     modifier = Modifier
                         .align(Alignment.TopStart)
-                        .padding(start = 26.dp, top = 24.dp)
+                        .padding(start = 24.dp, top = 24.dp)
                         .size(54.dp),
                     shape = CircleShape,
                     color = Color.White.copy(alpha = 0.10f),
@@ -151,10 +151,10 @@ fun LoginScreen(
                 Column(
                     modifier = Modifier
                         .fillMaxSize()
-                        .padding(horizontal = 28.dp, vertical = 30.dp),
+                        .padding(horizontal = 24.dp, vertical = 26.dp),
                     horizontalAlignment = Alignment.CenterHorizontally
                 ) {
-                    Spacer(modifier = Modifier.height(76.dp))
+                    Spacer(modifier = Modifier.height(64.dp))
 
                     Text(
                         text = "R I D E I T",
@@ -163,17 +163,17 @@ fun LoginScreen(
                         style = MaterialTheme.typography.titleMedium
                     )
 
-                    Spacer(modifier = Modifier.height(10.dp))
+                    Spacer(modifier = Modifier.height(8.dp))
 
                     Text(
                         text = accountSubtitle,
                         color = Color(0xFFC5C0CF),
                         fontWeight = FontWeight.Medium,
                         textAlign = TextAlign.Center,
-                        style = MaterialTheme.typography.bodyMedium
+                        style = MaterialTheme.typography.bodySmall
                     )
 
-                    Spacer(modifier = Modifier.height(24.dp))
+                    Spacer(modifier = Modifier.height(18.dp))
 
                     Surface(
                         modifier = Modifier
@@ -188,43 +188,43 @@ fun LoginScreen(
                         shadowElevation = 20.dp
                     ) {
                         Column(
-                            modifier = Modifier.padding(horizontal = 20.dp, vertical = 22.dp),
+                            modifier = Modifier.padding(horizontal = 18.dp, vertical = 18.dp),
                             horizontalAlignment = Alignment.CenterHorizontally
                         ) {
                             Text(
                                 text = accountTitle,
                                 color = Color.White,
                                 fontWeight = FontWeight.Black,
-                                style = MaterialTheme.typography.headlineSmall,
+                                style = MaterialTheme.typography.titleLarge,
                                 textAlign = TextAlign.Center
                             )
 
-                            Spacer(modifier = Modifier.height(6.dp))
+                            Spacer(modifier = Modifier.height(5.dp))
 
                             Text(
                                 text = "Use your email and password to sign in",
                                 color = Color(0xFFAAA6B6),
                                 fontWeight = FontWeight.Medium,
                                 textAlign = TextAlign.Center,
-                                style = MaterialTheme.typography.bodyMedium
+                                style = MaterialTheme.typography.bodySmall
                             )
 
-                            Spacer(modifier = Modifier.height(16.dp))
+                            Spacer(modifier = Modifier.height(12.dp))
 
                             RoleWarningPill(
                                 text = if (isDriver) {
-                                    "🚘 Driver accounts open Driver Dashboard only."
+                                    "🚘 Driver account opens Driver Dashboard only."
                                 } else {
-                                    "🚕 Rider accounts open Rider Map only."
+                                    "🚕 Rider account opens Rider Map only."
                                 },
                                 accentColor = glowColor
                             )
 
-                            Spacer(modifier = Modifier.height(18.dp))
+                            Spacer(modifier = Modifier.height(14.dp))
 
                             LoginLabel("EMAIL")
 
-                            Spacer(modifier = Modifier.height(7.dp))
+                            Spacer(modifier = Modifier.height(6.dp))
 
                             OutlinedTextField(
                                 value = email,
@@ -235,7 +235,7 @@ fun LoginScreen(
                                 },
                                 modifier = Modifier
                                     .fillMaxWidth()
-                                    .height(60.dp),
+                                    .height(58.dp),
                                 placeholder = {
                                     Text(
                                         text = "you@example.com",
@@ -262,11 +262,11 @@ fun LoginScreen(
                                 )
                             )
 
-                            Spacer(modifier = Modifier.height(16.dp))
+                            Spacer(modifier = Modifier.height(12.dp))
 
                             LoginLabel("PASSWORD")
 
-                            Spacer(modifier = Modifier.height(7.dp))
+                            Spacer(modifier = Modifier.height(6.dp))
 
                             OutlinedTextField(
                                 value = password,
@@ -277,7 +277,7 @@ fun LoginScreen(
                                 },
                                 modifier = Modifier
                                     .fillMaxWidth()
-                                    .height(60.dp),
+                                    .height(58.dp),
                                 placeholder = {
                                     Text(
                                         text = "••••••••",
@@ -322,7 +322,7 @@ fun LoginScreen(
                                 )
                             )
 
-                            Spacer(modifier = Modifier.height(4.dp))
+                            Spacer(modifier = Modifier.height(2.dp))
 
                             TextButton(
                                 onClick = {
@@ -349,11 +349,12 @@ fun LoginScreen(
                                 Text(
                                     text = "Forgot password?",
                                     color = Color(0xFFB8B4C6),
-                                    fontWeight = FontWeight.Medium
+                                    fontWeight = FontWeight.Medium,
+                                    style = MaterialTheme.typography.bodySmall
                                 )
                             }
 
-                            Spacer(modifier = Modifier.height(8.dp))
+                            Spacer(modifier = Modifier.height(6.dp))
 
                             GlowButton(
                                 text = if (isLoading) "Signing In..." else primaryButtonText,
@@ -385,31 +386,21 @@ fun LoginScreen(
                                 }
                             )
 
-                            Spacer(modifier = Modifier.height(12.dp))
+                            Spacer(modifier = Modifier.height(10.dp))
 
-                            Surface(
-                                modifier = Modifier
-                                    .fillMaxWidth()
-                                    .height(52.dp)
-                                    .clickable(enabled = !isLoading) {
-                                        onCreateAccountClick()
-                                    },
-                                shape = RoundedCornerShape(22.dp),
-                                color = Color.White.copy(alpha = 0.05f),
-                                shadowElevation = 0.dp
-                            ) {
-                                Box(contentAlignment = Alignment.Center) {
-                                    Text(
-                                        text = createAccountText,
-                                        color = Color.White.copy(alpha = 0.88f),
-                                        fontWeight = FontWeight.Black,
-                                        style = MaterialTheme.typography.titleMedium
-                                    )
-                                }
-                            }
+                            CreateAccountButton(
+                                text = if (isDriver) {
+                                    "New driver? Create Driver Account"
+                                } else {
+                                    "New rider? Create Rider Account"
+                                },
+                                accentColor = glowColor,
+                                enabled = !isLoading,
+                                onClick = onCreateAccountClick
+                            )
 
                             errorMessage?.let {
-                                Spacer(modifier = Modifier.height(10.dp))
+                                Spacer(modifier = Modifier.height(8.dp))
                                 Text(
                                     text = it,
                                     color = Color(0xFFFF6B6B),
@@ -420,7 +411,7 @@ fun LoginScreen(
                             }
 
                             successMessage?.let {
-                                Spacer(modifier = Modifier.height(10.dp))
+                                Spacer(modifier = Modifier.height(8.dp))
                                 Text(
                                     text = it,
                                     color = Color(0xFF22C55E),
@@ -445,7 +436,7 @@ private fun LoginLabel(
         text = text,
         color = Color(0xFFAAA6B6),
         fontWeight = FontWeight.Black,
-        style = MaterialTheme.typography.labelLarge,
+        style = MaterialTheme.typography.labelMedium,
         modifier = Modifier.fillMaxWidth()
     )
 }
@@ -463,7 +454,7 @@ private fun RoleWarningPill(
     ) {
         Text(
             text = text,
-            modifier = Modifier.padding(horizontal = 14.dp, vertical = 10.dp),
+            modifier = Modifier.padding(horizontal = 12.dp, vertical = 9.dp),
             color = if (accentColor == Color(0xFFFF1212)) {
                 Color(0xFFFFB4B4)
             } else {
@@ -486,11 +477,11 @@ private fun GlowButton(
     Surface(
         modifier = Modifier
             .fillMaxWidth()
-            .height(56.dp)
+            .height(54.dp)
             .clickable(enabled = enabled) {
                 onClick()
             },
-        shape = RoundedCornerShape(24.dp),
+        shape = RoundedCornerShape(22.dp),
         color = Color.Transparent,
         shadowElevation = 18.dp
     ) {
@@ -516,6 +507,41 @@ private fun GlowButton(
                 color = Color.White,
                 fontWeight = FontWeight.Black,
                 style = MaterialTheme.typography.titleMedium
+            )
+        }
+    }
+}
+
+@Composable
+private fun CreateAccountButton(
+    text: String,
+    accentColor: Color,
+    enabled: Boolean,
+    onClick: () -> Unit
+) {
+    Surface(
+        modifier = Modifier
+            .fillMaxWidth()
+            .height(52.dp)
+            .clickable(enabled = enabled) {
+                onClick()
+            }
+            .border(
+                width = 1.5.dp,
+                color = accentColor.copy(alpha = 0.70f),
+                shape = RoundedCornerShape(22.dp)
+            ),
+        shape = RoundedCornerShape(22.dp),
+        color = accentColor.copy(alpha = 0.14f),
+        shadowElevation = 8.dp
+    ) {
+        Box(contentAlignment = Alignment.Center) {
+            Text(
+                text = text,
+                color = Color.White,
+                fontWeight = FontWeight.Black,
+                style = MaterialTheme.typography.titleSmall,
+                textAlign = TextAlign.Center
             )
         }
     }
