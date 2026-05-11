@@ -457,6 +457,54 @@ object FirebaseManager {
         return auth.currentUser?.email
     }
 
+    fun currentUserDisplayName(
+        fallback: String = "Rideit User"
+    ): String {
+        val user = auth.currentUser ?: return fallback
+
+        val firebaseName = user.displayName
+            ?.trim()
+            .orEmpty()
+
+        if (firebaseName.isNotBlank()) {
+            return firebaseName
+        }
+
+        val emailPrefix = user.email
+            ?.substringBefore("@")
+            ?.replace(".", " ")
+            ?.replace("_", " ")
+            ?.replace("-", " ")
+            ?.trim()
+            .orEmpty()
+
+        if (emailPrefix.isBlank()) {
+            return fallback
+        }
+
+        return emailPrefix
+            .split(" ")
+            .filter { it.isNotBlank() }
+            .joinToString(" ") { word ->
+                word.replaceFirstChar { char ->
+                    if (char.isLowerCase()) {
+                        char.titlecase()
+                    } else {
+                        char.toString()
+                    }
+                }
+            }
+            .ifBlank { fallback }
+    }
+
+    fun currentDriverDisplayName(): String {
+        return currentUserDisplayName(fallback = "Rideit Driver")
+    }
+
+    fun currentRiderDisplayName(): String {
+        return currentUserDisplayName(fallback = "Rideit Rider")
+    }
+
     fun login(
         email: String,
         password: String,

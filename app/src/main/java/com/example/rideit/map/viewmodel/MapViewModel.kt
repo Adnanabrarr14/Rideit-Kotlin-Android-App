@@ -2,6 +2,7 @@ package com.example.rideit.map.viewmodel
 
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import com.example.rideit.RideitFareConstants
 import com.example.rideit.map.model.LocationSuggestion
 import com.example.rideit.map.model.MapUiState
 import com.example.rideit.map.model.RideOption
@@ -74,11 +75,7 @@ class MapViewModel : ViewModel() {
             return
         }
 
-        val rides = listOf(
-            RideOption("1", "Mini", "Suzuki Alto / Mira", "Rs. 180", "2 min"),
-            RideOption("2", "Comfort", "Corolla / Civic / Elantra", "Rs. 320", "4 min"),
-            RideOption("3", "Business", "Fortuner / Prado / Tucson", "Rs. 580", "6 min")
-        )
+        val rides = createRideOptions()
 
         _uiState.value = _uiState.value.copy(
             pickupLatLng = pickup,
@@ -117,9 +114,9 @@ class MapViewModel : ViewModel() {
                 id = "1",
                 name = "Ali Khan",
                 vehicleName = when (selectedRide.title) {
-                    "Mini" -> "Suzuki Alto"
-                    "Comfort" -> "Toyota Corolla"
-                    "Business" -> "Toyota Fortuner"
+                    RideitFareConstants.MINI_TITLE -> "Suzuki Alto"
+                    RideitFareConstants.COMFORT_TITLE -> "Toyota Corolla"
+                    RideitFareConstants.BUSINESS_TITLE -> "Toyota Fortuner"
                     else -> "Suzuki Alto"
                 },
                 vehicleNumber = "LEA-1234",
@@ -170,6 +167,32 @@ class MapViewModel : ViewModel() {
             driver = null,
             driverLatLng = null,
             rideConfirmedMessage = "Ride cancelled"
+        )
+    }
+
+    private fun createRideOptions(): List<RideOption> {
+        return listOf(
+            RideOption(
+                id = RideitFareConstants.MINI_ID,
+                title = RideitFareConstants.MINI_TITLE,
+                subtitle = RideitFareConstants.MINI_SUBTITLE,
+                estimatedFare = RideitFareConstants.formatFare(RideitFareConstants.MINI_FARE),
+                estimatedTime = RideitFareConstants.MINI_TIME
+            ),
+            RideOption(
+                id = RideitFareConstants.COMFORT_ID,
+                title = RideitFareConstants.COMFORT_TITLE,
+                subtitle = RideitFareConstants.COMFORT_SUBTITLE,
+                estimatedFare = RideitFareConstants.formatFare(RideitFareConstants.COMFORT_FARE),
+                estimatedTime = RideitFareConstants.COMFORT_TIME
+            ),
+            RideOption(
+                id = RideitFareConstants.BUSINESS_ID,
+                title = RideitFareConstants.BUSINESS_TITLE,
+                subtitle = RideitFareConstants.BUSINESS_SUBTITLE,
+                estimatedFare = RideitFareConstants.formatFare(RideitFareConstants.BUSINESS_FARE),
+                estimatedTime = RideitFareConstants.BUSINESS_TIME
+            )
         )
     }
 }

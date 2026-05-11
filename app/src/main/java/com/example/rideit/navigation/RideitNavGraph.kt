@@ -275,49 +275,6 @@ fun RideitNavGraph(
                 }
             )
         }
-
-        composable(Routes.PROFILE) {
-            ProfileScreen(
-                onBackClick = {
-                    navController.popBackStack()
-                },
-                onLogoutClick = {
-                    logoutAndReturnToAccountType(navController)
-                }
-            )
-        }
-
-        composable(Routes.TRIP_HISTORY) {
-            TripHistoryScreen(
-                onBackClick = {
-                    navController.popBackStack()
-                }
-            )
-        }
-
-        composable(Routes.PAYMENT) {
-            PaymentScreen(
-                onBackClick = {
-                    navController.popBackStack()
-                }
-            )
-        }
-
-        composable(Routes.NOTIFICATIONS) {
-            NotificationsScreen(
-                onBackClick = {
-                    navController.popBackStack()
-                }
-            )
-        }
-
-        composable(Routes.SETTINGS) {
-            SettingsScreen(
-                onBackClick = {
-                    navController.popBackStack()
-                }
-            )
-        }
     }
 }
 
@@ -360,70 +317,51 @@ private fun RiderMapWithDrawer(
 ) {
     val drawerState = rememberDrawerState(initialValue = DrawerValue.Closed)
     val scope = rememberCoroutineScope()
+    val riderName = FirebaseManager.currentRiderDisplayName()
 
     ModalNavigationDrawer(
         drawerState = drawerState,
         drawerContent = {
             RiderDrawer(
+                riderName = riderName,
                 onRiderHomeClick = {
-                    scope.launch {
-                        drawerState.close()
-                    }
-
+                    scope.launch { drawerState.close() }
                     navController.navigate(Routes.MAP) {
                         launchSingleTop = true
                     }
                 },
                 onProfileClick = {
-                    scope.launch {
-                        drawerState.close()
-                    }
-
+                    scope.launch { drawerState.close() }
                     navController.navigate(Routes.RIDER_PROFILE) {
                         launchSingleTop = true
                     }
                 },
                 onTripHistoryClick = {
-                    scope.launch {
-                        drawerState.close()
-                    }
-
+                    scope.launch { drawerState.close() }
                     navController.navigate(Routes.RIDER_TRIP_HISTORY) {
                         launchSingleTop = true
                     }
                 },
                 onPaymentClick = {
-                    scope.launch {
-                        drawerState.close()
-                    }
-
+                    scope.launch { drawerState.close() }
                     navController.navigate(Routes.RIDER_PAYMENT) {
                         launchSingleTop = true
                     }
                 },
                 onNotificationsClick = {
-                    scope.launch {
-                        drawerState.close()
-                    }
-
+                    scope.launch { drawerState.close() }
                     navController.navigate(Routes.RIDER_NOTIFICATIONS) {
                         launchSingleTop = true
                     }
                 },
                 onSettingsClick = {
-                    scope.launch {
-                        drawerState.close()
-                    }
-
+                    scope.launch { drawerState.close() }
                     navController.navigate(Routes.RIDER_SETTINGS) {
                         launchSingleTop = true
                     }
                 },
                 onLogout = {
-                    scope.launch {
-                        drawerState.close()
-                    }
-
+                    scope.launch { drawerState.close() }
                     logoutAndReturnToAccountType(navController)
                 }
             )
@@ -434,9 +372,7 @@ private fun RiderMapWithDrawer(
 
             Button(
                 onClick = {
-                    scope.launch {
-                        drawerState.open()
-                    }
+                    scope.launch { drawerState.open() }
                 },
                 modifier = Modifier
                     .align(Alignment.TopStart)
@@ -462,43 +398,33 @@ private fun DriverHomeWithDrawer(
 ) {
     val drawerState = rememberDrawerState(initialValue = DrawerValue.Closed)
     val scope = rememberCoroutineScope()
+    val driverName = FirebaseManager.currentDriverDisplayName()
 
     ModalNavigationDrawer(
         drawerState = drawerState,
         drawerContent = {
             DriverDrawer(
+                driverName = driverName,
                 onDriverHomeClick = {
-                    scope.launch {
-                        drawerState.close()
-                    }
-
+                    scope.launch { drawerState.close() }
                     navController.navigate(Routes.DRIVER_HOME) {
                         launchSingleTop = true
                     }
                 },
                 onProfileClick = {
-                    scope.launch {
-                        drawerState.close()
-                    }
-
+                    scope.launch { drawerState.close() }
                     navController.navigate(Routes.DRIVER_PROFILE) {
                         launchSingleTop = true
                     }
                 },
                 onSettingsClick = {
-                    scope.launch {
-                        drawerState.close()
-                    }
-
+                    scope.launch { drawerState.close() }
                     navController.navigate(Routes.DRIVER_SETTINGS) {
                         launchSingleTop = true
                     }
                 },
                 onLogout = {
-                    scope.launch {
-                        drawerState.close()
-                    }
-
+                    scope.launch { drawerState.close() }
                     logoutAndReturnToAccountType(navController)
                 }
             )
@@ -509,9 +435,7 @@ private fun DriverHomeWithDrawer(
 
             Button(
                 onClick = {
-                    scope.launch {
-                        drawerState.open()
-                    }
+                    scope.launch { drawerState.open() }
                 },
                 modifier = Modifier
                     .align(Alignment.TopStart)
@@ -533,6 +457,7 @@ private fun DriverHomeWithDrawer(
 
 @Composable
 private fun RiderDrawer(
+    riderName: String,
     onRiderHomeClick: () -> Unit,
     onProfileClick: () -> Unit,
     onTripHistoryClick: () -> Unit,
@@ -562,9 +487,9 @@ private fun RiderDrawer(
                 .padding(22.dp)
         ) {
             DrawerHeader(
-                title = "Rideit",
+                title = riderName,
                 subtitle = "Rider Account",
-                avatar = "R"
+                avatar = riderName.drawerAvatarLetter(defaultLetter = "R")
             )
 
             Spacer(modifier = Modifier.height(30.dp))
@@ -619,15 +544,14 @@ private fun RiderDrawer(
 
             Spacer(modifier = Modifier.weight(1f))
 
-            LogoutButton(
-                onLogout = onLogout
-            )
+            LogoutButton(onLogout = onLogout)
         }
     }
 }
 
 @Composable
 private fun DriverDrawer(
+    driverName: String,
     onDriverHomeClick: () -> Unit,
     onProfileClick: () -> Unit,
     onSettingsClick: () -> Unit,
@@ -654,9 +578,9 @@ private fun DriverDrawer(
                 .padding(22.dp)
         ) {
             DrawerHeader(
-                title = "Rideit Driver",
+                title = driverName,
                 subtitle = "Driver Account",
-                avatar = "D"
+                avatar = driverName.drawerAvatarLetter(defaultLetter = "D")
             )
 
             Spacer(modifier = Modifier.height(30.dp))
@@ -692,9 +616,7 @@ private fun DriverDrawer(
                 shape = RoundedCornerShape(22.dp),
                 color = Color(0xFF1D1D21)
             ) {
-                Column(
-                    modifier = Modifier.padding(15.dp)
-                ) {
+                Column(modifier = Modifier.padding(15.dp)) {
                     Text(
                         text = "Driver tools",
                         color = Color.White,
@@ -715,9 +637,7 @@ private fun DriverDrawer(
 
             Spacer(modifier = Modifier.weight(1f))
 
-            LogoutButton(
-                onLogout = onLogout
-            )
+            LogoutButton(onLogout = onLogout)
         }
     }
 }
@@ -728,9 +648,7 @@ private fun DrawerHeader(
     subtitle: String,
     avatar: String
 ) {
-    Row(
-        verticalAlignment = Alignment.CenterVertically
-    ) {
+    Row(verticalAlignment = Alignment.CenterVertically) {
         Box(
             modifier = Modifier
                 .size(58.dp)
@@ -789,9 +707,7 @@ private fun DrawerItem(
         modifier = Modifier
             .fillMaxWidth()
             .padding(bottom = 12.dp)
-            .clickable {
-                onClick()
-            },
+            .clickable { onClick() },
         shape = RoundedCornerShape(20.dp),
         color = backgroundColor
     ) {
@@ -811,9 +727,7 @@ private fun DrawerItem(
 
             Spacer(modifier = Modifier.width(12.dp))
 
-            Column(
-                modifier = Modifier.weight(1f)
-            ) {
+            Column(modifier = Modifier.weight(1f)) {
                 Text(
                     text = title,
                     color = Color.White,
@@ -847,9 +761,7 @@ private fun LogoutButton(
     Surface(
         modifier = Modifier
             .fillMaxWidth()
-            .clickable {
-                onLogout()
-            },
+            .clickable { onLogout() },
         shape = RoundedCornerShape(20.dp),
         color = Color(0xFF2A1111)
     ) {
@@ -872,4 +784,13 @@ private fun LogoutButton(
             )
         }
     }
+}
+
+private fun String.drawerAvatarLetter(
+    defaultLetter: String
+): String {
+    return trim()
+        .firstOrNull()
+        ?.uppercase()
+        ?: defaultLetter
 }

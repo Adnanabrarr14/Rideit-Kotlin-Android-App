@@ -2892,3 +2892,699 @@ Continue tomorrow with the next safe phase:
 - Phase 8.20.5 — MapScreen upper panel final polish or move to next Rider screen.
 - Safe additive fixes only.
 - No code destruction.
+
+
+
+
+
+## Phase 8.21.1 — Routes Cleanup Audit Progress
+
+### Completed
+- Confirmed `SignupScreen.kt` is not duplicate.
+- `SignupScreen.kt` is used in `RideitNavGraph.kt` for:
+  - `Routes.RIDER_SIGNUP`
+  - `Routes.DRIVER_SIGNUP`
+- Therefore `SignupScreen.kt` must be kept.
+
+### Routes.kt Audit
+
+#### Keep These Active Routes
+- `ACCOUNT_TYPE`
+- `RIDER_LOGIN`
+- `DRIVER_LOGIN`
+- `RIDER_SIGNUP`
+- `DRIVER_SIGNUP`
+- `MAP`
+- `DRIVER_HOME`
+- `RIDER_PROFILE`
+- `RIDER_TRIP_HISTORY`
+- `RIDER_PAYMENT`
+- `RIDER_NOTIFICATIONS`
+- `RIDER_SETTINGS`
+- `DRIVER_PROFILE`
+- `DRIVER_SETTINGS`
+
+#### Legacy Route Cleanup Candidates
+These may be old/general routes and should be checked before deletion:
+- `PROFILE`
+- `TRIP_HISTORY`
+- `PAYMENT`
+- `NOTIFICATIONS`
+- `SETTINGS`
+
+### Next Safe Step
+Search the whole project for:
+- `Routes.PROFILE`
+- `Routes.TRIP_HISTORY`
+- `Routes.PAYMENT`
+- `Routes.NOTIFICATIONS`
+- `Routes.SETTINGS`
+
+If they are only used as old fallback composable blocks in `RideitNavGraph.kt`, remove them safely in the next cleanup step.
+
+### Important Rule
+- Do not delete route constants until project-wide usage is checked.
+- Do not touch `MapScreen.kt`.
+- Do not delete `SignupScreen.kt`.
+
+
+## Final Professional Fix List — Rideit Cleanup Roadmap
+
+### Already Completed / Confirmed
+- Duplicate/conflicting `RideitDriverPremiumStabilityCards.kt` was deleted.
+- Unused `HomeScreen.kt` was deleted safely.
+- `SignupScreen.kt` was checked and confirmed real/active, so it must stay.
+- Old unused route constants were removed from `Routes.kt`.
+- App icon was added and connected in `AndroidManifest.xml`.
+- `MapScreen.kt` is working and protected.
+- Main rider screens were checked and confirmed real.
+- Main driver screens were checked and confirmed real.
+- Core Gradle/Firebase/map architecture files were checked.
+
+### Still Left To Fix
+
+#### 1. API Key Security
+- Move `MAPS_API_KEY` from app `build.gradle.kts` to `local.properties`.
+- Do not commit API key to GitHub.
+- Restrict/regenerate the key before public upload.
+
+#### 2. Real User / Driver Name
+- Replace hardcoded `"Shameer Khan"` with real Firebase user/driver name or email fallback.
+- Apply safely across driver screens.
+
+#### 3. Firestore Security Rules
+- Add proper Firestore rules to protect:
+  - users
+  - ride_requests
+  - rider data
+  - driver data
+  - feedback/rating fields
+
+#### 4. Hardcoded Ride Prices
+- Move ride prices into a constants/config file.
+- Avoid scattered hardcoded fares.
+
+#### 5. README
+- Write professional GitHub README:
+  - app overview
+  - features
+  - tech stack
+  - screenshots
+  - setup instructions
+  - Firebase/Maps key instructions
+  - architecture notes
+
+#### 6. Package Name
+- Change package from `com.example.rideit` to `com.adnan.rideit` before release/client showcase.
+
+#### 7. Architecture Cleanup
+- Move Firestore logic from large UI files into ViewModel/repository gradually.
+- Do this only after stable cleanup fixes are complete.
+
+### Recommended Fix Order
+1. API key security
+2. Real Firebase user/driver name
+3. Ride price constants
+4. Firestore Security Rules
+5. README
+6. Package rename
+7. Firestore/ViewModel architecture refactor
+
+### Important Rule
+- Do not touch `MapScreen.kt` unless absolutely required.
+- Do not delete files without usage check.
+- Rebuild after each fix.
+- Fix one thing at a time.
+
+
+
+
+
+## Phase 8.21.6 Completed — API Key Security
+
+### Completed
+- Moved Google Maps API key into `local.properties`.
+- Removed hardcoded Google Maps API key from app `build.gradle.kts`.
+- Updated app `build.gradle.kts` to read:
+
+  `MAPS_API_KEY`
+
+  from `local.properties`.
+
+- Gradle sync issue was fixed by importing:
+
+  `import java.util.Properties`
+
+- App build/sync is successful.
+- App is running successfully after the API key security fix.
+
+### Files Updated
+- `local.properties`
+- `app/build.gradle.kts`
+
+### Current Status
+- `AndroidManifest.xml` still uses:
+
+  `${MAPS_API_KEY}`
+
+- API key is no longer hardcoded in Gradle.
+- App is stable and running.
+
+### Important Later Security Step
+- Confirm `.gitignore` includes:
+
+  `local.properties`
+
+- Before public GitHub upload, restrict or regenerate the exposed Google Maps API key in Google Cloud Console.
+
+### Next Professional Fix
+Continue with:
+- Real Firebase user/driver name cleanup
+- Replace hardcoded `"Shameer Khan"` safely
+- No MapScreen changes
+
+
+
+
+## Phase 8.21.7 Started — Real Firebase User/Driver Name Cleanup
+
+### Completed in Step 1
+- Updated `FirebaseManager.kt`.
+- Added safe real Firebase display name helpers:
+  - `currentUserDisplayName()`
+  - `currentDriverDisplayName()`
+  - `currentRiderDisplayName()`
+
+### Behavior
+- Uses Firebase `displayName` if available.
+- If display name is missing, uses email before `@`.
+- Converts email-style names into readable text.
+- Falls back safely to:
+  - `Rideit Driver`
+  - `Rideit Rider`
+  - `Rideit User`
+
+### Safety
+- No MapScreen changes.
+- No driver screen rewrite.
+- No Firebase flow rewrite.
+- Existing login/signup/ride functions preserved.
+
+### Next Step
+Phase 8.21.7.2:
+- Update `RideitNavGraph.kt`
+- Pass `FirebaseManager.currentDriverDisplayName()` into driver screens
+- Pass `FirebaseManager.currentRiderDisplayName()` where needed
+- Remove usage of default hardcoded `"Shameer Khan"` without breaking screens
+
+
+## Phase 8.21.7.2 Completed — Real Firebase Name Connected to Drawers
+
+### Completed
+- Updated `RideitNavGraph.kt`.
+- Connected Firebase real display name helpers:
+  - `FirebaseManager.currentRiderDisplayName()`
+  - `FirebaseManager.currentDriverDisplayName()`
+- Rider drawer now shows real Firebase rider name/email fallback.
+- Driver drawer now shows real Firebase driver name/email fallback.
+- Fixed compile error by keeping `DriverHomeScreen()` call unchanged because current `DriverHomeScreen.kt` does not accept `driverName` parameter yet.
+
+### Safety
+- No MapScreen changes.
+- No UI redesign.
+- No duplicate files.
+- App builds/runs successfully.
+
+### Current Status
+- Drawer name is now dynamic.
+- Driver dashboard name may still be hardcoded inside `DriverHomeScreen.kt`.
+
+### Next Step
+Phase 8.21.7.3:
+- Safely update `DriverHomeScreen.kt` to accept/use real driver name.
+- Remove hardcoded `"Shameer Khan"` from driver dashboard only.
+- No MapScreen changes.
+
+
+
+
+## Phase 8.21.7.3 Completed — DriverHomeScreen Real Driver Name
+
+### Completed
+- Updated `DriverHomeScreen.kt`.
+- Added safe `driverName` parameter:
+  - Defaults to `FirebaseManager.currentDriverDisplayName()`
+- Removed hardcoded `"Shameer Khan"` from:
+  - Driver dashboard header
+  - Driver active trip navigation
+  - Driver wallet navigation
+  - Driver trip history navigation
+  - Driver documents navigation
+  - Driver support navigation
+  - Firestore accepted ride `driverName` field
+- Driver avatar letter now comes from the real driver name.
+
+### Result
+- Driver screens now receive the real Firebase driver name/email fallback.
+- Accepted rides now save the real driver name into Firestore.
+- App builds and runs successfully.
+
+### Safety
+- No MapScreen changes.
+- No UI redesign.
+- No duplicate files.
+- Existing driver ride request / accept / decline / active trip / wallet / history / documents / support flow preserved.
+
+### Current Status
+- API key security completed.
+- Real driver name cleanup completed for drawer and DriverHomeScreen flow.
+
+### Next Professional Fix Options
+1. Replace hardcoded rider/profile values with real Firebase data.
+2. Move ride prices into constants file.
+3. Add Firestore Security Rules.
+4. README/GitHub polish.
+5. Package rename later before launch.
+
+
+## Phase 8.21.8 Completed — Ride Price Constants
+
+### Completed
+- Created new file:
+  - `RideitFareConstants.kt`
+- Updated:
+  - `MapViewModel.kt`
+- Removed hardcoded ride option prices from `MapViewModel.kt`.
+- Ride option IDs, titles, subtitles, fares, and ETA values now come from `RideitFareConstants`.
+
+### Current Ride Constants
+- Mini: Rs. 180
+- Comfort: Rs. 320
+- Business: Rs. 580
+
+### Result
+- App builds and runs successfully.
+- Rider ride options still work.
+- UI behavior remains unchanged.
+- No `MapScreen.kt` changes.
+- No Firebase changes.
+- No redesign.
+
+### Safety
+- Existing rider map flow preserved.
+- Existing driver flow preserved.
+- Existing navigation preserved.
+
+### Next Professional Fix Options
+1. Firestore Security Rules
+2. Replace hardcoded rider/profile demo values
+3. README/GitHub polish
+4. Package rename later before launch
+5. Gradual Firestore/ViewModel architecture cleanup later
+
+
+
+
+## Phase 8.21.9 Completed — Firestore Security Rules Published
+
+### Completed
+- Firestore Security Rules were added and published in Firebase Console.
+- Rules now protect:
+  - `users`
+  - `ride_requests`
+- Unknown collections are denied by default.
+- Delete operations are blocked.
+- Only signed-in users can access app Firestore data.
+
+### Current Status
+- API key security completed.
+- Real Firebase driver name cleanup completed.
+- Ride price constants completed.
+- Firestore Security Rules published.
+
+### Next Step
+Test full rider/driver Firebase flow:
+1. Rider books ride.
+2. Driver checks request.
+3. Driver accepts ride.
+4. Rider sees accepted driver.
+5. Complete/cancel/rating/history/wallet flows still work.
+
+### If Error Happens
+If app shows permission denied, update rules safely based on the exact failed flow.
+
+
+
+
+## Phase 8.21.9 Completed — Firestore Security Rules Working
+
+### Completed
+- Firestore Security Rules were published in Firebase Console.
+- Full rider/driver Firebase flow was tested after publishing rules.
+
+### Tested Successfully
+- Rider login
+- Rider booking
+- Driver login
+- Driver Live ON
+- Driver Check request
+- Driver accept ride
+- Rider sees accepted driver
+- Complete/cancel flow
+- Rider trip history
+- Driver wallet/history
+
+### Result
+- Firestore rules are working with current Rideit app flow.
+- No permission denied errors reported.
+- App remains stable.
+
+### Current Professional Fixes Completed
+- API key moved to `local.properties`
+- Hardcoded Google Maps key removed from Gradle
+- Real Firebase driver name connected
+- Hardcoded `"Shameer Khan"` removed from driver flow
+- Ride prices moved into `RideitFareConstants.kt`
+- Firestore Security Rules added and tested
+- Duplicate/conflicting files cleaned
+- Legacy routes cleaned
+- App icon connected
+- Main files audited
+
+### Next Best Phase
+Phase 8.21.10 — Professional README / GitHub Polish
+
+Goal:
+- Prepare app for client/GitHub presentation.
+- Write clean project description.
+- Add features list.
+- Add tech stack.
+- Add setup instructions.
+- Add Firebase/Maps key instructions.
+- Add screenshots section.
+- Add architecture notes.
+
+## Phase 8.21.10 Completed — Professional README / GitHub Polish
+
+### Completed
+- Created root `README.md`.
+- Added professional Rideit project overview.
+- Added rider features.
+- Added driver features.
+- Added security/professional fixes.
+- Added tech stack.
+- Added main app screens.
+- Added rider/driver app flow.
+- Fixed App Flow Markdown formatting.
+- Added Firebase setup notes.
+- Added Google Maps API key setup notes.
+- Added Firestore Security Rules section.
+- Added project structure.
+- Added completed cleanup list.
+- Added future improvements.
+- Added tested flow.
+- Added screenshots placeholder section.
+- Added run instructions.
+- Added developer section.
+
+### Result
+- README is now professional and GitHub/client friendly.
+- App Flow section is correctly formatted with separate Rider Flow and Driver Flow code blocks.
+- Project is easier for clients/recruiters to understand.
+
+### Current Professional Fixes Completed
+- API key moved to `local.properties`
+- Firestore Security Rules added and tested
+- Real Firebase driver name connected
+- Hardcoded `"Shameer Khan"` removed from driver flow
+- Ride prices moved to constants
+- Duplicate/conflicting files cleaned
+- Legacy routes cleaned
+- Professional README added
+
+### Next Best Phase
+Phase 8.21.11 — Screenshots Folder + GitHub Presentation Polish
+
+
+## Phase 8.21.11.1 Completed — Screenshots Folder Created Safely
+
+### Completed
+- Created root `screenshots` folder.
+- Added empty `.gitkeep` file inside `screenshots`.
+- Kept app code unchanged.
+- Did not touch `MapScreen.kt`.
+- Did not reconnect `RideitRiderMapPremiumLayer.kt`.
+- No Kotlin/Firebase/navigation files changed.
+
+### Result
+- GitHub presentation screenshots folder is ready.
+- Folder will be preserved on GitHub before real screenshots are added.
+
+### Next Step
+Phase 8.21.11.2 — Capture clean app screenshots later:
+- `account-type.png`
+- `rider-login.png`
+- `rider-map.png`
+- `driver-dashboard.png`
+- `driver-wallet.png`
+- `trip-history.png`
+
+## Phase 8.21.11.2 Postponed — Screenshots Will Be Added Near Launch
+
+### Decision
+- Final GitHub/client screenshots will not be added right now.
+- The app still has remaining features and polish work.
+- Screenshots should be captured only when the app is complete, stable, and ready for launch/client presentation.
+
+### Current Status
+- Root `screenshots` folder exists.
+- `.gitkeep` exists so GitHub will preserve the folder.
+- No real screenshots added yet.
+- README screenshot section will be updated later.
+
+### Reason
+- Early screenshots can make the project look unfinished.
+- Final screenshots should show the best version of Rideit.
+
+### Next Step
+Continue app completion and final polish before GitHub presentation screenshots.
+
+
+
+## Phase 8.21.12 Planned — Launch Readiness Feature Completion
+
+### Current Decision
+Final GitHub/client screenshots are postponed until the app is complete and launch-ready.
+
+The `screenshots` folder and `.gitkeep` are already prepared, but real screenshots and the README screenshot section will be added later near final client presentation.
+
+---
+
+## Remaining Launch-Ready Work
+
+### 1. Rider MapScreen Quick Places
+Improve the quick place buttons on the rider MapScreen:
+
+- Home
+- Work
+- Mall
+- Airport
+
+Goal:
+- Make these chips useful and professional.
+- When tapped, they should help set/select real locations.
+- Keep MapScreen design safe.
+- Do not redesign the whole MapScreen.
+
+---
+
+### 2. Enable Location Services / Real Device Location
+Improve location behavior:
+
+- If device location is ON and permission is granted, the app should automatically detect the user’s current location.
+- Map should move to the user’s real current location.
+- Avoid world map/default empty behavior.
+- Keep Islamabad fallback only when real location is unavailable.
+- “Enable location services” should actually connect to permission/location behavior.
+
+Goal:
+- Professional ride-hailing behavior like Uber/Careem.
+- User should not manually search current location if permission is already granted.
+
+---
+
+### 3. Rider Payment Method System
+Build proper payment method flow in Menu/Drawer.
+
+Payment options:
+- Cash
+- Debit/Credit Card
+- Rideit Wallet
+
+Goal:
+- User can select Cash.
+- User can add/manage Debit/Credit Card UI.
+- User can select Rideit Wallet.
+- Selected payment method should look professional and be ready for booking flow.
+
+Important:
+- Real bank/card charging does not need to be connected yet unless later required.
+- For portfolio/client version, build safe simulated card/wallet flow first.
+
+---
+
+### 4. Rideit Wallet System
+Build wallet flow:
+
+- Show wallet balance.
+- Add money to wallet.
+- Wallet history.
+- Use wallet as payment method.
+- Show insufficient balance message if needed.
+
+Goal:
+- Wallet should feel real and professional.
+- Firebase/local state can be used depending on safest architecture.
+
+---
+
+### 5. Rider Settings Full Sections
+Add/complete Settings sections:
+
+#### Languages
+- Add all country languages / major world languages.
+- User can select app language preference.
+
+#### Rideit Preferences
+- Dark mode.
+- Light mode.
+- Default/system theme.
+- App color preferences if safe.
+
+#### Privacy
+- Manage data.
+- Manage permissions.
+- Privacy controls.
+
+#### Emergency Contacts
+- Add emergency contact.
+- View emergency contacts.
+- Edit/remove later if needed.
+
+#### About Rideit
+- App information.
+- Version.
+- About text.
+- Safety/client-ready description.
+
+---
+
+### 6. Notification Preferences
+Add notification settings:
+
+- Email updates ON/OFF.
+- SMS updates ON/OFF.
+- App notifications ON/OFF.
+- Ride updates preference.
+- Promotions/marketing updates preference.
+
+Goal:
+- Professional notification preferences screen.
+
+---
+
+## Driver Side Matching Work
+
+After rider side is complete, apply matching quality to driver side.
+
+### 7. Driver Wallet / Earnings Polish
+- Driver wallet.
+- Earnings balance.
+- Trip earning history.
+- Withdraw/request payout UI if needed.
+- Keep current working wallet/history flow safe.
+
+---
+
+### 8. Driver Payment / Account Preferences
+- Driver payment receiving method.
+- Wallet/earnings settings.
+- Basic payout details UI.
+
+---
+
+### 9. Driver Settings Full Sections
+Driver settings should also include:
+
+- Languages.
+- Dark/light/default theme.
+- Privacy.
+- Permissions.
+- Emergency contacts.
+- About Rideit.
+- Notification preferences.
+
+---
+
+### 10. Driver Notifications
+Driver notification preferences:
+
+- Ride request alerts.
+- Email updates.
+- SMS updates.
+- App notifications.
+- Earnings updates.
+
+---
+
+## Final Launch Preparation
+
+### 11. Final QA
+Before screenshots:
+
+- Rider login works.
+- Driver login works.
+- Rider booking works.
+- Driver accept works.
+- Complete/cancel works.
+- Trip history works.
+- Wallet works.
+- Payment method works.
+- Settings screens work.
+- No crashes.
+- No permission denied errors.
+- No fake/hardcoded names.
+- No duplicate files.
+- No unused broken routes.
+
+---
+
+### 12. Final GitHub / Client Presentation
+Only after app is complete:
+
+- Capture final screenshots.
+- Add screenshots to `screenshots/`.
+- Update README screenshot section.
+- Final GitHub polish.
+- Final client presentation polish.
+
+---
+
+## Next Step
+Start with:
+
+### Phase 8.21.12.1 — Real Device Location + Map Quick Places
+
+Required files before starting:
+- `MapScreen.kt`
+- `MapViewModel.kt`
+- `MapRepository.kt`
+- `MapUiState.kt`
+- `LocationSuggestion.kt`
+
+Protection Rules:
+- Do not redesign MapScreen.
+- Do not reconnect `RideitRiderMapPremiumLayer.kt`.
+- Do not break existing booking flow.
+- Do not delete files without Find Usages.
+- Rebuild after every feature/fix step.

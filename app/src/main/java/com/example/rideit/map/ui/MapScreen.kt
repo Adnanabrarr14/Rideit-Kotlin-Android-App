@@ -735,7 +735,7 @@ fun MapScreen(
                 .align(Alignment.TopCenter)
                 .fillMaxWidth()
                 .statusBarsPadding()
-                .padding(start = 18.dp, end = 18.dp, top = 22.dp)
+                .padding(start = 10.dp, end = 10.dp, top = 10.dp)
         )
 
         MapFloatingControls(
@@ -985,20 +985,22 @@ private fun RiderMapTopChrome(
             Row(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .padding(start = 66.dp),
-                verticalAlignment = Alignment.CenterVertically
+                    .padding(start = 70.dp, end = 2.dp),
+                verticalAlignment = Alignment.Top
             ) {
                 Text(
                     text = "RideIt",
                     color = Color(0xFF8A35F2),
                     fontWeight = FontWeight.Black,
                     fontStyle = FontStyle.Italic,
-                    style = MaterialTheme.typography.titleLarge
+                    style = MaterialTheme.typography.titleLarge,
+                    modifier = Modifier.padding(top = 0.dp)
                 )
 
                 Spacer(modifier = Modifier.weight(1f))
 
                 Surface(
+                    modifier = Modifier.padding(top = 10.dp),
                     shape = RoundedCornerShape(50),
                     color = Color.White.copy(alpha = 0.96f),
                     shadowElevation = 10.dp
@@ -1026,27 +1028,27 @@ private fun RiderMapTopChrome(
                 }
             }
 
-            Spacer(modifier = Modifier.height(28.dp))
+            Spacer(modifier = Modifier.height(18.dp))
 
             Surface(
                 modifier = Modifier
                     .fillMaxWidth()
                     .clickable { onPermissionClick() },
-                shape = RoundedCornerShape(28.dp),
+                shape = RoundedCornerShape(26.dp),
                 color = Color.White.copy(alpha = 0.97f),
                 shadowElevation = 16.dp,
                 tonalElevation = 8.dp
             ) {
                 Column(
-                    modifier = Modifier.padding(horizontal = 16.dp, vertical = 14.dp)
+                    modifier = Modifier.padding(horizontal = 14.dp, vertical = 13.dp)
                 ) {
                     Row(
                         verticalAlignment = Alignment.CenterVertically
                     ) {
                         Box(
                             modifier = Modifier
-                                .size(48.dp)
-                                .clip(RoundedCornerShape(16.dp))
+                                .size(46.dp)
+                                .clip(RoundedCornerShape(15.dp))
                                 .background(Color(0xFFF1ECFF)),
                             contentAlignment = Alignment.Center
                         ) {
@@ -1080,18 +1082,18 @@ private fun RiderMapTopChrome(
                         }
                     }
 
-                    Spacer(modifier = Modifier.height(14.dp))
+                    Spacer(modifier = Modifier.height(12.dp))
 
                     Row(
-                        horizontalArrangement = Arrangement.spacedBy(10.dp),
+                        horizontalArrangement = Arrangement.spacedBy(8.dp),
                         modifier = Modifier.fillMaxWidth()
                     ) {
                         Surface(
                             modifier = Modifier
                                 .weight(1f)
-                                .height(48.dp)
+                                .height(46.dp)
                                 .clickable { onPermissionClick() },
-                            shape = RoundedCornerShape(18.dp),
+                            shape = RoundedCornerShape(17.dp),
                             color = Color(0xFFF1ECFF)
                         ) {
                             Box(contentAlignment = Alignment.Center) {
@@ -1107,9 +1109,9 @@ private fun RiderMapTopChrome(
                         Surface(
                             modifier = Modifier
                                 .weight(1f)
-                                .height(48.dp)
+                                .height(46.dp)
                                 .clickable { onPermissionClick() },
-                            shape = RoundedCornerShape(18.dp),
+                            shape = RoundedCornerShape(17.dp),
                             color = Color.Transparent,
                             shadowElevation = 10.dp
                         ) {

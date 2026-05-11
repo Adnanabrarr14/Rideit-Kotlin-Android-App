@@ -12,12 +12,6 @@ object Routes {
     const val MAP = "map"
     const val DRIVER_HOME = "driver_home"
 
-    const val PROFILE = "profile"
-    const val TRIP_HISTORY = "trip_history"
-    const val PAYMENT = "payment"
-    const val NOTIFICATIONS = "notifications"
-    const val SETTINGS = "settings"
-
     const val RIDER_PROFILE = "rider_profile"
     const val RIDER_TRIP_HISTORY = "rider_trip_history"
     const val RIDER_PAYMENT = "rider_payment"

@@ -195,7 +195,7 @@ fun AccountTypeScreen(
 
                     AccountChoiceCard(
                         icon = "🚘",
-                        title = "Driver\nLogin",
+                        title = "Driver Login",
                         badge = "Driver",
                         subtitle = "Go online, accept rides\nand view earnings.",
                         accentColor = purple,

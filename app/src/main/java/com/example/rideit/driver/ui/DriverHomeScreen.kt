@@ -108,7 +108,9 @@ private data class DriverDashboardStats(
 )
 
 @Composable
-fun DriverHomeScreen() {
+fun DriverHomeScreen(
+    driverName: String = FirebaseManager.currentDriverDisplayName()
+) {
     var isOnline by remember { mutableStateOf(false) }
     var showRideRequest by remember { mutableStateOf(false) }
     var activeDestination by remember { mutableStateOf(DriverHomeDestination.Home) }
@@ -447,7 +449,7 @@ fun DriverHomeScreen() {
     when (activeDestination) {
         DriverHomeDestination.ActiveTrip -> {
             DriverTripScreen(
-                driverName = "Shameer Khan",
+                driverName = driverName,
                 rideRequestId = activeRideRequestId,
                 onBackToDriverHome = {
                     resetRideRequestUi()
@@ -465,7 +467,7 @@ fun DriverHomeScreen() {
 
         DriverHomeDestination.Wallet -> {
             DriverWalletScreen(
-                driverName = "Shameer Khan",
+                driverName = driverName,
                 onBackClick = {
                     activeDestination = DriverHomeDestination.Home
                 }
@@ -475,7 +477,7 @@ fun DriverHomeScreen() {
 
         DriverHomeDestination.TripHistory -> {
             DriverTripHistoryScreen(
-                driverName = "Shameer Khan",
+                driverName = driverName,
                 onBackClick = {
                     activeDestination = DriverHomeDestination.Home
                 }
@@ -485,7 +487,7 @@ fun DriverHomeScreen() {
 
         DriverHomeDestination.Documents -> {
             DriverDocumentsScreen(
-                driverName = "Shameer Khan",
+                driverName = driverName,
                 onBackClick = {
                     activeDestination = DriverHomeDestination.Home
                 }
@@ -495,7 +497,7 @@ fun DriverHomeScreen() {
 
         DriverHomeDestination.Support -> {
             DriverSupportScreen(
-                driverName = "Shameer Khan",
+                driverName = driverName,
                 onBackClick = {
                     activeDestination = DriverHomeDestination.Home
                 }
@@ -522,7 +524,7 @@ fun DriverHomeScreen() {
                 .padding(horizontal = 18.dp, vertical = 18.dp)
         ) {
             DriverHeaderCard(
-                driverName = "Shameer Khan",
+                driverName = driverName,
                 isOnline = isOnline,
                 onOnlineChanged = { newValue ->
                     isOnline = newValue
@@ -597,7 +599,7 @@ fun DriverHomeScreen() {
                                         "status" to "accepted",
                                         "driverId" to driverId,
                                         "driverEmail" to driverEmail,
-                                        "driverName" to "Shameer Khan",
+                                        "driverName" to driverName,
                                         "acceptedAt" to Timestamp.now(),
                                         "updatedAt" to Timestamp.now()
                                     )
@@ -783,7 +785,7 @@ private fun DriverHeaderCard(
                     contentAlignment = Alignment.Center
                 ) {
                     Text(
-                        text = "S",
+                        text = driverName.driverAvatarLetter(),
                         style = MaterialTheme.typography.headlineSmall,
                         fontWeight = FontWeight.Black,
                         color = Color.White
@@ -1945,4 +1947,11 @@ private fun isWithinLastDays(
     } catch (_: Exception) {
         false
     }
+}
+
+private fun String.driverAvatarLetter(): String {
+    return trim()
+        .firstOrNull()
+        ?.uppercase()
+        ?: "D"
 }
