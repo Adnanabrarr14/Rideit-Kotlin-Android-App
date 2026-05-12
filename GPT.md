@@ -3588,3 +3588,199 @@ Protection Rules:
 - Do not break existing booking flow.
 - Do not delete files without Find Usages.
 - Rebuild after every feature/fix step.
+
+## Phase 8.21.12.1 Completed — Real Device Location + Quick Places + Safe Route Stabilization
+
+### Completed
+- Started Phase 8.21.12.1 for Rider MapScreen launch-readiness.
+- Connected quick place chips:
+  - Home
+  - Work
+  - Mall
+  - Airport
+- Improved quick place behavior:
+  - Home uses current detected device location as the home/current area placeholder.
+  - Work shows work/location suggestions so user can select work location.
+  - Mall shows mall suggestions.
+  - Airport shows airport suggestions.
+- Added real device location behavior using permission flow.
+- Added Device GPS / Fused Location Provider behavior.
+- Rider MapScreen now checks location permission after login/opening.
+- If permission is granted and device location is available, map moves to user’s current location.
+- If device location/GPS is off, app uses Android location settings flow instead of fake behavior.
+- Kept Islamabad fallback only as safe fallback when real location is unavailable.
+- Improved route display from curved route to a safer road-style angled route.
+- Added safe driver marker visibility on map.
+- Removed risky custom bitmap car marker after crash.
+- Restored app stability with safe default blue driver marker.
+- Kept Firebase booking flow unchanged.
+- Kept driver accept/cancel/complete flow unchanged.
+- Kept rider active trip panel working.
+- Kept MapScreen design protected and avoided full redesign.
+- Did not reconnect `RideitRiderMapPremiumLayer.kt`.
+
+### Important Notes
+- Android does not allow apps to silently turn GPS ON automatically.
+- Correct professional behavior is:
+  - Ask location permission.
+  - Check device GPS/location settings.
+  - Show Android GPS/location dialog if needed.
+  - Detect current location using Fused Location Provider after user allows.
+- Custom bitmap car marker caused crash risk and was removed.
+- Safe blue driver marker remains for now.
+- A proper drawable-based car marker can be added later safely.
+
+### Result
+- App opens successfully again.
+- Rider MapScreen is more professional.
+- Device GPS / Fused Location behavior is working safely.
+- Quick places are connected.
+- Route display is cleaner and less curved.
+- Driver marker appears safely without crashing the app.
+- App remains stable after MapScreen changes.
+
+### Current Stable Status
+- App is running.
+- Rider MapScreen opens.
+- Location permission/GPS flow works.
+- Quick places work.
+- Search Ride works.
+- Ride booking works.
+- Driver marker shows safely.
+- Cancel Ride still works.
+- Firebase flow remains protected.
+
+### Protection Rules Still Active
+- Do not redesign `MapScreen.kt`.
+- Do not reconnect `RideitRiderMapPremiumLayer.kt`.
+- Do not add risky custom bitmap marker code directly inside MapScreen.
+- Do not delete files without Find Usages.
+- Rebuild after every feature/fix step.
+
+### Next Phase
+Phase 8.21.12.2 — Rider Payment Method System
+
+Planned payment options:
+- Cash
+- Debit/Credit Card
+- Rideit Wallet
+
+Goal:
+- User can select Cash.
+- User can add/manage Debit/Credit Card UI.
+- User can select Rideit Wallet.
+- Selected payment method should be ready for booking flow.
+- Build safe simulated payment/wallet flow first for portfolio/client version.
+
+## Phase 8.21.12.3 — Rider Payment Method Firebase Save + Booking Attach
+
+### Status
+Completed and stable.
+
+### Completed
+- Rider selected payment method is saved to Firebase.
+- Payment screen loads saved rider payment method from Firebase.
+- Cash, Debit/Credit Card, and Rideit Wallet selection works.
+- Card flow remains safe demo mode.
+- Only card last 4 digits are saved.
+- Full card number and CVV are not stored.
+- Rideit Wallet demo balance is saved with rider profile.
+- New ride requests automatically attach selected payment method.
+- Ride request now stores:
+  - paymentMethodId
+  - paymentMethodTitle
+  - paymentStatus
+  - paymentMode
+  - paymentGateway
+  - paymentCaptured
+  - cardLastFour when card is selected
+  - walletBalanceAtBooking when wallet is selected
+- MapScreen was not touched.
+- Firebase booking flow remains protected.
+
+### Safety Notes
+- Real payment gateway is not connected yet.
+- Current payment flow is safe demo mode for portfolio/client presentation.
+- Real payment gateway integration should be done later near launch readiness.
+
+### Next Phase
+Phase 8.21.12.4 — Rider Wallet Screen + Wallet Top-up Demo Flow.
+
+
+
+## Phase 8.21.12.4 — Rider Wallet Screen + Wallet Top-up Demo Flow
+
+### Status
+Completed and stable.
+
+### Completed
+- Added new Rider Wallet screen.
+- Added `RIDER_WALLET` route.
+- Connected Rideit Wallet to rider drawer/menu.
+- Wallet balance loads from Firebase rider payment profile.
+- Demo wallet top-up options added:
+  - Rs. 500
+  - Rs. 1,000
+  - Rs. 2,500
+- Demo top-up updates wallet balance in Firebase.
+- Rider can select Rideit Wallet as active payment method from the Wallet screen.
+- Recent wallet activity UI added.
+- Safe demo mode messaging added.
+- No real money, bank account, payment gateway or card charging is connected.
+- MapScreen was not touched.
+- Existing Firebase booking/payment method attachment remains protected.
+
+### UI Correction
+- Removed Rideit Wallet from Payment Methods screen to reduce user confusion.
+- Payment Methods now shows only:
+  - Cash
+  - Debit / Credit Card
+- Rideit Wallet remains as a separate drawer/menu screen.
+- Wallet screen is responsible for:
+  - Balance
+  - Demo top-up
+  - Wallet payment selection
+- This creates a cleaner and more professional user flow.
+
+### Safety Notes
+- Wallet activity history is UI demo activity for now.
+- Wallet balance is saved in Firebase.
+- Real wallet transactions and payment gateway integration should be added later near launch readiness.
+
+### Next Phase
+Phase 8.21.12.5 — Driver Wallet / Earnings System.
+
+
+## Phase 8.21.12.5 — Driver Wallet / Earnings System
+
+### Status
+Completed and stable.
+
+### Completed
+- Added `DRIVER_WALLET` route.
+- Added Driver Wallet item to driver drawer/menu.
+- Connected drawer Driver Wallet to the existing driver-side wallet screen.
+- Fixed package/import issue:
+  - Driver wallet file remains in `com.example.rideit.driver.ui`.
+  - `RideitNavGraph.kt` now imports `com.example.rideit.driver.ui.DriverWalletScreen`.
+- Driver Wallet reads completed driver rides from Firebase.
+- Driver Wallet calculates:
+  - Available earnings
+  - Today earnings
+  - Weekly earnings
+  - Total earnings
+  - Completed trips
+  - Pending demo payout
+- Recent earnings activity UI added.
+- Demo withdrawal request UI added.
+- No real payout, bank transfer, payment gateway or withdrawal system is connected yet.
+- Existing DriverHomeScreen wallet flow remains protected.
+- MapScreen was not touched.
+
+### Safety Notes
+- Driver earnings are calculated from completed `ride_requests`.
+- Real payout integration should be added later near launch readiness.
+- Current payout flow is safe demo mode for portfolio/client presentation.
+
+### Next Phase
+Phase 8.21.12.6 — Driver Wallet polish + completed trip earning consistency QA.

@@ -25,9 +25,18 @@ class MapViewModel : ViewModel() {
 
     private var searchJob: Job? = null
     private var driverJob: Job? = null
+    private var quickPlaceJob: Job? = null
 
     fun onPickupTextChanged(text: String) {
         _uiState.value = _uiState.value.copy(pickupText = text)
+    }
+
+    fun onCurrentLocationDetected(latLng: LatLng) {
+        _uiState.value = _uiState.value.copy(
+            pickupText = "Current location",
+            pickupLatLng = latLng,
+            errorMessage = null
+        )
     }
 
     fun onDropoffTextChanged(text: String) {
@@ -55,6 +64,108 @@ class MapViewModel : ViewModel() {
         }
     }
 
+    fun onQuickPlaceSelected(type: String) {
+        val cleanType = type.lowercase().trim()
+        val currentLocation = _uiState.value.pickupLatLng
+
+        quickPlaceJob?.cancel()
+        quickPlaceJob = viewModelScope.launch {
+            _uiState.value = _uiState.value.copy(
+                showRideOptions = false,
+                selectedRideOption = null,
+                routePoints = emptyList(),
+                dropoffLatLng = null,
+                locationSuggestions = emptyList(),
+                errorMessage = when (cleanType) {
+                    "home" -> "Detecting your home/current area..."
+                    "work" -> "Select or add your work location"
+                    "mall" -> "Searching nearby malls..."
+                    "airport" -> "Searching nearby airports..."
+                    "restaurant" -> "Searching nearby restaurants..."
+                    else -> null
+                }
+            )
+
+            val suggestions = repository.searchQuickPlaceSuggestions(
+                quickPlaceType = cleanType,
+                currentLocation = currentLocation
+            )
+
+            when (cleanType) {
+                "home" -> {
+                    val home = suggestions.firstOrNull()
+                    if (home != null) {
+                        _uiState.value = _uiState.value.copy(
+                            dropoffText = home.title,
+                            dropoffLatLng = LatLng(home.latitude, home.longitude),
+                            locationSuggestions = emptyList(),
+                            errorMessage = null
+                        )
+                    } else {
+                        _uiState.value = _uiState.value.copy(
+                            dropoffText = "",
+                            dropoffLatLng = null,
+                            locationSuggestions = emptyList(),
+                            errorMessage = "Turn on location services to detect your home/current area"
+                        )
+                    }
+                }
+
+                "work" -> {
+                    _uiState.value = _uiState.value.copy(
+                        dropoffText = "Work",
+                        dropoffLatLng = null,
+                        locationSuggestions = suggestions,
+                        errorMessage = if (suggestions.isEmpty()) {
+                            "Search and select your work location"
+                        } else {
+                            "Select your work location from suggestions"
+                        }
+                    )
+                }
+
+                "mall" -> {
+                    _uiState.value = _uiState.value.copy(
+                        dropoffText = "Mall",
+                        dropoffLatLng = null,
+                        locationSuggestions = suggestions,
+                        errorMessage = if (suggestions.isEmpty()) {
+                            "No nearby malls found. Try typing mall name."
+                        } else {
+                            "Select a nearby mall"
+                        }
+                    )
+                }
+
+                "airport" -> {
+                    _uiState.value = _uiState.value.copy(
+                        dropoffText = "Airport",
+                        dropoffLatLng = null,
+                        locationSuggestions = suggestions,
+                        errorMessage = if (suggestions.isEmpty()) {
+                            "No nearby airports found. Try typing airport name."
+                        } else {
+                            "Select a nearby airport"
+                        }
+                    )
+                }
+
+                "restaurant" -> {
+                    _uiState.value = _uiState.value.copy(
+                        dropoffText = "Restaurant",
+                        dropoffLatLng = null,
+                        locationSuggestions = suggestions,
+                        errorMessage = if (suggestions.isEmpty()) {
+                            "No nearby restaurants found. Try typing restaurant name."
+                        } else {
+                            "Select a nearby restaurant"
+                        }
+                    )
+                }
+            }
+        }
+    }
+
     fun onSuggestionSelected(suggestion: LocationSuggestion) {
         _uiState.value = _uiState.value.copy(
             dropoffText = suggestion.title,
@@ -71,6 +182,16 @@ class MapViewModel : ViewModel() {
         if (dropoff == null) {
             _uiState.value = _uiState.value.copy(
                 errorMessage = "Select a dropoff location from suggestions"
+            )
+            return
+        }
+
+        if (
+            pickup.latitude == dropoff.latitude &&
+            pickup.longitude == dropoff.longitude
+        ) {
+            _uiState.value = _uiState.value.copy(
+                errorMessage = "Pickup and dropoff cannot be the same location"
             )
             return
         }

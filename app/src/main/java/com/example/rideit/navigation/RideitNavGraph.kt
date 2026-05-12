@@ -41,12 +41,14 @@ import androidx.navigation.compose.composable
 import androidx.navigation.compose.rememberNavController
 import com.example.rideit.FirebaseManager
 import com.example.rideit.driver.ui.DriverHomeScreen
+import com.example.rideit.driver.ui.DriverWalletScreen
 import com.example.rideit.map.ui.MapScreen
 import com.example.rideit.ui.screens.AccountTypeScreen
 import com.example.rideit.ui.screens.LoginScreen
 import com.example.rideit.ui.screens.NotificationsScreen
 import com.example.rideit.ui.screens.PaymentScreen
 import com.example.rideit.ui.screens.ProfileScreen
+import com.example.rideit.ui.screens.RiderWalletScreen
 import com.example.rideit.ui.screens.SettingsScreen
 import com.example.rideit.ui.screens.SignupScreen
 import com.example.rideit.ui.screens.TripHistoryScreen
@@ -225,6 +227,23 @@ fun RideitNavGraph(
             )
         }
 
+        composable(Routes.RIDER_WALLET) {
+            BackHandler {
+                returnToRiderHome(navController)
+            }
+
+            RiderWalletScreen(
+                onBackClick = {
+                    returnToRiderHome(navController)
+                },
+                onPaymentMethodsClick = {
+                    navController.navigate(Routes.RIDER_PAYMENT) {
+                        launchSingleTop = true
+                    }
+                }
+            )
+        }
+
         composable(Routes.RIDER_NOTIFICATIONS) {
             BackHandler {
                 returnToRiderHome(navController)
@@ -260,6 +279,18 @@ fun RideitNavGraph(
                 },
                 onLogoutClick = {
                     logoutAndReturnToAccountType(navController)
+                }
+            )
+        }
+
+        composable(Routes.DRIVER_WALLET) {
+            BackHandler {
+                returnToDriverHome(navController)
+            }
+
+            DriverWalletScreen(
+                onBackClick = {
+                    returnToDriverHome(navController)
                 }
             )
         }
@@ -348,6 +379,12 @@ private fun RiderMapWithDrawer(
                         launchSingleTop = true
                     }
                 },
+                onWalletClick = {
+                    scope.launch { drawerState.close() }
+                    navController.navigate(Routes.RIDER_WALLET) {
+                        launchSingleTop = true
+                    }
+                },
                 onNotificationsClick = {
                     scope.launch { drawerState.close() }
                     navController.navigate(Routes.RIDER_NOTIFICATIONS) {
@@ -417,6 +454,12 @@ private fun DriverHomeWithDrawer(
                         launchSingleTop = true
                     }
                 },
+                onWalletClick = {
+                    scope.launch { drawerState.close() }
+                    navController.navigate(Routes.DRIVER_WALLET) {
+                        launchSingleTop = true
+                    }
+                },
                 onSettingsClick = {
                     scope.launch { drawerState.close() }
                     navController.navigate(Routes.DRIVER_SETTINGS) {
@@ -462,6 +505,7 @@ private fun RiderDrawer(
     onProfileClick: () -> Unit,
     onTripHistoryClick: () -> Unit,
     onPaymentClick: () -> Unit,
+    onWalletClick: () -> Unit,
     onNotificationsClick: () -> Unit,
     onSettingsClick: () -> Unit,
     onLogout: () -> Unit
@@ -521,9 +565,17 @@ private fun RiderDrawer(
             DrawerItem(
                 icon = "💳",
                 title = "Payment Methods",
-                subtitle = "Cards, cash and wallet",
+                subtitle = "Cash and card",
                 selected = false,
                 onClick = onPaymentClick
+            )
+
+            DrawerItem(
+                icon = "👛",
+                title = "Rideit Wallet",
+                subtitle = "Balance and demo top-up",
+                selected = false,
+                onClick = onWalletClick
             )
 
             DrawerItem(
@@ -554,6 +606,7 @@ private fun DriverDrawer(
     driverName: String,
     onDriverHomeClick: () -> Unit,
     onProfileClick: () -> Unit,
+    onWalletClick: () -> Unit,
     onSettingsClick: () -> Unit,
     onLogout: () -> Unit
 ) {
@@ -602,6 +655,14 @@ private fun DriverDrawer(
             )
 
             DrawerItem(
+                icon = "₨",
+                title = "Driver Wallet",
+                subtitle = "Earnings and demo payout",
+                selected = false,
+                onClick = onWalletClick
+            )
+
+            DrawerItem(
                 icon = "⚙️",
                 title = "Driver Settings",
                 subtitle = "Driver app preferences",
@@ -627,7 +688,7 @@ private fun DriverDrawer(
                     Spacer(modifier = Modifier.height(6.dp))
 
                     Text(
-                        text = "Wallet, trip history, vehicle documents, support and active trip tools are inside Driver Dashboard.",
+                        text = "Wallet, trip history, vehicle documents, support and active trip tools remain inside Driver Dashboard too.",
                         color = Color(0xFF9CA3AF),
                         style = MaterialTheme.typography.bodySmall,
                         fontWeight = FontWeight.Medium
@@ -722,7 +783,11 @@ private fun DrawerItem(
                     .background(iconBackgroundColor),
                 contentAlignment = Alignment.Center
             ) {
-                Text(icon)
+                Text(
+                    text = icon,
+                    color = Color.White,
+                    fontWeight = FontWeight.Black
+                )
             }
 
             Spacer(modifier = Modifier.width(12.dp))

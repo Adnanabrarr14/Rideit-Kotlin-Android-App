@@ -2,6 +2,7 @@ package com.example.rideit
 
 import com.google.firebase.Timestamp
 import com.google.firebase.auth.FirebaseAuth
+import com.google.firebase.firestore.DocumentSnapshot
 import com.google.firebase.firestore.FirebaseFirestore
 import com.google.firebase.firestore.SetOptions
 
@@ -12,6 +13,17 @@ object FirebaseManager {
 
     const val ROLE_RIDER = "rider"
     const val ROLE_DRIVER = "driver"
+
+    const val PAYMENT_CASH = "cash"
+    const val PAYMENT_CARD = "card"
+    const val PAYMENT_WALLET = "wallet"
+
+    data class RiderPaymentProfile(
+        val selectedPaymentMethod: String = PAYMENT_CASH,
+        val cardLastFour: String = "",
+        val cardHolderName: String = "",
+        val walletBalance: Long = 1250L
+    )
 
     fun login(
         email: String,
@@ -137,6 +149,9 @@ object FirebaseManager {
 
                 if (!snapshot.exists()) {
                     userData["createdAt"] = Timestamp.now()
+                    userData["riderSelectedPaymentMethod"] = PAYMENT_CASH
+                    userData["riderWalletBalance"] = 1250L
+                    userData["riderPaymentMode"] = "safe_demo"
                 }
 
                 userDocument
@@ -150,6 +165,109 @@ object FirebaseManager {
             }
             .addOnFailureListener { exception ->
                 onError(exception.message ?: "Failed to check user profile")
+            }
+    }
+
+    fun loadRiderPaymentProfile(
+        onSuccess: (RiderPaymentProfile) -> Unit,
+        onError: (String) -> Unit
+    ) {
+        val currentUser = auth.currentUser
+
+        if (currentUser == null) {
+            onError("You must be logged in to load payment methods.")
+            return
+        }
+
+        firestore.collection("users")
+            .document(currentUser.uid)
+            .get()
+            .addOnSuccessListener { snapshot ->
+                onSuccess(paymentProfileFromSnapshot(snapshot))
+            }
+            .addOnFailureListener { exception ->
+                onError(exception.message ?: "Failed to load payment method")
+            }
+    }
+
+    fun saveRiderPaymentProfile(
+        selectedPaymentMethod: String,
+        cardLastFour: String,
+        cardHolderName: String,
+        walletBalance: Long = 1250L,
+        onSuccess: () -> Unit,
+        onError: (String) -> Unit
+    ) {
+        val currentUser = auth.currentUser
+
+        if (currentUser == null) {
+            onError("You must be logged in to save payment method.")
+            return
+        }
+
+        val safeMethod = when (selectedPaymentMethod.lowercase()) {
+            PAYMENT_CARD -> PAYMENT_CARD
+            PAYMENT_WALLET -> PAYMENT_WALLET
+            else -> PAYMENT_CASH
+        }
+
+        val cleanLastFour = cardLastFour
+            .filter { it.isDigit() }
+            .takeLast(4)
+
+        val cleanCardHolderName = cardHolderName
+            .trim()
+            .take(40)
+
+        val paymentData = hashMapOf<String, Any>(
+            "riderSelectedPaymentMethod" to safeMethod,
+            "riderCardLastFour" to cleanLastFour,
+            "riderCardHolderName" to cleanCardHolderName,
+            "riderWalletBalance" to walletBalance.coerceAtLeast(0L),
+            "riderPaymentMode" to "safe_demo",
+            "riderPaymentUpdatedAt" to Timestamp.now(),
+            "updatedAt" to Timestamp.now()
+        )
+
+        firestore.collection("users")
+            .document(currentUser.uid)
+            .set(paymentData, SetOptions.merge())
+            .addOnSuccessListener {
+                onSuccess()
+            }
+            .addOnFailureListener { exception ->
+                onError(exception.message ?: "Failed to save payment method")
+            }
+    }
+
+    fun removeRiderSavedCard(
+        onSuccess: () -> Unit,
+        onError: (String) -> Unit
+    ) {
+        val currentUser = auth.currentUser
+
+        if (currentUser == null) {
+            onError("You must be logged in to remove card.")
+            return
+        }
+
+        val paymentData = hashMapOf<String, Any>(
+            "riderSelectedPaymentMethod" to PAYMENT_CASH,
+            "riderCardLastFour" to "",
+            "riderCardHolderName" to "",
+            "riderPaymentMode" to "safe_demo",
+            "riderPaymentUpdatedAt" to Timestamp.now(),
+            "updatedAt" to Timestamp.now()
+        )
+
+        firestore.collection("users")
+            .document(currentUser.uid)
+            .set(paymentData, SetOptions.merge())
+            .addOnSuccessListener {
+                onSuccess()
+            }
+            .addOnFailureListener { exception ->
+                onError(exception.message ?: "Failed to remove saved card")
             }
     }
 
@@ -168,6 +286,48 @@ object FirebaseManager {
             return
         }
 
+        firestore.collection("users")
+            .document(currentUser.uid)
+            .get()
+            .addOnSuccessListener { userSnapshot ->
+                saveRideRequestWithPaymentProfile(
+                    currentUserUid = currentUser.uid,
+                    currentUserEmail = currentUser.email ?: "",
+                    pickupAddress = pickupAddress,
+                    dropoffAddress = dropoffAddress,
+                    rideType = rideType,
+                    fareEstimate = fareEstimate,
+                    paymentProfile = paymentProfileFromSnapshot(userSnapshot),
+                    onSuccess = onSuccess,
+                    onError = onError
+                )
+            }
+            .addOnFailureListener {
+                saveRideRequestWithPaymentProfile(
+                    currentUserUid = currentUser.uid,
+                    currentUserEmail = currentUser.email ?: "",
+                    pickupAddress = pickupAddress,
+                    dropoffAddress = dropoffAddress,
+                    rideType = rideType,
+                    fareEstimate = fareEstimate,
+                    paymentProfile = RiderPaymentProfile(),
+                    onSuccess = onSuccess,
+                    onError = onError
+                )
+            }
+    }
+
+    private fun saveRideRequestWithPaymentProfile(
+        currentUserUid: String,
+        currentUserEmail: String,
+        pickupAddress: String,
+        dropoffAddress: String,
+        rideType: String,
+        fareEstimate: String,
+        paymentProfile: RiderPaymentProfile,
+        onSuccess: (String) -> Unit,
+        onError: (String) -> Unit
+    ) {
         val requestRef = firestore.collection("ride_requests").document()
 
         val cleanPickup = pickupAddress.trim().ifBlank { "Selected pickup location" }
@@ -175,14 +335,32 @@ object FirebaseManager {
         val cleanRideType = rideType.trim().ifBlank { "Rideit" }
         val cleanFareEstimate = fareEstimate.trim().ifBlank { "Fare pending" }
 
-        val requestData = hashMapOf(
+        val safePaymentMethod = when (paymentProfile.selectedPaymentMethod.lowercase()) {
+            PAYMENT_CARD -> PAYMENT_CARD
+            PAYMENT_WALLET -> PAYMENT_WALLET
+            else -> PAYMENT_CASH
+        }
+
+        val paymentTitle = when (safePaymentMethod) {
+            PAYMENT_CARD -> "Debit / Credit Card"
+            PAYMENT_WALLET -> "Rideit Wallet"
+            else -> "Cash"
+        }
+
+        val paymentStatus = when (safePaymentMethod) {
+            PAYMENT_CARD -> "demo_card_selected"
+            PAYMENT_WALLET -> "demo_wallet_selected"
+            else -> "cash_pending"
+        }
+
+        val requestData = hashMapOf<String, Any>(
             "requestId" to requestRef.id,
 
-            "riderId" to currentUser.uid,
-            "riderEmail" to (currentUser.email ?: ""),
+            "riderId" to currentUserUid,
+            "riderEmail" to currentUserEmail,
 
-            "userId" to currentUser.uid,
-            "userEmail" to (currentUser.email ?: ""),
+            "userId" to currentUserUid,
+            "userEmail" to currentUserEmail,
 
             "pickupAddress" to cleanPickup,
             "dropoffAddress" to cleanDropoff,
@@ -193,10 +371,26 @@ object FirebaseManager {
             "fareEstimate" to cleanFareEstimate,
             "fare" to cleanFareEstimate,
 
+            "paymentMethodId" to safePaymentMethod,
+            "paymentMethodTitle" to paymentTitle,
+            "paymentStatus" to paymentStatus,
+            "paymentMode" to "safe_demo",
+            "paymentGateway" to "none",
+            "paymentCaptured" to false,
+            "paymentAddedAtBooking" to true,
+
             "status" to "pending",
             "createdAt" to Timestamp.now(),
             "updatedAt" to Timestamp.now()
         )
+
+        if (safePaymentMethod == PAYMENT_CARD && paymentProfile.cardLastFour.isNotBlank()) {
+            requestData["cardLastFour"] = paymentProfile.cardLastFour
+        }
+
+        if (safePaymentMethod == PAYMENT_WALLET) {
+            requestData["walletBalanceAtBooking"] = paymentProfile.walletBalance
+        }
 
         requestRef
             .set(requestData)
@@ -206,6 +400,42 @@ object FirebaseManager {
             .addOnFailureListener { exception ->
                 onError(exception.message ?: "Failed to save ride request")
             }
+    }
+
+    private fun paymentProfileFromSnapshot(
+        snapshot: DocumentSnapshot?
+    ): RiderPaymentProfile {
+        if (snapshot == null || !snapshot.exists()) {
+            return RiderPaymentProfile()
+        }
+
+        val method = when (
+            snapshot.getString("riderSelectedPaymentMethod")
+                ?.trim()
+                ?.lowercase()
+        ) {
+            PAYMENT_CARD -> PAYMENT_CARD
+            PAYMENT_WALLET -> PAYMENT_WALLET
+            else -> PAYMENT_CASH
+        }
+
+        val lastFour = snapshot.getString("riderCardLastFour")
+            ?.filter { it.isDigit() }
+            ?.takeLast(4)
+            .orEmpty()
+
+        val cardHolderName = snapshot.getString("riderCardHolderName")
+            ?.trim()
+            .orEmpty()
+
+        val walletBalance = snapshot.getLong("riderWalletBalance") ?: 1250L
+
+        return RiderPaymentProfile(
+            selectedPaymentMethod = method,
+            cardLastFour = lastFour,
+            cardHolderName = cardHolderName,
+            walletBalance = walletBalance.coerceAtLeast(0L)
+        )
     }
 
     fun findLatestRestorableRiderRide(

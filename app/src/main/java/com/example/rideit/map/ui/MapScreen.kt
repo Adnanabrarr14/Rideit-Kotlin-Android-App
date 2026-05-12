@@ -1,8 +1,12 @@
 package com.example.rideit.map.ui
 
 import android.Manifest
+import android.annotation.SuppressLint
+import android.app.Activity
+import android.content.IntentSender
 import android.content.pm.PackageManager
 import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.IntentSenderRequest
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.fadeIn
@@ -72,11 +76,17 @@ import com.example.rideit.map.model.MapUiState
 import com.example.rideit.map.model.RideOption
 import com.example.rideit.map.model.RideRequestStatus
 import com.example.rideit.map.viewmodel.MapViewModel
+import com.google.android.gms.common.api.ResolvableApiException
+import com.google.android.gms.location.LocationRequest
+import com.google.android.gms.location.LocationServices
+import com.google.android.gms.location.LocationSettingsRequest
+import com.google.android.gms.location.Priority
 import com.google.android.gms.maps.CameraUpdateFactory
 import com.google.android.gms.maps.model.BitmapDescriptorFactory
 import com.google.android.gms.maps.model.CameraPosition
 import com.google.android.gms.maps.model.LatLng
 import com.google.android.gms.maps.model.LatLngBounds
+import com.google.android.gms.tasks.CancellationTokenSource
 import com.google.firebase.firestore.FirebaseFirestore
 import com.google.firebase.firestore.ListenerRegistration
 import com.google.maps.android.compose.GoogleMap
@@ -120,10 +130,161 @@ fun MapScreen(
     var firebaseTripCancelledByDriver by remember { mutableStateOf(false) }
     var firebaseLiveTripStatus by remember { mutableStateOf<String?>(null) }
 
+    var pendingDetectAfterGpsDialog by remember { mutableStateOf(false) }
+    var showLocationCard by remember { mutableStateOf(true) }
+
     val firestore = remember { FirebaseFirestore.getInstance() }
     val scope = rememberCoroutineScope()
     val snackbarHostState = remember { SnackbarHostState() }
     val context = LocalContext.current
+    val fusedLocationClient = remember { LocationServices.getFusedLocationProviderClient(context) }
+    val settingsClient = remember { LocationServices.getSettingsClient(context) }
+
+    val defaultLocation = LatLng(33.6844, 73.0479)
+
+    val cameraPositionState = rememberCameraPositionState {
+        position = CameraPosition.fromLatLngZoom(defaultLocation, 14f)
+    }
+
+    fun moveToDetectedLocation(location: LatLng, message: String) {
+        mapViewModel.onCurrentLocationDetected(location)
+        showLocationCard = false
+
+        scope.launch {
+            cameraPositionState.animate(
+                update = CameraUpdateFactory.newLatLngZoom(location, 16.5f),
+                durationMs = 900
+            )
+            snackbarHostState.showSnackbar(message)
+        }
+    }
+
+    @SuppressLint("MissingPermission")
+    fun detectLocationWithFusedProvider(showSuccessSnackbar: Boolean = true) {
+        val fineGranted = ContextCompat.checkSelfPermission(
+            context,
+            Manifest.permission.ACCESS_FINE_LOCATION
+        ) == PackageManager.PERMISSION_GRANTED
+
+        val coarseGranted = ContextCompat.checkSelfPermission(
+            context,
+            Manifest.permission.ACCESS_COARSE_LOCATION
+        ) == PackageManager.PERMISSION_GRANTED
+
+        if (!fineGranted && !coarseGranted) return
+
+        val cancellationTokenSource = CancellationTokenSource()
+
+        fusedLocationClient.getCurrentLocation(
+            Priority.PRIORITY_HIGH_ACCURACY,
+            cancellationTokenSource.token
+        ).addOnSuccessListener { location ->
+            if (location != null) {
+                moveToDetectedLocation(
+                    location = LatLng(location.latitude, location.longitude),
+                    message = if (showSuccessSnackbar) {
+                        "Current location detected."
+                    } else {
+                        "Map moved to your current location."
+                    }
+                )
+            } else {
+                fusedLocationClient.lastLocation
+                    .addOnSuccessListener { lastLocation ->
+                        if (lastLocation != null) {
+                            moveToDetectedLocation(
+                                location = LatLng(lastLocation.latitude, lastLocation.longitude),
+                                message = if (showSuccessSnackbar) {
+                                    "Current location detected."
+                                } else {
+                                    "Map moved to your current location."
+                                }
+                            )
+                        } else {
+                            scope.launch {
+                                snackbarHostState.showSnackbar(
+                                    "Unable to detect current GPS location. Please try again."
+                                )
+                            }
+                        }
+                    }
+                    .addOnFailureListener {
+                        scope.launch {
+                            snackbarHostState.showSnackbar(
+                                "Unable to detect current GPS location. Please try again."
+                            )
+                        }
+                    }
+            }
+        }.addOnFailureListener {
+            scope.launch {
+                snackbarHostState.showSnackbar(
+                    "Unable to detect current GPS location. Please try again."
+                )
+            }
+        }
+    }
+
+    val gpsSettingsLauncher = rememberLauncherForActivityResult(
+        contract = ActivityResultContracts.StartIntentSenderForResult()
+    ) { result ->
+        if (result.resultCode == Activity.RESULT_OK || pendingDetectAfterGpsDialog) {
+            pendingDetectAfterGpsDialog = false
+            detectLocationWithFusedProvider(showSuccessSnackbar = true)
+        } else {
+            pendingDetectAfterGpsDialog = false
+            scope.launch {
+                snackbarHostState.showSnackbar(
+                    "Device location is still off. Turn it on to detect your current location."
+                )
+            }
+        }
+    }
+
+    fun checkGpsSettingsThenDetectLocation(showSuccessSnackbar: Boolean = true) {
+        val locationRequest = LocationRequest.Builder(
+            Priority.PRIORITY_HIGH_ACCURACY,
+            1_000L
+        )
+            .setMinUpdateIntervalMillis(500L)
+            .setWaitForAccurateLocation(false)
+            .build()
+
+        val locationSettingsRequest = LocationSettingsRequest.Builder()
+            .addLocationRequest(locationRequest)
+            .setAlwaysShow(true)
+            .build()
+
+        settingsClient.checkLocationSettings(locationSettingsRequest)
+            .addOnSuccessListener {
+                detectLocationWithFusedProvider(showSuccessSnackbar = showSuccessSnackbar)
+            }
+            .addOnFailureListener { exception ->
+                if (exception is ResolvableApiException) {
+                    pendingDetectAfterGpsDialog = true
+
+                    try {
+                        val intentSenderRequest = IntentSenderRequest.Builder(
+                            exception.resolution
+                        ).build()
+
+                        gpsSettingsLauncher.launch(intentSenderRequest)
+                    } catch (_: IntentSender.SendIntentException) {
+                        scope.launch {
+                            snackbarHostState.showSnackbar(
+                                "Unable to open location settings. Please turn on GPS manually."
+                            )
+                        }
+                    }
+                } else {
+                    scope.launch {
+                        snackbarHostState.showSnackbar(
+                            "Please turn on device location services."
+                        )
+                    }
+                }
+            }
+    }
 
     val locationPermissionLauncher = rememberLauncherForActivityResult(
         contract = ActivityResultContracts.RequestMultiplePermissions()
@@ -132,18 +293,19 @@ fun MapScreen(
             permissions[Manifest.permission.ACCESS_FINE_LOCATION] == true ||
                     permissions[Manifest.permission.ACCESS_COARSE_LOCATION] == true
 
-        scope.launch {
-            snackbarHostState.showSnackbar(
-                message = if (granted) {
-                    "Location permission enabled."
-                } else {
+        if (granted) {
+            checkGpsSettingsThenDetectLocation(showSuccessSnackbar = true)
+        } else {
+            showLocationCard = true
+            scope.launch {
+                snackbarHostState.showSnackbar(
                     "Location permission is required to find nearby rides."
-                }
-            )
+                )
+            }
         }
     }
 
-    fun requestLocationPermission() {
+    fun requestLocationPermissionAndGps() {
         val fineGranted = ContextCompat.checkSelfPermission(
             context,
             Manifest.permission.ACCESS_FINE_LOCATION
@@ -155,9 +317,7 @@ fun MapScreen(
         ) == PackageManager.PERMISSION_GRANTED
 
         if (fineGranted || coarseGranted) {
-            scope.launch {
-                snackbarHostState.showSnackbar("Location permission already enabled.")
-            }
+            checkGpsSettingsThenDetectLocation(showSuccessSnackbar = true)
         } else {
             locationPermissionLauncher.launch(
                 arrayOf(
@@ -168,10 +328,30 @@ fun MapScreen(
         }
     }
 
-    val defaultLocation = LatLng(33.6844, 73.0479)
+    LaunchedEffect(Unit) {
+        val fineGranted = ContextCompat.checkSelfPermission(
+            context,
+            Manifest.permission.ACCESS_FINE_LOCATION
+        ) == PackageManager.PERMISSION_GRANTED
 
-    val cameraPositionState = rememberCameraPositionState {
-        position = CameraPosition.fromLatLngZoom(defaultLocation, 14f)
+        val coarseGranted = ContextCompat.checkSelfPermission(
+            context,
+            Manifest.permission.ACCESS_COARSE_LOCATION
+        ) == PackageManager.PERMISSION_GRANTED
+
+        if (fineGranted || coarseGranted) {
+            delay(650)
+            checkGpsSettingsThenDetectLocation(showSuccessSnackbar = false)
+        } else {
+            delay(450)
+            showLocationCard = true
+            locationPermissionLauncher.launch(
+                arrayOf(
+                    Manifest.permission.ACCESS_FINE_LOCATION,
+                    Manifest.permission.ACCESS_COARSE_LOCATION
+                )
+            )
+        }
     }
 
     LaunchedEffect(Unit) {
@@ -274,7 +454,6 @@ fun MapScreen(
 
     DisposableEffect(activeRideRequestId) {
         var listenerRegistration: ListenerRegistration? = null
-
         val requestId = activeRideRequestId
 
         if (!requestId.isNullOrBlank()) {
@@ -473,7 +652,7 @@ fun MapScreen(
                 !uiState.showRideOptions &&
                 uiState.selectedRideOption == null
 
-    val driverDisplayName = firebaseDriverName ?: uiState.driver?.name ?: "Shameer Khan"
+    val driverDisplayName = firebaseDriverName ?: uiState.driver?.name ?: "Driver"
     val driverPhone = "+92 300 1234567"
     val driverVehicleModel = uiState.driver?.vehicleName ?: selectedRide?.title?.let { "$it Rideit Car" } ?: "Toyota Corolla"
     val driverVehicleNumber = uiState.driver?.vehicleNumber ?: "RIA-2026"
@@ -488,11 +667,11 @@ fun MapScreen(
                 firebaseLiveTripStatus == "searching" ||
                 firebaseLiveTripStatus == "searching_driver" -> "Waiting for driver to accept"
         firebaseLiveTripStatus == "accepted" -> "$driverDisplayName accepted your ride"
-        firebaseLiveTripStatus == "driver_arriving" -> "Driver arrived at pickup"
+        firebaseLiveTripStatus == "driver_arriving" -> "Driver is coming to pickup"
         firebaseLiveTripStatus == "ride_started" -> "Trip is currently in progress"
         uiState.rideRequestStatus == RideRequestStatus.SEARCHING_DRIVER -> "Finding your driver"
         uiState.rideRequestStatus == RideRequestStatus.DRIVER_FOUND -> "$driverDisplayName accepted your ride"
-        uiState.rideRequestStatus == RideRequestStatus.DRIVER_ARRIVING -> "Driver arrived at pickup"
+        uiState.rideRequestStatus == RideRequestStatus.DRIVER_ARRIVING -> "Driver is coming to pickup"
         uiState.rideRequestStatus == RideRequestStatus.RIDE_STARTED -> "Ride is currently in progress"
         else -> "Driver status"
     }
@@ -527,12 +706,12 @@ fun MapScreen(
                 firebaseLiveTripStatus == "searching" ||
                 firebaseLiveTripStatus == "searching_driver" -> "Finding driver"
         firebaseLiveTripStatus == "accepted" -> "Driver accepted"
-        firebaseLiveTripStatus == "driver_arriving" -> "Driver arrived"
+        firebaseLiveTripStatus == "driver_arriving" -> "Driver is coming"
         firebaseLiveTripStatus == "ride_started" -> "Trip in progress"
         else -> when (currentTripStatus) {
             RideitTripStatus.SearchingDriver -> "Finding driver"
             RideitTripStatus.DriverFound -> "Driver assigned"
-            RideitTripStatus.DriverArriving -> "Driver arrived"
+            RideitTripStatus.DriverArriving -> "Driver is coming"
             RideitTripStatus.TripInProgress -> "Trip tracking"
             RideitTripStatus.TripCompleted -> "Trip completed"
             RideitTripStatus.Cancelled -> "Ride cancelled"
@@ -685,7 +864,12 @@ fun MapScreen(
         ) {
             if (!firebaseTripCompleted && !firebaseTripCancelledByDriver) {
                 uiState.pickupLatLng?.let {
-                    Marker(state = MarkerState(it), title = "Pickup")
+                    Marker(
+                        state = MarkerState(it),
+                        title = "Your location",
+                        snippet = "Current GPS pickup location",
+                        icon = BitmapDescriptorFactory.defaultMarker(BitmapDescriptorFactory.HUE_CYAN)
+                    )
                 }
 
                 uiState.dropoffLatLng?.let {
@@ -699,7 +883,7 @@ fun MapScreen(
                         snippet = when (firebaseLiveTripStatus) {
                             "pending", "requested", "searching", "searching_driver" -> "Waiting for driver"
                             "accepted" -> "Driver accepted your ride"
-                            "driver_arriving" -> "Driver arrived at pickup"
+                            "driver_arriving" -> "Driver is coming to pickup"
                             "ride_started" -> "Trip in progress"
                             else -> "Driver is on the way"
                         },
@@ -710,8 +894,16 @@ fun MapScreen(
                 if (uiState.routePoints.size >= 2) {
                     Polyline(
                         points = uiState.routePoints,
-                        width = 8f,
-                        color = Color(0xFF8A35F2)
+                        width = 10f,
+                        color = Color.White,
+                        geodesic = false
+                    )
+
+                    Polyline(
+                        points = uiState.routePoints,
+                        width = 6f,
+                        color = Color(0xFF7B1DE8),
+                        geodesic = false
                     )
                 }
             }
@@ -728,18 +920,26 @@ fun MapScreen(
 
         RiderMapTopChrome(
             visible = shouldShowRiderTopHeader,
+            showLocationCard = showLocationCard,
+            locationLabel = if (uiState.pickupLatLng != null) "Current area" else "GPS off",
             onPermissionClick = {
-                requestLocationPermission()
+                requestLocationPermissionAndGps()
+            },
+            onDismissLocationCard = {
+                showLocationCard = false
             },
             modifier = Modifier
                 .align(Alignment.TopCenter)
                 .fillMaxWidth()
                 .statusBarsPadding()
-                .padding(start = 10.dp, end = 10.dp, top = 10.dp)
+                .padding(start = 12.dp, end = 12.dp, top = 8.dp)
         )
 
         MapFloatingControls(
             visible = shouldShowRiderTopHeader,
+            onMyLocation = {
+                requestLocationPermissionAndGps()
+            },
             onZoomIn = {
                 scope.launch {
                     cameraPositionState.animate(CameraUpdateFactory.zoomIn(), 350)
@@ -752,7 +952,7 @@ fun MapScreen(
             },
             modifier = Modifier
                 .align(Alignment.CenterEnd)
-                .padding(end = 20.dp, top = 44.dp)
+                .padding(end = 18.dp, top = 44.dp)
         )
 
         PremiumTripStatusBanner(
@@ -763,7 +963,7 @@ fun MapScreen(
             modifier = Modifier
                 .align(Alignment.TopCenter)
                 .statusBarsPadding()
-                .padding(top = if (shouldShowRiderTopHeader) 186.dp else 12.dp)
+                .padding(top = if (shouldShowRiderTopHeader && showLocationCard) 144.dp else 82.dp)
         )
 
         CompactRouteChip(
@@ -777,7 +977,11 @@ fun MapScreen(
                 .align(Alignment.TopStart)
                 .statusBarsPadding()
                 .padding(
-                    top = if (currentTripStatus == RideitTripStatus.Idle) 204.dp else 116.dp,
+                    top = if (currentTripStatus == RideitTripStatus.Idle) {
+                        if (showLocationCard) 170.dp else 104.dp
+                    } else {
+                        116.dp
+                    },
                     start = 16.dp,
                     end = 120.dp
                 )
@@ -972,7 +1176,10 @@ fun MapScreen(
 @Composable
 private fun RiderMapTopChrome(
     visible: Boolean,
+    showLocationCard: Boolean,
+    locationLabel: String,
     onPermissionClick: () -> Unit,
+    onDismissLocationCard: () -> Unit,
     modifier: Modifier = Modifier
 ) {
     AnimatedVisibility(
@@ -985,70 +1192,82 @@ private fun RiderMapTopChrome(
             Row(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .padding(start = 70.dp, end = 2.dp),
-                verticalAlignment = Alignment.Top
+                    .padding(start = 150.dp, end = 0.dp),
+                verticalAlignment = Alignment.CenterVertically
             ) {
-                Text(
-                    text = "RideIt",
-                    color = Color(0xFF8A35F2),
-                    fontWeight = FontWeight.Black,
-                    fontStyle = FontStyle.Italic,
-                    style = MaterialTheme.typography.titleLarge,
-                    modifier = Modifier.padding(top = 0.dp)
-                )
+                Surface(
+                    shape = RoundedCornerShape(18.dp),
+                    color = Color.White.copy(alpha = 0.98f),
+                    shadowElevation = 10.dp
+                ) {
+                    Text(
+                        text = "RideIt",
+                        color = Color(0xFF8A35F2),
+                        fontWeight = FontWeight.Black,
+                        fontStyle = FontStyle.Italic,
+                        style = MaterialTheme.typography.titleMedium,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis,
+                        modifier = Modifier.padding(horizontal = 14.dp, vertical = 9.dp)
+                    )
+                }
 
-                Spacer(modifier = Modifier.weight(1f))
+                Spacer(modifier = Modifier.width(8.dp))
 
                 Surface(
-                    modifier = Modifier.padding(top = 10.dp),
                     shape = RoundedCornerShape(50),
-                    color = Color.White.copy(alpha = 0.96f),
+                    color = Color.White.copy(alpha = 0.98f),
                     shadowElevation = 10.dp
                 ) {
                     Row(
-                        modifier = Modifier.padding(horizontal = 12.dp, vertical = 8.dp),
+                        modifier = Modifier.padding(horizontal = 11.dp, vertical = 9.dp),
                         verticalAlignment = Alignment.CenterVertically
                     ) {
                         Box(
                             modifier = Modifier
                                 .size(8.dp)
                                 .clip(CircleShape)
-                                .background(Color(0xFF8A35F2))
+                                .background(
+                                    if (locationLabel == "GPS off") {
+                                        Color(0xFFEF4444)
+                                    } else {
+                                        Color(0xFF22C55E)
+                                    }
+                                )
                         )
 
                         Spacer(modifier = Modifier.width(6.dp))
 
                         Text(
-                            text = "Islamabad",
+                            text = locationLabel,
                             color = Color(0xFF111827),
                             fontWeight = FontWeight.Black,
-                            style = MaterialTheme.typography.labelSmall
+                            style = MaterialTheme.typography.labelSmall,
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis
                         )
                     }
                 }
             }
 
-            Spacer(modifier = Modifier.height(18.dp))
+            if (showLocationCard) {
+                Spacer(modifier = Modifier.height(10.dp))
 
-            Surface(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .clickable { onPermissionClick() },
-                shape = RoundedCornerShape(26.dp),
-                color = Color.White.copy(alpha = 0.97f),
-                shadowElevation = 16.dp,
-                tonalElevation = 8.dp
-            ) {
-                Column(
-                    modifier = Modifier.padding(horizontal = 14.dp, vertical = 13.dp)
+                Surface(
+                    modifier = Modifier.fillMaxWidth(),
+                    shape = RoundedCornerShape(20.dp),
+                    color = Color.White.copy(alpha = 0.97f),
+                    shadowElevation = 14.dp,
+                    tonalElevation = 6.dp
                 ) {
                     Row(
+                        modifier = Modifier.padding(horizontal = 12.dp, vertical = 10.dp),
                         verticalAlignment = Alignment.CenterVertically
                     ) {
                         Box(
                             modifier = Modifier
-                                .size(46.dp)
-                                .clip(RoundedCornerShape(15.dp))
+                                .size(38.dp)
+                                .clip(RoundedCornerShape(14.dp))
                                 .background(Color(0xFFF1ECFF)),
                             contentAlignment = Alignment.Center
                         ) {
@@ -1059,11 +1278,11 @@ private fun RiderMapTopChrome(
                             )
                         }
 
-                        Spacer(modifier = Modifier.width(12.dp))
+                        Spacer(modifier = Modifier.width(10.dp))
 
                         Column(modifier = Modifier.weight(1f)) {
                             Text(
-                                text = "Enable location services",
+                                text = "Enable location",
                                 color = Color(0xFF111827),
                                 fontWeight = FontWeight.Black,
                                 style = MaterialTheme.typography.titleSmall,
@@ -1072,67 +1291,43 @@ private fun RiderMapTopChrome(
                             )
 
                             Text(
-                                text = "We need your location to find nearby drivers",
+                                text = "Use GPS for nearby rides",
                                 color = Color(0xFF6B7280),
                                 fontWeight = FontWeight.Medium,
-                                style = MaterialTheme.typography.labelMedium,
+                                style = MaterialTheme.typography.labelSmall,
                                 maxLines = 1,
                                 overflow = TextOverflow.Ellipsis
                             )
                         }
-                    }
 
-                    Spacer(modifier = Modifier.height(12.dp))
+                        Surface(
+                            modifier = Modifier.clickable { onPermissionClick() },
+                            shape = RoundedCornerShape(14.dp),
+                            color = Color(0xFF8A35F2)
+                        ) {
+                            Text(
+                                text = "Share",
+                                color = Color.White,
+                                fontWeight = FontWeight.Black,
+                                style = MaterialTheme.typography.labelMedium,
+                                modifier = Modifier.padding(horizontal = 14.dp, vertical = 9.dp)
+                            )
+                        }
 
-                    Row(
-                        horizontalArrangement = Arrangement.spacedBy(8.dp),
-                        modifier = Modifier.fillMaxWidth()
-                    ) {
+                        Spacer(modifier = Modifier.width(8.dp))
+
                         Surface(
                             modifier = Modifier
-                                .weight(1f)
-                                .height(46.dp)
-                                .clickable { onPermissionClick() },
-                            shape = RoundedCornerShape(17.dp),
-                            color = Color(0xFFF1ECFF)
+                                .size(34.dp)
+                                .clickable { onDismissLocationCard() },
+                            shape = CircleShape,
+                            color = Color(0xFFF3F4F6)
                         ) {
                             Box(contentAlignment = Alignment.Center) {
                                 Text(
-                                    text = "Enter address",
-                                    color = Color(0xFF8A35F2),
-                                    fontWeight = FontWeight.Black,
-                                    style = MaterialTheme.typography.bodyMedium
-                                )
-                            }
-                        }
-
-                        Surface(
-                            modifier = Modifier
-                                .weight(1f)
-                                .height(46.dp)
-                                .clickable { onPermissionClick() },
-                            shape = RoundedCornerShape(17.dp),
-                            color = Color.Transparent,
-                            shadowElevation = 10.dp
-                        ) {
-                            Box(
-                                modifier = Modifier
-                                    .fillMaxSize()
-                                    .background(
-                                        Brush.verticalGradient(
-                                            colors = listOf(
-                                                Color(0xFF9E3BFF),
-                                                Color(0xFF7B1DE8)
-                                            )
-                                        )
-                                    ),
-                                contentAlignment = Alignment.Center
-                            ) {
-                                Text(
-                                    text = "Share location",
-                                    color = Color.White,
-                                    fontWeight = FontWeight.Black,
-                                    style = MaterialTheme.typography.bodyMedium
+                                    text = "×",
+                                    color = Color(0xFF6B7280),
+                                    fontWeight = FontWeight.Black
                                 )
                             }
                         }
@@ -1146,6 +1341,7 @@ private fun RiderMapTopChrome(
 @Composable
 private fun MapFloatingControls(
     visible: Boolean,
+    onMyLocation: () -> Unit,
     onZoomIn: () -> Unit,
     onZoomOut: () -> Unit,
     modifier: Modifier = Modifier
@@ -1156,32 +1352,16 @@ private fun MapFloatingControls(
         exit = fadeOut(),
         modifier = modifier
     ) {
-        Column(
-            horizontalAlignment = Alignment.CenterHorizontally
-        ) {
+        Column(horizontalAlignment = Alignment.CenterHorizontally) {
+            FloatingMapButton(text = "⌖", onClick = onMyLocation)
+
+            Spacer(modifier = Modifier.height(10.dp))
+
             FloatingMapButton(text = "+", onClick = onZoomIn)
 
             Spacer(modifier = Modifier.height(10.dp))
 
             FloatingMapButton(text = "−", onClick = onZoomOut)
-
-            Spacer(modifier = Modifier.height(10.dp))
-
-            Surface(
-                modifier = Modifier.size(48.dp),
-                shape = RoundedCornerShape(16.dp),
-                color = Color(0xFF8A35F2),
-                shadowElevation = 14.dp
-            ) {
-                Box(contentAlignment = Alignment.Center) {
-                    Text(
-                        text = "◎",
-                        color = Color.White,
-                        fontWeight = FontWeight.Black,
-                        style = MaterialTheme.typography.titleMedium
-                    )
-                }
-            }
         }
     }
 }
@@ -1238,9 +1418,7 @@ private fun RiderActiveTripCompactCard(
             shadowElevation = 18.dp,
             tonalElevation = 8.dp
         ) {
-            Column(
-                modifier = Modifier.padding(16.dp)
-            ) {
+            Column(modifier = Modifier.padding(16.dp)) {
                 Row(
                     modifier = Modifier.fillMaxWidth(),
                     verticalAlignment = Alignment.CenterVertically
@@ -1252,10 +1430,7 @@ private fun RiderActiveTripCompactCard(
                             .background(Color(0xFF2563EB).copy(alpha = 0.12f)),
                         contentAlignment = Alignment.Center
                     ) {
-                        Text(
-                            text = "🚗",
-                            style = MaterialTheme.typography.titleLarge
-                        )
+                        Text(text = "🚗", style = MaterialTheme.typography.titleLarge)
                     }
 
                     Spacer(modifier = Modifier.width(12.dp))
@@ -1315,9 +1490,7 @@ private fun RiderActiveTripCompactCard(
                     shape = RoundedCornerShape(20.dp),
                     color = Color(0xFFF8FAFC)
                 ) {
-                    Column(
-                        modifier = Modifier.padding(13.dp)
-                    ) {
+                    Column(modifier = Modifier.padding(13.dp)) {
                         InfoLine(label = "Phone", value = phoneNumber)
                         Spacer(modifier = Modifier.height(6.dp))
                         InfoLine(label = "Car", value = vehicleModel)
@@ -1472,7 +1645,12 @@ private fun RideitBottomPanel(
         modifier = Modifier
             .fillMaxWidth()
             .padding(horizontal = 14.dp, vertical = 14.dp),
-        shape = RoundedCornerShape(topStart = 36.dp, topEnd = 36.dp, bottomStart = 28.dp, bottomEnd = 28.dp),
+        shape = RoundedCornerShape(
+            topStart = 36.dp,
+            topEnd = 36.dp,
+            bottomStart = 28.dp,
+            bottomEnd = 28.dp
+        ),
         color = Color.White,
         shadowElevation = 18.dp,
         tonalElevation = 8.dp
@@ -1532,6 +1710,7 @@ private fun RideitBottomPanel(
                         onPickupChanged = mapViewModel::onPickupTextChanged,
                         onDropoffChanged = mapViewModel::onDropoffTextChanged,
                         onSuggestionSelected = mapViewModel::onSuggestionSelected,
+                        onQuickPlaceSelected = mapViewModel::onQuickPlaceSelected,
                         onSearchClick = mapViewModel::onSearchClicked
                     )
                 }
@@ -1546,10 +1725,9 @@ private fun SearchContent(
     onPickupChanged: (String) -> Unit,
     onDropoffChanged: (String) -> Unit,
     onSuggestionSelected: (LocationSuggestion) -> Unit,
+    onQuickPlaceSelected: (String) -> Unit,
     onSearchClick: () -> Unit
 ) {
-    val purple = Color(0xFF8A35F2)
-
     Text(
         text = "Where are you going?",
         fontWeight = FontWeight.Black,
@@ -1598,12 +1776,18 @@ private fun SearchContent(
                     Text("📍", modifier = Modifier.width(36.dp))
 
                     Column {
-                        Text(suggestion.title, fontWeight = FontWeight.Bold)
+                        Text(
+                            text = suggestion.title,
+                            fontWeight = FontWeight.Bold,
+                            color = Color(0xFF111827)
+                        )
 
                         Text(
                             text = suggestion.fullAddress,
                             color = Color(0xFF777777),
-                            style = MaterialTheme.typography.bodySmall
+                            style = MaterialTheme.typography.bodySmall,
+                            maxLines = 2,
+                            overflow = TextOverflow.Ellipsis
                         )
                     }
                 }
@@ -1613,19 +1797,69 @@ private fun SearchContent(
 
     Spacer(modifier = Modifier.height(14.dp))
 
-    Row(
-        modifier = Modifier.fillMaxWidth(),
-        horizontalArrangement = Arrangement.spacedBy(8.dp)
-    ) {
-        QuickPlaceChip(icon = "🏠", text = "Home", modifier = Modifier.weight(1f))
-        QuickPlaceChip(icon = "💼", text = "Work", modifier = Modifier.weight(1f))
-        QuickPlaceChip(icon = "🛍️", text = "Mall", modifier = Modifier.weight(1f))
-        QuickPlaceChip(icon = "✈️", text = "Airport", modifier = Modifier.weight(1f))
+    Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.spacedBy(8.dp)
+        ) {
+            QuickPlaceChip(
+                icon = "🏠",
+                text = "Home",
+                modifier = Modifier.weight(1f),
+                onClick = { onQuickPlaceSelected("home") }
+            )
+
+            QuickPlaceChip(
+                icon = "💼",
+                text = "Work",
+                modifier = Modifier.weight(1f),
+                onClick = { onQuickPlaceSelected("work") }
+            )
+
+            QuickPlaceChip(
+                icon = "🛍️",
+                text = "Mall",
+                modifier = Modifier.weight(1f),
+                onClick = { onQuickPlaceSelected("mall") }
+            )
+        }
+
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.spacedBy(8.dp)
+        ) {
+            QuickPlaceChip(
+                icon = "✈️",
+                text = "Airport",
+                modifier = Modifier.weight(1f),
+                onClick = { onQuickPlaceSelected("airport") }
+            )
+
+            QuickPlaceChip(
+                icon = "🍽️",
+                text = "Restaurant",
+                modifier = Modifier.weight(1f),
+                onClick = { onQuickPlaceSelected("restaurant") }
+            )
+        }
     }
 
     uiState.errorMessage?.let {
         Spacer(modifier = Modifier.height(8.dp))
-        Text(it, color = Color.Red)
+        Text(
+            text = it,
+            color = if (
+                it.contains("Select", ignoreCase = true) ||
+                it.contains("Searching", ignoreCase = true) ||
+                it.contains("Detecting", ignoreCase = true)
+            ) {
+                Color(0xFF6B7280)
+            } else {
+                Color.Red
+            },
+            style = MaterialTheme.typography.bodySmall,
+            fontWeight = FontWeight.Bold
+        )
     }
 
     Spacer(modifier = Modifier.height(16.dp))
@@ -1765,10 +1999,13 @@ private fun ModernEditableLocationField(
 private fun QuickPlaceChip(
     icon: String,
     text: String,
-    modifier: Modifier = Modifier
+    modifier: Modifier = Modifier,
+    onClick: () -> Unit
 ) {
     Surface(
-        modifier = modifier.height(38.dp),
+        modifier = modifier
+            .height(38.dp)
+            .clickable { onClick() },
         shape = RoundedCornerShape(50),
         color = Color.White,
         shadowElevation = 0.dp
@@ -1793,7 +2030,8 @@ private fun QuickPlaceChip(
                 color = Color(0xFF111827),
                 fontWeight = FontWeight.Bold,
                 style = MaterialTheme.typography.labelSmall,
-                maxLines = 1
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis
             )
         }
     }
@@ -1928,12 +2166,12 @@ private fun PremiumRideStatusContent(
                     firebaseLiveTripStatus == "searching" ||
                     firebaseLiveTripStatus == "searching_driver" -> "Finding your driver"
             firebaseLiveTripStatus == "accepted" -> "Driver accepted"
-            firebaseLiveTripStatus == "driver_arriving" -> "Driver arrived at pickup"
+            firebaseLiveTripStatus == "driver_arriving" -> "Driver is coming to pickup"
             firebaseLiveTripStatus == "ride_started" -> "Trip in progress"
             firebaseDriverName != null -> "Driver accepted"
             uiState.rideRequestStatus == RideRequestStatus.SEARCHING_DRIVER -> "Finding your driver"
             uiState.rideRequestStatus == RideRequestStatus.DRIVER_FOUND -> "Driver found"
-            uiState.rideRequestStatus == RideRequestStatus.DRIVER_ARRIVING -> "Driver arrived at pickup"
+            uiState.rideRequestStatus == RideRequestStatus.DRIVER_ARRIVING -> "Driver is coming to pickup"
             uiState.rideRequestStatus == RideRequestStatus.RIDE_STARTED -> "Ride started"
             else -> "Ride status"
         },
@@ -1993,63 +2231,41 @@ private fun PremiumRideStatusContent(
         trackColor = Color(0xFFE5E7EB)
     )
 
-    Spacer(modifier = Modifier.height(16.dp))
+    Spacer(modifier = Modifier.height(14.dp))
 
-    if (!firebaseTripCancelledByDriver && !firebaseTripCompleted) {
-        Surface(
-            modifier = Modifier.fillMaxWidth(),
-            shape = RoundedCornerShape(24.dp),
-            color = Color(0xFFF8FAFC)
-        ) {
-            Row(
-                modifier = Modifier.padding(16.dp),
-                verticalAlignment = Alignment.CenterVertically
-            ) {
-                Box(
-                    modifier = Modifier
-                        .size(54.dp)
-                        .clip(CircleShape)
-                        .background(statusColor),
-                    contentAlignment = Alignment.Center
-                ) {
-                    Text("🚗")
-                }
+    Surface(
+        modifier = Modifier.fillMaxWidth(),
+        shape = RoundedCornerShape(22.dp),
+        color = Color(0xFFF8F7FF)
+    ) {
+        Column(modifier = Modifier.padding(14.dp)) {
+            Text(
+                text = "Trip details",
+                color = Color(0xFF111827),
+                fontWeight = FontWeight.Bold
+            )
 
-                Spacer(modifier = Modifier.width(14.dp))
+            Spacer(modifier = Modifier.height(8.dp))
 
-                Column(modifier = Modifier.weight(1f)) {
-                    Text(
-                        text = firebaseDriverName ?: uiState.driver?.name ?: "Driver car",
-                        fontWeight = FontWeight.Bold
-                    )
+            Text(
+                text = "Pickup: ${uiState.pickupText.ifBlank { "Current location" }}",
+                color = Color(0xFF6B7280),
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis
+            )
 
-                    Text(
-                        text = uiState.driver?.let {
-                            "${it.vehicleName} • ${it.vehicleNumber}"
-                        } ?: "Waiting for driver details",
-                        color = Color.Gray
-                    )
-
-                    Text(
-                        text = when (firebaseLiveTripStatus) {
-                            "pending", "requested", "searching", "searching_driver" -> "Waiting for driver to accept"
-                            "accepted" -> "Driver accepted your ride"
-                            "driver_arriving" -> "Driver arrived at pickup"
-                            "ride_started" -> "Trip is in progress"
-                            else -> uiState.driver?.let { "⭐ ${it.rating} • ${it.arrivalTime}" }
-                                ?: "Driver assigned"
-                        },
-                        color = statusColor,
-                        fontWeight = FontWeight.Bold
-                    )
-                }
-            }
+            Text(
+                text = "Dropoff: ${uiState.dropoffText.ifBlank { "Selected destination" }}",
+                color = Color(0xFF6B7280),
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis
+            )
         }
     }
 
-    Spacer(modifier = Modifier.height(14.dp))
-
     if (isCancellingRideRequest) {
+        Spacer(modifier = Modifier.height(12.dp))
+
         LinearProgressIndicator(
             modifier = Modifier
                 .fillMaxWidth()
@@ -2248,32 +2464,27 @@ private fun resolveVisibleDriverLatLng(
 
     if (!shouldShowDriver) return null
 
-    currentDriverLatLng?.let {
-        return it
-    }
+    currentDriverLatLng?.let { return it }
 
     val pickup = pickupLatLng ?: fallbackLocation
     val dropoff = dropoffLatLng ?: pickup
 
     return when {
-        cleanStatus == "accepted" ||
-                localRideRequestStatus == RideRequestStatus.DRIVER_FOUND -> {
+        cleanStatus == "accepted" || localRideRequestStatus == RideRequestStatus.DRIVER_FOUND -> {
             LatLng(
                 (fallbackLocation.latitude * 0.35) + (pickup.latitude * 0.65),
                 (fallbackLocation.longitude * 0.35) + (pickup.longitude * 0.65)
             )
         }
 
-        cleanStatus == "driver_arriving" ||
-                localRideRequestStatus == RideRequestStatus.DRIVER_ARRIVING -> {
+        cleanStatus == "driver_arriving" || localRideRequestStatus == RideRequestStatus.DRIVER_ARRIVING -> {
             LatLng(
                 (fallbackLocation.latitude * 0.10) + (pickup.latitude * 0.90),
                 (fallbackLocation.longitude * 0.10) + (pickup.longitude * 0.90)
             )
         }
 
-        cleanStatus == "ride_started" ||
-                localRideRequestStatus == RideRequestStatus.RIDE_STARTED -> {
+        cleanStatus == "ride_started" || localRideRequestStatus == RideRequestStatus.RIDE_STARTED -> {
             LatLng(
                 (pickup.latitude + dropoff.latitude) / 2.0,
                 (pickup.longitude + dropoff.longitude) / 2.0

@@ -1,44 +1,35 @@
 package com.example.rideit.driver.ui
 
-import androidx.compose.animation.AnimatedVisibility
-import androidx.compose.animation.fadeIn
-import androidx.compose.animation.fadeOut
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
-import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
-import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
-import androidx.compose.foundation.layout.navigationBars
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
-import androidx.compose.foundation.layout.statusBars
 import androidx.compose.foundation.layout.width
-import androidx.compose.foundation.layout.windowInsetsPadding
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
-import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
-import androidx.compose.material3.Divider
 import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.SnackbarHost
-import androidx.compose.material3.SnackbarHostState
+import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
+import androidx.compose.runtime.Immutable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
-import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -50,128 +41,161 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import com.example.rideit.FirebaseManager
 import com.google.firebase.Timestamp
+import com.google.firebase.firestore.DocumentSnapshot
 import com.google.firebase.firestore.FirebaseFirestore
 import com.google.firebase.firestore.ListenerRegistration
-import kotlinx.coroutines.launch
 import java.text.SimpleDateFormat
 import java.util.Locale
-import kotlin.math.roundToInt
 
-private data class DriverWalletTrip(
-    val requestId: String,
-    val riderEmail: String,
-    val pickup: String,
-    val dropoff: String,
-    val fareText: String,
-    val fareAmount: Int,
-    val status: String,
-    val createdAt: Timestamp?,
-    val completedAt: Timestamp?,
-    val cancelledAt: Timestamp?,
-    val updatedAt: Timestamp?,
-    val sortTimeMillis: Long
+@Immutable
+private data class DriverWalletStats(
+    val availableBalance: Int = 0,
+    val todayEarnings: Int = 0,
+    val weekEarnings: Int = 0,
+    val totalEarnings: Int = 0,
+    val completedTrips: Int = 0,
+    val todayTrips: Int = 0,
+    val pendingPayout: Int = 0
 )
 
 @Composable
 fun DriverWalletScreen(
-    driverName: String = "Shameer Khan",
+    driverName: String = FirebaseManager.currentDriverDisplayName(),
     onBackClick: () -> Unit
 ) {
-    val snackbarHostState = remember { SnackbarHostState() }
-    val scope = rememberCoroutineScope()
-
-    var isLoading by remember { mutableStateOf(true) }
-    var firebaseError by remember { mutableStateOf<String?>(null) }
-    var walletTrips by remember { mutableStateOf<List<DriverWalletTrip>>(emptyList()) }
-
-    val driverId = remember { FirebaseManager.currentUserId().orEmpty() }
     val firestore = remember { FirebaseFirestore.getInstance() }
+    val driverId = remember { FirebaseManager.currentUserId().orEmpty() }
+
+    var stats by remember { mutableStateOf(DriverWalletStats()) }
+    var isLoading by remember { mutableStateOf(true) }
+
+    var statusMessage by rememberSaveable {
+        mutableStateOf("Loading driver wallet...")
+    }
+
+    var recentOne by rememberSaveable {
+        mutableStateOf("No completed trips yet")
+    }
+
+    var recentTwo by rememberSaveable {
+        mutableStateOf("Driver wallet ready")
+    }
+
+    var recentThree by rememberSaveable {
+        mutableStateOf("Safe demo payout mode")
+    }
 
     DisposableEffect(driverId) {
         var listenerRegistration: ListenerRegistration? = null
 
         if (driverId.isBlank()) {
             isLoading = false
-            firebaseError = "Driver account not found. Please login again."
-            walletTrips = emptyList()
+            statusMessage = "Driver account not found. Please login again."
         } else {
             isLoading = true
-            firebaseError = null
+            statusMessage = "Listening for completed trips..."
 
             listenerRegistration = firestore.collection("ride_requests")
                 .whereEqualTo("driverId", driverId)
-                .limit(75)
+                .limit(100)
                 .addSnapshotListener { snapshots, error ->
                     if (error != null) {
                         isLoading = false
-                        firebaseError = error.message ?: "Failed to load wallet earnings."
-                        walletTrips = emptyList()
+                        statusMessage = error.message ?: "Failed to load driver wallet."
                         return@addSnapshotListener
                     }
 
-                    val walletStatuses = setOf(
-                        "completed",
-                        "cancelled_by_driver",
-                        "cancelled_by_rider"
+                    val documents = snapshots?.documents.orEmpty()
+
+                    val completedDocs = documents
+                        .filter { document ->
+                            document.safeText("status").lowercase() == "completed"
+                        }
+                        .sortedByDescending { document ->
+                            document.safeSortTime()
+                        }
+
+                    val todayCompletedDocs = completedDocs.filter { document ->
+                        isToday(
+                            document.getTimestamp("completedAt")
+                                ?: document.getTimestamp("updatedAt")
+                                ?: document.getTimestamp("createdAt")
+                        )
+                    }
+
+                    val weekCompletedDocs = completedDocs.filter { document ->
+                        isWithinLastDays(
+                            timestamp = document.getTimestamp("completedAt")
+                                ?: document.getTimestamp("updatedAt")
+                                ?: document.getTimestamp("createdAt"),
+                            days = 7
+                        )
+                    }
+
+                    val totalEarnings = completedDocs.sumOf { document ->
+                        extractFareAmount(
+                            document.safeText("fareEstimate")
+                                .ifBlank { document.safeText("fare") }
+                                .ifBlank { document.safeText("estimatedFare") }
+                                .ifBlank { document.safeText("price") }
+                        )
+                    }
+
+                    val todayEarnings = todayCompletedDocs.sumOf { document ->
+                        extractFareAmount(
+                            document.safeText("fareEstimate")
+                                .ifBlank { document.safeText("fare") }
+                                .ifBlank { document.safeText("estimatedFare") }
+                                .ifBlank { document.safeText("price") }
+                        )
+                    }
+
+                    val weekEarnings = weekCompletedDocs.sumOf { document ->
+                        extractFareAmount(
+                            document.safeText("fareEstimate")
+                                .ifBlank { document.safeText("fare") }
+                                .ifBlank { document.safeText("estimatedFare") }
+                                .ifBlank { document.safeText("price") }
+                        )
+                    }
+
+                    stats = DriverWalletStats(
+                        availableBalance = totalEarnings,
+                        todayEarnings = todayEarnings,
+                        weekEarnings = weekEarnings,
+                        totalEarnings = totalEarnings,
+                        completedTrips = completedDocs.size,
+                        todayTrips = todayCompletedDocs.size,
+                        pendingPayout = totalEarnings
                     )
 
-                    val trips = snapshots
-                        ?.documents
-                        ?.mapNotNull { document ->
-                            val statusRaw = document.getString("status").orEmpty().lowercase()
-
-                            if (statusRaw !in walletStatuses) {
-                                return@mapNotNull null
-                            }
-
-                            val fareText = document.getString("fareEstimate")
-                                ?: document.getString("fare")
-                                ?: "₨ 0"
-
-                            val pickup = document.getString("pickupAddress")
-                                ?: document.getString("pickupText")
-                                ?: "Pickup location"
-
-                            val dropoff = document.getString("dropoffAddress")
-                                ?: document.getString("dropText")
-                                ?: document.getString("dropoffText")
-                                ?: "Dropoff location"
-
-                            val riderEmail = document.getString("riderEmail")
-                                ?: document.getString("userEmail")
-                                ?: "Rider"
-
-                            val createdAt = document.getTimestamp("createdAt")
-                            val completedAt = document.getTimestamp("completedAt")
-                            val cancelledAt = document.getTimestamp("cancelledAt")
-                            val updatedAt = document.getTimestamp("updatedAt")
-
-                            val finalTimestamp = completedAt
-                                ?: cancelledAt
-                                ?: updatedAt
-                                ?: createdAt
-
-                            DriverWalletTrip(
-                                requestId = document.id,
-                                riderEmail = riderEmail,
-                                pickup = pickup,
-                                dropoff = dropoff,
-                                fareText = normalizeFareText(fareText),
-                                fareAmount = extractFareAmount(fareText),
-                                status = statusRaw,
-                                createdAt = createdAt,
-                                completedAt = completedAt,
-                                cancelledAt = cancelledAt,
-                                updatedAt = updatedAt,
-                                sortTimeMillis = finalTimestamp?.toDate()?.time ?: 0L
+                    val recentRows = completedDocs
+                        .take(3)
+                        .map { document ->
+                            val fareText = normalizeFareText(
+                                document.safeText("fareEstimate")
+                                    .ifBlank { document.safeText("fare") }
+                                    .ifBlank { "₨ 0" }
                             )
-                        }
-                        ?.sortedByDescending { it.sortTimeMillis }
-                        .orEmpty()
 
-                    walletTrips = trips
+                            val pickup = document.safeText("pickupAddress")
+                                .ifBlank { document.safeText("pickupText") }
+                                .ifBlank { "Pickup" }
+
+                            "Completed trip • $fareText • ${pickup.take(22)}"
+                        }
+
+                    recentOne = recentRows.getOrNull(0) ?: "No completed trips yet"
+                    recentTwo = recentRows.getOrNull(1) ?: "Earnings appear after completed rides"
+                    recentThree = recentRows.getOrNull(2) ?: "Safe demo payout mode"
+
+                    statusMessage = if (completedDocs.isEmpty()) {
+                        "No completed trips yet"
+                    } else {
+                        "Wallet synced from completed trips"
+                    }
+
                     isLoading = false
-                    firebaseError = null
                 }
         }
 
@@ -180,309 +204,221 @@ fun DriverWalletScreen(
         }
     }
 
-    val completedTrips = walletTrips.filter { it.status == "completed" }
-    val cancelledTrips = walletTrips.filter { it.status != "completed" }
-
-    val totalEarnings = completedTrips.sumOf { it.fareAmount }
-    val pendingPayout = (totalEarnings * 0.25f).roundToInt()
-    val rideitFee = (totalEarnings * 0.12f).roundToInt()
-    val netEarnings = (totalEarnings - rideitFee).coerceAtLeast(0)
-
-    val todayTrips = completedTrips.filter { isToday(it.completedAt ?: it.updatedAt ?: it.createdAt) }
-    val todayEarnings = todayTrips.sumOf { it.fareAmount }
-
-    val weekTrips = completedTrips.filter { isWithinLastDays(it.completedAt ?: it.updatedAt ?: it.createdAt, 7) }
-    val weekEarnings = weekTrips.sumOf { it.fareAmount }
-
-    val averageFare = if (completedTrips.isNotEmpty()) {
-        totalEarnings / completedTrips.size
-    } else {
-        0
-    }
-
-    val weeklyTarget = 50000
-    val weeklyProgress = if (weeklyTarget <= 0) {
-        0f
-    } else {
-        (weekEarnings.toFloat() / weeklyTarget.toFloat()).coerceIn(0f, 1f)
-    }
-
-    val weeklyProgressPercent = (weeklyProgress * 100).roundToInt()
-
-    val recentActivities = walletTrips.take(6)
-
     Box(
         modifier = Modifier
             .fillMaxSize()
-            .background(Color(0xFFF6F7FB))
+            .background(
+                Brush.verticalGradient(
+                    colors = listOf(
+                        Color(0xFF050505),
+                        Color(0xFF111827),
+                        Color(0xFF090909)
+                    )
+                )
+            )
     ) {
         Column(
             modifier = Modifier
                 .fillMaxSize()
-                .windowInsetsPadding(WindowInsets.statusBars)
-                .windowInsetsPadding(WindowInsets.navigationBars)
                 .verticalScroll(rememberScrollState())
-                .padding(horizontal = 18.dp, vertical = 18.dp)
+                .padding(horizontal = 20.dp)
+                .padding(top = 34.dp, bottom = 22.dp)
         ) {
-            DriverWalletHeader(
+            DriverWalletTopBar(
                 driverName = driverName,
                 onBackClick = onBackClick
             )
 
-            Spacer(modifier = Modifier.height(16.dp))
+            Spacer(modifier = Modifier.height(18.dp))
 
-            if (isLoading) {
-                WalletLoadingCard()
+            DriverWalletStatusPill(
+                text = statusMessage
+            )
 
-                Spacer(modifier = Modifier.height(16.dp))
-            }
+            Spacer(modifier = Modifier.height(14.dp))
 
-            firebaseError?.let { error ->
-                WalletMessageCard(
-                    title = "Unable to load wallet",
-                    message = error,
-                    success = false
-                )
+            DriverWalletHeroCard(
+                stats = stats,
+                isLoading = isLoading
+            )
 
-                Spacer(modifier = Modifier.height(16.dp))
-            }
+            Spacer(modifier = Modifier.height(18.dp))
 
-            WalletBalanceCard(
-                availableBalance = netEarnings,
-                pendingPayout = pendingPayout,
-                completedTrips = completedTrips.size,
+            DriverWalletStatsGrid(
+                stats = stats,
+                isLoading = isLoading
+            )
+
+            Spacer(modifier = Modifier.height(18.dp))
+
+            DriverPayoutCard(
+                stats = stats,
+                isLoading = isLoading,
                 onWithdrawClick = {
-                    scope.launch {
-                        snackbarHostState.showSnackbar(
-                            message = if (netEarnings > 0) {
-                                "Withdraw request prepared for ${formatRupees(netEarnings)}. Real payout will be connected later."
-                            } else {
-                                "No completed Firebase earnings available for withdrawal yet."
-                            }
-                        )
-                    }
+                    statusMessage = "Demo withdrawal requested. Real payout is not connected yet."
                 }
             )
 
-            Spacer(modifier = Modifier.height(16.dp))
+            Spacer(modifier = Modifier.height(18.dp))
 
-            WalletStatsGrid(
-                todayEarnings = todayEarnings,
-                todayTripCount = todayTrips.size,
-                weekEarnings = weekEarnings,
-                weekTripCount = weekTrips.size,
-                completedTripCount = completedTrips.size,
-                cancelledTripCount = cancelledTrips.size
+            DriverRecentEarningsCard(
+                recentOne = recentOne,
+                recentTwo = recentTwo,
+                recentThree = recentThree
             )
 
-            Spacer(modifier = Modifier.height(16.dp))
+            Spacer(modifier = Modifier.height(14.dp))
 
-            WeeklyEarningsCard(
-                weekEarnings = weekEarnings,
-                weeklyTarget = weeklyTarget,
-                weeklyProgress = weeklyProgress,
-                weeklyProgressPercent = weeklyProgressPercent,
-                weekTripCount = weekTrips.size,
-                averageFare = averageFare
+            DriverWalletSafetyCard()
+        }
+    }
+}
+
+@Composable
+private fun DriverWalletTopBar(
+    driverName: String,
+    onBackClick: () -> Unit
+) {
+    Row(
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        OutlinedButton(
+            onClick = onBackClick,
+            shape = RoundedCornerShape(16.dp),
+            colors = ButtonDefaults.outlinedButtonColors(
+                contentColor = Color.White
             )
-
-            Spacer(modifier = Modifier.height(16.dp))
-
-            EarningsBreakdownCard(
-                rideFares = totalEarnings,
-                rideitFee = rideitFee,
-                netEarnings = netEarnings,
-                completedTrips = completedTrips.size
+        ) {
+            Text(
+                text = "‹ Back",
+                fontWeight = FontWeight.Bold
             )
-
-            Spacer(modifier = Modifier.height(16.dp))
-
-            RecentWalletActivityCard(
-                activities = recentActivities,
-                onActivityClick = { trip ->
-                    scope.launch {
-                        snackbarHostState.showSnackbar(
-                            message = "${statusLabel(trip.status)} • ${trip.fareText} • ${trip.pickup} to ${trip.dropoff}"
-                        )
-                    }
-                }
-            )
-
-            if (!isLoading && firebaseError == null && walletTrips.isEmpty()) {
-                Spacer(modifier = Modifier.height(16.dp))
-
-                WalletMessageCard(
-                    title = "No Firebase earnings yet",
-                    message = "Complete a real ride as driver and your wallet earnings will appear here automatically.",
-                    success = true
-                )
-            }
-
-            Spacer(modifier = Modifier.height(24.dp))
         }
 
-        SnackbarHost(
-            hostState = snackbarHostState,
-            modifier = Modifier
-                .align(Alignment.BottomCenter)
-                .windowInsetsPadding(WindowInsets.navigationBars)
-                .padding(16.dp)
+        Spacer(modifier = Modifier.width(14.dp))
+
+        Column {
+            Text(
+                text = "Driver Wallet",
+                color = Color.White,
+                fontWeight = FontWeight.Black,
+                style = MaterialTheme.typography.headlineMedium
+            )
+
+            Text(
+                text = driverName,
+                color = Color(0xFF9CA3AF),
+                style = MaterialTheme.typography.bodySmall,
+                fontWeight = FontWeight.Medium,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis
+            )
+        }
+    }
+}
+
+@Composable
+private fun DriverWalletStatusPill(
+    text: String
+) {
+    Surface(
+        shape = RoundedCornerShape(999.dp),
+        color = Color.White.copy(alpha = 0.08f)
+    ) {
+        Text(
+            text = text,
+            color = Color(0xFFE5E7EB),
+            fontWeight = FontWeight.Bold,
+            style = MaterialTheme.typography.labelMedium,
+            modifier = Modifier.padding(horizontal = 12.dp, vertical = 8.dp)
         )
     }
 }
 
 @Composable
-private fun DriverWalletHeader(
-    driverName: String,
-    onBackClick: () -> Unit
+private fun DriverWalletHeroCard(
+    stats: DriverWalletStats,
+    isLoading: Boolean
 ) {
     Surface(
         modifier = Modifier.fillMaxWidth(),
         shape = RoundedCornerShape(32.dp),
-        color = Color(0xFF111827),
-        shadowElevation = 14.dp,
-        tonalElevation = 8.dp
+        color = Color.Transparent,
+        shadowElevation = 20.dp
     ) {
-        Column(
+        Box(
             modifier = Modifier
                 .fillMaxWidth()
                 .background(
                     Brush.linearGradient(
                         colors = listOf(
                             Color(0xFF111827),
-                            Color(0xFF1F2937),
+                            Color(0xFF2563EB),
                             Color(0xFF8A35F2)
                         )
                     )
                 )
-                .padding(20.dp)
+                .padding(22.dp)
         ) {
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                verticalAlignment = Alignment.CenterVertically
-            ) {
-                Surface(
-                    modifier = Modifier
-                        .size(46.dp)
-                        .clickable { onBackClick() },
-                    shape = CircleShape,
-                    color = Color.White.copy(alpha = 0.14f)
+            Column {
+                Row(
+                    verticalAlignment = Alignment.CenterVertically
                 ) {
-                    Box(contentAlignment = Alignment.Center) {
+                    Text(
+                        text = "Available Earnings",
+                        color = Color.White,
+                        fontWeight = FontWeight.Black,
+                        style = MaterialTheme.typography.titleLarge
+                    )
+
+                    Spacer(modifier = Modifier.width(10.dp))
+
+                    Surface(
+                        shape = RoundedCornerShape(999.dp),
+                        color = Color.White.copy(alpha = 0.16f)
+                    ) {
                         Text(
-                            text = "‹",
+                            text = "Demo payout",
                             color = Color.White,
-                            fontWeight = FontWeight.Black,
-                            style = MaterialTheme.typography.headlineSmall
+                            fontWeight = FontWeight.Bold,
+                            style = MaterialTheme.typography.labelSmall,
+                            modifier = Modifier.padding(horizontal = 10.dp, vertical = 5.dp)
                         )
                     }
                 }
 
-                Spacer(modifier = Modifier.width(14.dp))
+                Spacer(modifier = Modifier.height(18.dp))
 
-                Column(modifier = Modifier.weight(1f)) {
-                    Text(
-                        text = "Driver Wallet",
-                        style = MaterialTheme.typography.titleLarge,
-                        fontWeight = FontWeight.Black,
-                        color = Color.White
-                    )
+                Text(
+                    text = if (isLoading) "₨ ..." else formatRupees(stats.availableBalance),
+                    color = Color.White,
+                    fontWeight = FontWeight.Black,
+                    style = MaterialTheme.typography.displaySmall
+                )
 
-                    Spacer(modifier = Modifier.height(3.dp))
+                Spacer(modifier = Modifier.height(8.dp))
 
-                    Text(
-                        text = driverName,
-                        style = MaterialTheme.typography.bodyMedium,
-                        fontWeight = FontWeight.Medium,
-                        color = Color.White.copy(alpha = 0.76f),
-                        maxLines = 1,
-                        overflow = TextOverflow.Ellipsis
-                    )
-                }
-
-                Surface(
-                    shape = RoundedCornerShape(50),
-                    color = Color(0xFF22C55E).copy(alpha = 0.18f)
-                ) {
-                    Text(
-                        text = "Firebase",
-                        modifier = Modifier.padding(horizontal = 12.dp, vertical = 7.dp),
-                        color = Color.White,
-                        fontWeight = FontWeight.Bold,
-                        style = MaterialTheme.typography.labelMedium
-                    )
-                }
+                Text(
+                    text = "${stats.completedTrips} completed trips • synced from Firebase",
+                    color = Color(0xFFE5E7EB),
+                    style = MaterialTheme.typography.bodyMedium,
+                    fontWeight = FontWeight.Medium
+                )
             }
 
-            Spacer(modifier = Modifier.height(20.dp))
-
-            Text(
-                text = "Track real Rideit earnings from completed Firebase trips, wallet balance, fees, and recent driver activity.",
-                style = MaterialTheme.typography.bodyMedium,
-                color = Color.White.copy(alpha = 0.78f),
-                fontWeight = FontWeight.Medium
-            )
-        }
-    }
-}
-
-@Composable
-private fun WalletBalanceCard(
-    availableBalance: Int,
-    pendingPayout: Int,
-    completedTrips: Int,
-    onWithdrawClick: () -> Unit
-) {
-    Surface(
-        modifier = Modifier.fillMaxWidth(),
-        shape = RoundedCornerShape(32.dp),
-        color = Color.White,
-        shadowElevation = 14.dp,
-        tonalElevation = 8.dp
-    ) {
-        Column(
-            modifier = Modifier.padding(20.dp)
-        ) {
-            Text(
-                text = "Available balance",
-                style = MaterialTheme.typography.bodyMedium,
-                fontWeight = FontWeight.Bold,
-                color = Color(0xFF6B7280)
-            )
-
-            Spacer(modifier = Modifier.height(7.dp))
-
-            Text(
-                text = formatRupees(availableBalance),
-                style = MaterialTheme.typography.displaySmall,
-                fontWeight = FontWeight.Black,
-                color = Color(0xFF111827)
-            )
-
-            Spacer(modifier = Modifier.height(5.dp))
-
-            Text(
-                text = "Pending payout: ${formatRupees(pendingPayout)} • Completed Firebase trips: $completedTrips",
-                style = MaterialTheme.typography.bodySmall,
-                fontWeight = FontWeight.Medium,
-                color = Color(0xFF6B7280)
-            )
-
-            Spacer(modifier = Modifier.height(18.dp))
-
-            Button(
-                onClick = onWithdrawClick,
+            Box(
                 modifier = Modifier
-                    .fillMaxWidth()
-                    .height(58.dp),
-                shape = RoundedCornerShape(22.dp),
-                colors = ButtonDefaults.buttonColors(
-                    containerColor = Color(0xFF8A35F2)
-                )
+                    .align(Alignment.TopEnd)
+                    .size(58.dp)
+                    .clip(CircleShape)
+                    .background(Color.White.copy(alpha = 0.18f)),
+                contentAlignment = Alignment.Center
             ) {
                 Text(
-                    text = "Withdraw Earnings",
-                    fontWeight = FontWeight.Black
+                    text = "₨",
+                    color = Color.White,
+                    fontWeight = FontWeight.Black,
+                    style = MaterialTheme.typography.headlineMedium
                 )
             }
         }
@@ -490,51 +426,49 @@ private fun WalletBalanceCard(
 }
 
 @Composable
-private fun WalletStatsGrid(
-    todayEarnings: Int,
-    todayTripCount: Int,
-    weekEarnings: Int,
-    weekTripCount: Int,
-    completedTripCount: Int,
-    cancelledTripCount: Int
+private fun DriverWalletStatsGrid(
+    stats: DriverWalletStats,
+    isLoading: Boolean
 ) {
-    Column(
-        verticalArrangement = Arrangement.spacedBy(12.dp)
-    ) {
+    Column {
         Row(
-            modifier = Modifier.fillMaxWidth(),
-            horizontalArrangement = Arrangement.spacedBy(12.dp)
+            modifier = Modifier.fillMaxWidth()
         ) {
-            WalletStatCard(
+            DriverWalletMetricCard(
                 title = "Today",
-                value = formatRupees(todayEarnings),
-                subtitle = "$todayTripCount trips",
+                value = if (isLoading) "₨ ..." else formatRupees(stats.todayEarnings),
+                subtitle = "${stats.todayTrips} trips",
                 modifier = Modifier.weight(1f)
             )
 
-            WalletStatCard(
-                title = "This week",
-                value = formatRupees(weekEarnings),
-                subtitle = "$weekTripCount trips",
+            Spacer(modifier = Modifier.width(12.dp))
+
+            DriverWalletMetricCard(
+                title = "This Week",
+                value = if (isLoading) "₨ ..." else formatRupees(stats.weekEarnings),
+                subtitle = "Last 7 days",
                 modifier = Modifier.weight(1f)
             )
         }
 
+        Spacer(modifier = Modifier.height(12.dp))
+
         Row(
-            modifier = Modifier.fillMaxWidth(),
-            horizontalArrangement = Arrangement.spacedBy(12.dp)
+            modifier = Modifier.fillMaxWidth()
         ) {
-            WalletStatCard(
-                title = "Completed",
-                value = completedTripCount.toString(),
-                subtitle = "Paid rides",
+            DriverWalletMetricCard(
+                title = "Total",
+                value = if (isLoading) "₨ ..." else formatRupees(stats.totalEarnings),
+                subtitle = "All completed rides",
                 modifier = Modifier.weight(1f)
             )
 
-            WalletStatCard(
-                title = "Cancelled",
-                value = cancelledTripCount.toString(),
-                subtitle = "No earnings",
+            Spacer(modifier = Modifier.width(12.dp))
+
+            DriverWalletMetricCard(
+                title = "Trips",
+                value = if (isLoading) "..." else stats.completedTrips.toString(),
+                subtitle = "Completed",
                 modifier = Modifier.weight(1f)
             )
         }
@@ -542,7 +476,7 @@ private fun WalletStatsGrid(
 }
 
 @Composable
-private fun WalletStatCard(
+private fun DriverWalletMetricCard(
     title: String,
     value: String,
     subtitle: String,
@@ -550,473 +484,307 @@ private fun WalletStatCard(
 ) {
     Surface(
         modifier = modifier,
-        shape = RoundedCornerShape(26.dp),
-        color = Color.White,
-        shadowElevation = 8.dp,
-        tonalElevation = 4.dp
+        shape = RoundedCornerShape(24.dp),
+        color = Color(0xFF17171A),
+        shadowElevation = 8.dp
     ) {
         Column(
             modifier = Modifier.padding(16.dp)
         ) {
             Text(
                 text = title,
-                style = MaterialTheme.typography.labelMedium,
+                color = Color(0xFF9CA3AF),
                 fontWeight = FontWeight.Bold,
-                color = Color(0xFF6B7280)
+                style = MaterialTheme.typography.labelMedium
             )
 
-            Spacer(modifier = Modifier.height(7.dp))
+            Spacer(modifier = Modifier.height(8.dp))
 
             Text(
                 text = value,
-                style = MaterialTheme.typography.titleLarge,
+                color = Color.White,
                 fontWeight = FontWeight.Black,
-                color = Color(0xFF111827),
+                style = MaterialTheme.typography.titleLarge,
                 maxLines = 1,
                 overflow = TextOverflow.Ellipsis
             )
 
-            Spacer(modifier = Modifier.height(3.dp))
+            Spacer(modifier = Modifier.height(5.dp))
 
             Text(
                 text = subtitle,
-                style = MaterialTheme.typography.bodySmall,
+                color = Color(0xFF9CA3AF),
                 fontWeight = FontWeight.Medium,
-                color = Color(0xFF8A35F2),
-                maxLines = 1,
-                overflow = TextOverflow.Ellipsis
+                style = MaterialTheme.typography.bodySmall
             )
         }
     }
 }
 
 @Composable
-private fun WeeklyEarningsCard(
-    weekEarnings: Int,
-    weeklyTarget: Int,
-    weeklyProgress: Float,
-    weeklyProgressPercent: Int,
-    weekTripCount: Int,
-    averageFare: Int
+private fun DriverPayoutCard(
+    stats: DriverWalletStats,
+    isLoading: Boolean,
+    onWithdrawClick: () -> Unit
 ) {
     Surface(
         modifier = Modifier.fillMaxWidth(),
-        shape = RoundedCornerShape(30.dp),
-        color = Color.White,
-        shadowElevation = 10.dp,
-        tonalElevation = 5.dp
+        shape = RoundedCornerShape(26.dp),
+        color = Color(0xFF121216)
     ) {
         Column(
             modifier = Modifier.padding(18.dp)
         ) {
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                verticalAlignment = Alignment.CenterVertically
-            ) {
-                Column(modifier = Modifier.weight(1f)) {
-                    Text(
-                        text = "Weekly target",
-                        style = MaterialTheme.typography.titleMedium,
-                        fontWeight = FontWeight.Black,
-                        color = Color(0xFF111827)
-                    )
+            Text(
+                text = "Payout",
+                color = Color.White,
+                fontWeight = FontWeight.Black,
+                style = MaterialTheme.typography.titleMedium
+            )
 
-                    Spacer(modifier = Modifier.height(4.dp))
+            Spacer(modifier = Modifier.height(8.dp))
 
-                    Text(
-                        text = "${formatRupees(weekEarnings)} of ${formatRupees(weeklyTarget)} completed",
-                        style = MaterialTheme.typography.bodySmall,
-                        fontWeight = FontWeight.Medium,
-                        color = Color(0xFF6B7280)
-                    )
-                }
-
-                Surface(
-                    shape = RoundedCornerShape(50),
-                    color = Color(0xFF8A35F2).copy(alpha = 0.10f)
-                ) {
-                    Text(
-                        text = "$weeklyProgressPercent%",
-                        modifier = Modifier.padding(horizontal = 12.dp, vertical = 7.dp),
-                        style = MaterialTheme.typography.labelLarge,
-                        fontWeight = FontWeight.Black,
-                        color = Color(0xFF8A35F2)
-                    )
-                }
-            }
+            Text(
+                text = "Withdrawals are demo-only for now. Real bank, JazzCash, EasyPaisa or Stripe payout can be connected later near launch readiness.",
+                color = Color(0xFF9CA3AF),
+                style = MaterialTheme.typography.bodySmall,
+                fontWeight = FontWeight.Medium
+            )
 
             Spacer(modifier = Modifier.height(14.dp))
 
             LinearProgressIndicator(
-                progress = { weeklyProgress },
+                progress = if (stats.pendingPayout <= 0) 0f else 1f,
                 modifier = Modifier
                     .fillMaxWidth()
                     .height(8.dp)
                     .clip(RoundedCornerShape(50)),
                 color = Color(0xFF8A35F2),
-                trackColor = Color(0xFFE5E7EB)
+                trackColor = Color.White.copy(alpha = 0.12f)
             )
 
             Spacer(modifier = Modifier.height(14.dp))
 
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.SpaceBetween
-            ) {
-                SmallWalletMetric("Trips", weekTripCount.toString())
-                SmallWalletMetric("Avg/trip", formatRupees(averageFare))
-                SmallWalletMetric("Target", formatRupees(weeklyTarget))
-            }
-        }
-    }
-}
-
-@Composable
-private fun SmallWalletMetric(
-    title: String,
-    value: String
-) {
-    Column {
-        Text(
-            text = title,
-            style = MaterialTheme.typography.labelSmall,
-            fontWeight = FontWeight.Bold,
-            color = Color(0xFF6B7280)
-        )
-
-        Spacer(modifier = Modifier.height(2.dp))
-
-        Text(
-            text = value,
-            style = MaterialTheme.typography.bodyMedium,
-            fontWeight = FontWeight.Black,
-            color = Color(0xFF111827)
-        )
-    }
-}
-
-@Composable
-private fun EarningsBreakdownCard(
-    rideFares: Int,
-    rideitFee: Int,
-    netEarnings: Int,
-    completedTrips: Int
-) {
-    Surface(
-        modifier = Modifier.fillMaxWidth(),
-        shape = RoundedCornerShape(30.dp),
-        color = Color.White,
-        shadowElevation = 10.dp,
-        tonalElevation = 5.dp
-    ) {
-        Column(
-            modifier = Modifier.padding(18.dp)
-        ) {
-            Text(
-                text = "Earnings breakdown",
-                style = MaterialTheme.typography.titleMedium,
-                fontWeight = FontWeight.Black,
-                color = Color(0xFF111827)
-            )
-
-            Spacer(modifier = Modifier.height(14.dp))
-
-            BreakdownRow("Ride fares", formatRupees(rideFares), Color(0xFF8A35F2))
-            BreakdownRow("Completed trips", completedTrips.toString(), Color(0xFF16A34A))
-            BreakdownRow("Tips", "₨ 0", Color(0xFF16A34A))
-            BreakdownRow("Peak bonuses", "₨ 0", Color(0xFFE17A00))
-            BreakdownRow("Rideit fee", "-${formatRupees(rideitFee)}", Color(0xFFEF4444))
-
-            Spacer(modifier = Modifier.height(12.dp))
-
-            Divider(color = Color(0xFFE5E7EB))
-
-            Spacer(modifier = Modifier.height(12.dp))
-
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                verticalAlignment = Alignment.CenterVertically
-            ) {
-                Text(
-                    text = "Net earnings",
-                    modifier = Modifier.weight(1f),
-                    style = MaterialTheme.typography.titleMedium,
-                    fontWeight = FontWeight.Black,
-                    color = Color(0xFF111827)
-                )
-
-                Text(
-                    text = formatRupees(netEarnings),
-                    style = MaterialTheme.typography.titleMedium,
-                    fontWeight = FontWeight.Black,
-                    color = Color(0xFF16A34A)
-                )
-            }
-        }
-    }
-}
-
-@Composable
-private fun BreakdownRow(
-    title: String,
-    amount: String,
-    color: Color
-) {
-    Row(
-        modifier = Modifier
-            .fillMaxWidth()
-            .padding(vertical = 9.dp),
-        verticalAlignment = Alignment.CenterVertically
-    ) {
-        Box(
-            modifier = Modifier
-                .size(11.dp)
-                .clip(CircleShape)
-                .background(color)
-        )
-
-        Spacer(modifier = Modifier.width(12.dp))
-
-        Text(
-            text = title,
-            modifier = Modifier.weight(1f),
-            style = MaterialTheme.typography.bodyMedium,
-            fontWeight = FontWeight.SemiBold,
-            color = Color(0xFF111827)
-        )
-
-        Text(
-            text = amount,
-            style = MaterialTheme.typography.bodyMedium,
-            fontWeight = FontWeight.Black,
-            color = color
-        )
-    }
-}
-
-@Composable
-private fun RecentWalletActivityCard(
-    activities: List<DriverWalletTrip>,
-    onActivityClick: (DriverWalletTrip) -> Unit
-) {
-    Surface(
-        modifier = Modifier.fillMaxWidth(),
-        shape = RoundedCornerShape(30.dp),
-        color = Color.White,
-        shadowElevation = 10.dp,
-        tonalElevation = 5.dp
-    ) {
-        Column(
-            modifier = Modifier.padding(18.dp)
-        ) {
-            Text(
-                text = "Recent Firebase activity",
-                style = MaterialTheme.typography.titleMedium,
-                fontWeight = FontWeight.Black,
-                color = Color(0xFF111827)
-            )
-
-            Spacer(modifier = Modifier.height(12.dp))
-
-            AnimatedVisibility(
-                visible = activities.isEmpty(),
-                enter = fadeIn(),
-                exit = fadeOut()
-            ) {
-                Text(
-                    text = "No wallet activity yet. Completed Firebase trips will show here.",
-                    style = MaterialTheme.typography.bodySmall,
-                    fontWeight = FontWeight.Medium,
-                    color = Color(0xFF6B7280)
-                )
-            }
-
-            activities.forEach { trip ->
-                WalletActivityItem(
-                    title = statusLabel(trip.status),
-                    subtitle = "${trip.pickup} → ${trip.dropoff}",
-                    amount = if (trip.status == "completed") {
-                        "+${trip.fareText}"
-                    } else {
-                        "₨ 0"
+            Surface(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .border(
+                        width = 1.dp,
+                        color = Color(0xFF2A2A31),
+                        shape = RoundedCornerShape(22.dp)
+                    )
+                    .clickable(enabled = !isLoading) {
+                        onWithdrawClick()
                     },
-                    positive = trip.status == "completed",
-                    onClick = { onActivityClick(trip) }
-                )
+                shape = RoundedCornerShape(22.dp),
+                color = Color(0xFF1B1B1D)
+            ) {
+                Row(
+                    modifier = Modifier.padding(16.dp),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Box(
+                        modifier = Modifier
+                            .size(48.dp)
+                            .clip(RoundedCornerShape(17.dp))
+                            .background(Color(0xFF8A35F2).copy(alpha = 0.18f)),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Text(
+                            text = "↗",
+                            color = Color.White,
+                            fontWeight = FontWeight.Black,
+                            style = MaterialTheme.typography.titleLarge
+                        )
+                    }
+
+                    Spacer(modifier = Modifier.width(12.dp))
+
+                    Column(modifier = Modifier.weight(1f)) {
+                        Text(
+                            text = "Request Demo Withdrawal",
+                            color = Color.White,
+                            fontWeight = FontWeight.Black,
+                            style = MaterialTheme.typography.titleMedium
+                        )
+
+                        Text(
+                            text = if (isLoading) {
+                                "Loading balance..."
+                            } else {
+                                "Available: ${formatRupees(stats.pendingPayout)}"
+                            },
+                            color = Color(0xFF9CA3AF),
+                            fontWeight = FontWeight.Medium,
+                            style = MaterialTheme.typography.bodySmall
+                        )
+                    }
+
+                    Text(
+                        text = "Demo",
+                        color = Color(0xFF8A35F2),
+                        fontWeight = FontWeight.Black,
+                        style = MaterialTheme.typography.labelMedium
+                    )
+                }
             }
         }
     }
 }
 
 @Composable
-private fun WalletActivityItem(
-    title: String,
-    subtitle: String,
-    amount: String,
-    positive: Boolean,
-    onClick: () -> Unit
+private fun DriverRecentEarningsCard(
+    recentOne: String,
+    recentTwo: String,
+    recentThree: String
+) {
+    Surface(
+        modifier = Modifier.fillMaxWidth(),
+        shape = RoundedCornerShape(24.dp),
+        color = Color(0xFF17171A)
+    ) {
+        Column(
+            modifier = Modifier.padding(18.dp)
+        ) {
+            Text(
+                text = "Recent Earnings",
+                color = Color.White,
+                fontWeight = FontWeight.Black,
+                style = MaterialTheme.typography.titleMedium
+            )
+
+            Spacer(modifier = Modifier.height(14.dp))
+
+            DriverEarningRow(
+                icon = "✓",
+                text = recentOne
+            )
+
+            Spacer(modifier = Modifier.height(12.dp))
+
+            DriverEarningRow(
+                icon = "₨",
+                text = recentTwo
+            )
+
+            Spacer(modifier = Modifier.height(12.dp))
+
+            DriverEarningRow(
+                icon = "🔒",
+                text = recentThree
+            )
+        }
+    }
+}
+
+@Composable
+private fun DriverEarningRow(
+    icon: String,
+    text: String
 ) {
     Row(
-        modifier = Modifier
-            .fillMaxWidth()
-            .clickable { onClick() }
-            .padding(vertical = 11.dp),
         verticalAlignment = Alignment.CenterVertically
     ) {
         Box(
             modifier = Modifier
                 .size(42.dp)
-                .clip(CircleShape)
-                .background(
-                    if (positive) {
-                        Color(0xFF16A34A).copy(alpha = 0.12f)
-                    } else {
-                        Color(0xFFEF4444).copy(alpha = 0.12f)
-                    }
-                ),
+                .clip(RoundedCornerShape(15.dp))
+                .background(Color.White.copy(alpha = 0.08f)),
             contentAlignment = Alignment.Center
         ) {
             Text(
-                text = if (positive) "+" else "-",
-                style = MaterialTheme.typography.titleMedium,
-                fontWeight = FontWeight.Black,
-                color = if (positive) Color(0xFF16A34A) else Color(0xFFEF4444)
+                text = icon,
+                color = Color.White,
+                fontWeight = FontWeight.Black
             )
         }
 
-        Spacer(modifier = Modifier.width(13.dp))
-
-        Column(modifier = Modifier.weight(1f)) {
-            Text(
-                text = title,
-                style = MaterialTheme.typography.bodyMedium,
-                fontWeight = FontWeight.Black,
-                color = Color(0xFF111827)
-            )
-
-            Spacer(modifier = Modifier.height(2.dp))
-
-            Text(
-                text = subtitle,
-                style = MaterialTheme.typography.bodySmall,
-                fontWeight = FontWeight.Medium,
-                color = Color(0xFF6B7280),
-                maxLines = 1,
-                overflow = TextOverflow.Ellipsis
-            )
-        }
+        Spacer(modifier = Modifier.width(12.dp))
 
         Text(
-            text = amount,
-            style = MaterialTheme.typography.bodyMedium,
-            fontWeight = FontWeight.Black,
-            color = if (positive) Color(0xFF16A34A) else Color(0xFFEF4444)
+            text = text,
+            color = Color(0xFFE5E7EB),
+            fontWeight = FontWeight.Medium,
+            style = MaterialTheme.typography.bodySmall,
+            modifier = Modifier.weight(1f),
+            maxLines = 2,
+            overflow = TextOverflow.Ellipsis
         )
     }
 }
 
 @Composable
-private fun WalletLoadingCard() {
+private fun DriverWalletSafetyCard() {
     Surface(
         modifier = Modifier.fillMaxWidth(),
-        shape = RoundedCornerShape(28.dp),
-        color = Color.White,
-        shadowElevation = 8.dp,
-        tonalElevation = 4.dp
-    ) {
-        Column(
-            modifier = Modifier.padding(18.dp)
-        ) {
-            Text(
-                text = "Loading Firebase wallet...",
-                style = MaterialTheme.typography.titleMedium,
-                fontWeight = FontWeight.Black,
-                color = Color(0xFF111827)
-            )
-
-            Spacer(modifier = Modifier.height(12.dp))
-
-            LinearProgressIndicator(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .height(8.dp)
-                    .clip(RoundedCornerShape(50)),
-                color = Color(0xFF8A35F2),
-                trackColor = Color(0xFFE5E7EB)
-            )
-        }
-    }
-}
-
-@Composable
-private fun WalletMessageCard(
-    title: String,
-    message: String,
-    success: Boolean
-) {
-    Surface(
-        modifier = Modifier.fillMaxWidth(),
-        shape = RoundedCornerShape(28.dp),
-        color = if (success) Color.White else Color(0xFFFFE5E5),
-        shadowElevation = 8.dp,
-        tonalElevation = 4.dp
+        shape = RoundedCornerShape(24.dp),
+        color = Color(0xFF1B1B1D)
     ) {
         Row(
             modifier = Modifier.padding(18.dp),
-            verticalAlignment = Alignment.CenterVertically
+            verticalAlignment = Alignment.Top
         ) {
             Box(
                 modifier = Modifier
-                    .size(46.dp)
-                    .clip(CircleShape)
-                    .background(
-                        if (success) {
-                            Color(0xFF8A35F2).copy(alpha = 0.12f)
-                        } else {
-                            Color(0xFFEF4444).copy(alpha = 0.12f)
-                        }
-                    ),
+                    .size(42.dp)
+                    .clip(RoundedCornerShape(15.dp))
+                    .background(Color(0xFF22C55E).copy(alpha = 0.14f)),
                 contentAlignment = Alignment.Center
             ) {
                 Text(
-                    text = if (success) "₨" else "!",
-                    color = if (success) Color(0xFF8A35F2) else Color(0xFFEF4444),
-                    fontWeight = FontWeight.Black
+                    text = "🔒",
+                    style = MaterialTheme.typography.titleMedium
                 )
             }
 
-            Spacer(modifier = Modifier.width(13.dp))
+            Spacer(modifier = Modifier.width(12.dp))
 
             Column(modifier = Modifier.weight(1f)) {
                 Text(
-                    text = title,
-                    style = MaterialTheme.typography.titleMedium,
+                    text = "Safe driver wallet",
+                    color = Color.White,
                     fontWeight = FontWeight.Black,
-                    color = Color(0xFF111827)
+                    style = MaterialTheme.typography.titleMedium
                 )
 
-                Spacer(modifier = Modifier.height(3.dp))
+                Spacer(modifier = Modifier.height(6.dp))
 
                 Text(
-                    text = message,
+                    text = "Earnings are calculated from completed Firebase ride requests. No real payout, bank transfer, wallet withdrawal or payment gateway is connected yet.",
+                    color = Color(0xFF9CA3AF),
                     style = MaterialTheme.typography.bodySmall,
-                    fontWeight = FontWeight.Medium,
-                    color = if (success) Color(0xFF6B7280) else Color(0xFFEF4444)
+                    fontWeight = FontWeight.Medium
                 )
             }
         }
     }
 }
 
-private fun normalizeFareText(fare: String): String {
-    val cleanFare = fare.trim()
+private fun DocumentSnapshot.safeText(field: String): String {
+    return try {
+        val value = get(field)
 
-    if (cleanFare.isBlank()) return "₨ 0"
+        when (value) {
+            null -> ""
+            is String -> value
+            is Number -> value.toString()
+            is Boolean -> value.toString()
+            else -> value.toString()
+        }
+    } catch (_: Exception) {
+        ""
+    }
+}
 
-    return cleanFare
-        .replace("Rs.", "₨")
-        .replace("Rs", "₨")
-        .replace("PKR", "₨")
+private fun DocumentSnapshot.safeSortTime(): Long {
+    return try {
+        getTimestamp("completedAt")?.seconds
+            ?: getTimestamp("updatedAt")?.seconds
+            ?: getTimestamp("createdAt")?.seconds
+            ?: 0L
+    } catch (_: Exception) {
+        0L
+    }
 }
 
 private fun extractFareAmount(fare: String): Int {
@@ -1026,19 +794,28 @@ private fun extractFareAmount(fare: String): Int {
         ?: 0
 }
 
+private fun normalizeFareText(fare: String): String {
+    val cleanFare = fare.trim()
+
+    if (cleanFare.isBlank()) return "₨ 0"
+
+    val digitsOnly = cleanFare.filter { it.isDigit() }
+
+    return when {
+        cleanFare.contains("₨") -> cleanFare
+        cleanFare.contains("Rs", ignoreCase = true) -> cleanFare
+            .replace("Rs.", "₨")
+            .replace("Rs", "₨")
+        cleanFare.contains("PKR", ignoreCase = true) -> cleanFare.replace("PKR", "₨")
+        digitsOnly.isNotBlank() -> "₨ $digitsOnly"
+        else -> cleanFare
+    }
+}
+
 private fun formatRupees(amount: Int): String {
     if (amount <= 0) return "₨ 0"
 
     return "₨ ${String.format(Locale.US, "%,d", amount)}"
-}
-
-private fun statusLabel(status: String): String {
-    return when (status.lowercase()) {
-        "completed" -> "Trip completed"
-        "cancelled_by_driver" -> "Cancelled by you"
-        "cancelled_by_rider" -> "Cancelled by rider"
-        else -> "Wallet activity"
-    }
 }
 
 private fun isToday(timestamp: Timestamp?): Boolean {
