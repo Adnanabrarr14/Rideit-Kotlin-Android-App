@@ -3784,3 +3784,126 @@ Completed and stable.
 
 ### Next Phase
 Phase 8.21.12.6 — Driver Wallet polish + completed trip earning consistency QA.
+
+
+
+## Phase 8.21.12.7.4 — Login + Settings Theme Polish
+
+### Status
+Completed and stable.
+
+### Completed
+- Account Type screen made more theme-aware.
+- Rider Login and Driver Login made cleaner and more premium.
+- Removed role-warning text:
+  - Rider account opens Rider Map only
+  - Driver account opens Driver Dashboard only
+- Removed visible login input line/underline issue.
+- Replaced login input fields with clean custom premium input fields.
+- Settings icons now follow selected theme:
+  - Light Mode uses light/purple styling
+  - Dark Mode uses dark/premium styling
+  - Rose/Pink Theme uses pink styling
+- Rider and Driver login routing preserved.
+- Firebase login/reset password flow preserved.
+
+### Protection Notes
+- MapScreen was not touched.
+- Navigation was preserved.
+- Firebase role-safe login remained protected.
+
+### Next Phase
+Phase 8.21.12.7.5 — Driver-side UI theme and identity polish.## Phase 8.21.12.7.3 — Rose Theme UI Conversion + Real Profile Identity
+
+### Status
+Completed and stable.
+
+### Completed
+- Added Rose / Pink theme support for women-selected accounts.
+- Women users can select Rose theme during signup.
+- Rose theme is saved in Firebase as `preferredThemeMode = rose`.
+- Drawer/Menu now changes to Rose/Pink theme.
+- Settings screen now includes:
+  - System Default
+  - Light Mode
+  - Dark Mode
+  - Rose / Pink Theme
+- Converted main rider drawer screens to Rose-aware UI:
+  - Profile
+  - Trip History
+  - Payment Methods
+  - Rideit Wallet
+  - Notifications
+  - Settings
+- Men/default users keep the dark premium Rideit style.
+- Added Full Name field to signup.
+- Firebase now saves:
+  - `fullName`
+  - `displayName`
+  - `name`
+  - `phoneNumber`
+- Firebase Auth display name is updated during signup.
+- Profile screen now shows real user name instead of hardcoded “Rideit User”.
+- Profile screen now supports Edit Profile.
+- User can update:
+  - Full Name
+  - Phone Number
+- Profile remains Rose-aware for women/Rose users and dark for default users.
+
+### Protection Notes
+- MapScreen was not touched.
+- Firebase ride booking/payment flow was preserved.
+- Existing rider/driver navigation remained safe.
+- Real payment gateway is still postponed; current payment system remains safe demo mode.
+
+### Next Phase
+Phase 8.21.12.7.4 — Apply Rose Theme + Real Name polish to remaining screens and driver-side UI.
+
+
+### Phase 8.21.12.6 UI Polish — Rider Active Ride Overlay Fix
+
+### Status
+Completed and stable.
+
+### Completed
+- Fixed MapScreen active ride overlay issue.
+- Removed/hid the compact route chip that was blocking the “Finding your driver” card.
+- Rider active trip screen now looks cleaner during:
+  - Finding driver
+  - Waiting for driver to accept
+  - Driver accepted
+  - Driver arriving
+- Firebase ride flow was not touched.
+- GPS/location flow was not touched.
+- Booking/cancel/driver marker/receipt logic remains protected.
+
+### Safety Notes
+- The map route line still remains visible.
+- The bottom active trip card still shows ride/driver details.
+- Only the small overlapping route chip was disabled.
+
+## Phase 8.21.12.7.1 — Professional Global Theme System
+
+### Status
+Completed and stable.
+
+### Completed
+- Added professional app-wide `RideitTheme.kt`.
+- Connected `MainActivity.kt` to use `RideitTheme`.
+- Theme preference now supports:
+  - System Default
+  - Light Mode
+  - Dark Mode
+- Theme mode is saved in Firebase user profile.
+- Theme mode is loaded globally after login.
+- MainActivity is now clean and client-ready.
+- Removed duplicate/unneeded `RideitLightColorScheme.kt` after safe cleanup.
+- Build completed successfully.
+
+### Notes
+- Screens using `MaterialTheme` now follow the selected app theme.
+- Some custom premium screens with hardcoded colors may still keep their branded look.
+- Future client theme colors can be changed from `RideitTheme.kt`.
+
+### Next Phase
+Phase 8.21.12.7.2 — Apply selected currency to fare display across rider/driver UI.

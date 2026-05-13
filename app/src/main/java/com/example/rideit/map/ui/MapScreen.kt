@@ -437,11 +437,12 @@ fun MapScreen(
                         firebaseTripCompleted = true
                         firebaseTripCancelledByDriver = false
                         firebaseLiveTripStatus = "completed"
-                        firebaseRideMessage = "Trip completed. Please submit your rating."
+                        firebaseRideMessage = "Trip completed. Receipt is ready."
                         firebaseRideError = null
+                        submittedRating = null
                         showPanel = false
-                        showRideCompletionSheet = true
-                        showReceiptPreviewSheet = false
+                        showRideCompletionSheet = false
+                        showReceiptPreviewSheet = true
                         mapViewModel.onCancelRideClicked()
                     }
                 }
@@ -514,13 +515,14 @@ fun MapScreen(
                             firebaseTripCancelledByDriver = false
                             firebaseDriverName = driverName ?: firebaseDriverName ?: "Your driver"
                             firebaseDriverEmail = driverEmail ?: firebaseDriverEmail
-                            firebaseRideMessage = "Trip completed successfully."
+                            firebaseRideMessage = "Trip completed successfully. Receipt is ready."
                             firebaseRideError = null
                             activeRideRequestId = null
+                            submittedRating = null
                             mapViewModel.onCancelRideClicked()
                             showPanel = false
-                            showRideCompletionSheet = true
-                            showReceiptPreviewSheet = false
+                            showRideCompletionSheet = false
+                            showReceiptPreviewSheet = true
                         }
 
                         "cancelled_by_driver" -> {
@@ -1081,16 +1083,21 @@ fun MapScreen(
             modifier = Modifier.align(Alignment.Center),
             onDismiss = {
                 showRideCompletionSheet = false
+                showReceiptPreviewSheet = true
             },
             onSubmitRating = { rating, tags, feedback ->
                 if (isSavingFeedback) return@PremiumRideCompletionSheet
 
                 val requestIdForFeedback = completedRideRequestId ?: activeRideRequestId
 
+                submittedRating = rating
+                showRideCompletionSheet = false
+                showReceiptPreviewSheet = true
+
                 if (requestIdForFeedback.isNullOrBlank()) {
                     scope.launch {
                         snackbarHostState.showSnackbar(
-                            message = "Completed ride not found. Feedback was not saved."
+                            message = "Receipt opened. Completed ride feedback could not be saved because ride ID was missing."
                         )
                     }
                     return@PremiumRideCompletionSheet
@@ -1129,10 +1136,13 @@ fun MapScreen(
                     },
                     onError = { error ->
                         isSavingFeedback = false
+                        submittedRating = rating
+                        showRideCompletionSheet = false
+                        showReceiptPreviewSheet = true
 
                         scope.launch {
                             snackbarHostState.showSnackbar(
-                                message = error
+                                message = "Receipt opened. Feedback save issue: $error"
                             )
                         }
                     }
@@ -1562,66 +1572,20 @@ private fun CompactRouteChip(
     etaText: String?,
     modifier: Modifier = Modifier
 ) {
-    AnimatedVisibility(
-        visible = visible,
-        enter = fadeIn(),
-        exit = fadeOut(),
-        modifier = modifier
-    ) {
-        Surface(
-            shape = RoundedCornerShape(22.dp),
-            color = Color.White.copy(alpha = 0.96f),
-            shadowElevation = 12.dp,
-            tonalElevation = 6.dp
-        ) {
-            Row(
-                modifier = Modifier.padding(horizontal = 13.dp, vertical = 11.dp),
-                verticalAlignment = Alignment.CenterVertically
-            ) {
-                Box(
-                    modifier = Modifier
-                        .size(36.dp)
-                        .clip(CircleShape)
-                        .background(Color(0xFF8A35F2).copy(alpha = 0.12f)),
-                    contentAlignment = Alignment.Center
-                ) {
-                    Text(
-                        text = "↗",
-                        color = Color(0xFF8A35F2),
-                        fontWeight = FontWeight.Black
-                    )
-                }
+    /*
+        Safe UI fix:
+        Hide this compact route chip so it does not block the
+        "Finding your driver" card on the rider MapScreen.
 
-                Spacer(modifier = Modifier.width(10.dp))
+        This does not touch GPS, Firebase, booking, driver marker,
+        cancel ride, receipt, or route logic.
+    */
 
-                Column(modifier = Modifier.weight(1f)) {
-                    Text(
-                        text = "${pickupText.ifBlank { "Pickup" }} → ${dropoffText.ifBlank { "Dropoff" }}",
-                        color = Color(0xFF111827),
-                        fontWeight = FontWeight.Black,
-                        maxLines = 1,
-                        overflow = TextOverflow.Ellipsis,
-                        style = MaterialTheme.typography.bodySmall
-                    )
-
-                    Spacer(modifier = Modifier.height(2.dp))
-
-                    Text(
-                        text = listOfNotNull(
-                            rideTitle,
-                            fareText,
-                            etaText
-                        ).joinToString(" • ").ifBlank { "Route ready" },
-                        color = Color(0xFF6B7280),
-                        fontWeight = FontWeight.Medium,
-                        maxLines = 1,
-                        overflow = TextOverflow.Ellipsis,
-                        style = MaterialTheme.typography.labelSmall
-                    )
-                }
-            }
-        }
+    if (!visible) {
+        return
     }
+
+    return
 }
 
 @Composable

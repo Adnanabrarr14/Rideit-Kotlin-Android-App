@@ -46,6 +46,7 @@ import com.google.firebase.firestore.FirebaseFirestore
 import com.google.firebase.firestore.ListenerRegistration
 import java.text.SimpleDateFormat
 import java.util.Locale
+import kotlin.math.roundToInt
 
 @Immutable
 private data class DriverWalletStats(
@@ -55,7 +56,8 @@ private data class DriverWalletStats(
     val totalEarnings: Int = 0,
     val completedTrips: Int = 0,
     val todayTrips: Int = 0,
-    val pendingPayout: Int = 0
+    val pendingPayout: Int = 0,
+    val averagePerTrip: Int = 0
 )
 
 @Composable
@@ -109,7 +111,7 @@ fun DriverWalletScreen(
 
                     val completedDocs = documents
                         .filter { document ->
-                            document.safeText("status").lowercase() == "completed"
+                            document.safeText("status").trim().lowercase() == "completed"
                         }
                         .sortedByDescending { document ->
                             document.safeSortTime()
@@ -133,30 +135,21 @@ fun DriverWalletScreen(
                     }
 
                     val totalEarnings = completedDocs.sumOf { document ->
-                        extractFareAmount(
-                            document.safeText("fareEstimate")
-                                .ifBlank { document.safeText("fare") }
-                                .ifBlank { document.safeText("estimatedFare") }
-                                .ifBlank { document.safeText("price") }
-                        )
+                        document.safeDriverEarningAmount()
                     }
 
                     val todayEarnings = todayCompletedDocs.sumOf { document ->
-                        extractFareAmount(
-                            document.safeText("fareEstimate")
-                                .ifBlank { document.safeText("fare") }
-                                .ifBlank { document.safeText("estimatedFare") }
-                                .ifBlank { document.safeText("price") }
-                        )
+                        document.safeDriverEarningAmount()
                     }
 
                     val weekEarnings = weekCompletedDocs.sumOf { document ->
-                        extractFareAmount(
-                            document.safeText("fareEstimate")
-                                .ifBlank { document.safeText("fare") }
-                                .ifBlank { document.safeText("estimatedFare") }
-                                .ifBlank { document.safeText("price") }
-                        )
+                        document.safeDriverEarningAmount()
+                    }
+
+                    val averagePerTrip = if (completedDocs.isNotEmpty()) {
+                        (totalEarnings.toFloat() / completedDocs.size.toFloat()).roundToInt()
+                    } else {
+                        0
                     }
 
                     stats = DriverWalletStats(
@@ -166,23 +159,22 @@ fun DriverWalletScreen(
                         totalEarnings = totalEarnings,
                         completedTrips = completedDocs.size,
                         todayTrips = todayCompletedDocs.size,
-                        pendingPayout = totalEarnings
+                        pendingPayout = totalEarnings,
+                        averagePerTrip = averagePerTrip
                     )
 
                     val recentRows = completedDocs
                         .take(3)
                         .map { document ->
-                            val fareText = normalizeFareText(
-                                document.safeText("fareEstimate")
-                                    .ifBlank { document.safeText("fare") }
-                                    .ifBlank { "₨ 0" }
-                            )
+                            val fareText = formatRupees(document.safeDriverEarningAmount())
 
                             val pickup = document.safeText("pickupAddress")
                                 .ifBlank { document.safeText("pickupText") }
                                 .ifBlank { "Pickup" }
 
-                            "Completed trip • $fareText • ${pickup.take(22)}"
+                            val completedDate = document.safeCompletedDateLabel()
+
+                            "Completed trip • $fareText • ${pickup.take(22)} • $completedDate"
                         }
 
                     recentOne = recentRows.getOrNull(0) ?: "No completed trips yet"
@@ -192,7 +184,7 @@ fun DriverWalletScreen(
                     statusMessage = if (completedDocs.isEmpty()) {
                         "No completed trips yet"
                     } else {
-                        "Wallet synced from completed trips"
+                        "Wallet synced from ${completedDocs.size} completed trips"
                     }
 
                     isLoading = false
@@ -255,7 +247,11 @@ fun DriverWalletScreen(
                 stats = stats,
                 isLoading = isLoading,
                 onWithdrawClick = {
-                    statusMessage = "Demo withdrawal requested. Real payout is not connected yet."
+                    statusMessage = if (stats.pendingPayout > 0) {
+                        "Demo withdrawal requested for ${formatRupees(stats.pendingPayout)}. Real payout is not connected yet."
+                    } else {
+                        "No available earnings yet. Complete trips first."
+                    }
                 }
             )
 
@@ -466,12 +462,21 @@ private fun DriverWalletStatsGrid(
             Spacer(modifier = Modifier.width(12.dp))
 
             DriverWalletMetricCard(
-                title = "Trips",
-                value = if (isLoading) "..." else stats.completedTrips.toString(),
-                subtitle = "Completed",
+                title = "Average",
+                value = if (isLoading) "₨ ..." else formatRupees(stats.averagePerTrip),
+                subtitle = "Per completed trip",
                 modifier = Modifier.weight(1f)
             )
         }
+
+        Spacer(modifier = Modifier.height(12.dp))
+
+        DriverWalletMetricCard(
+            title = "Completed Trips",
+            value = if (isLoading) "..." else stats.completedTrips.toString(),
+            subtitle = "Only completed rides count toward earnings",
+            modifier = Modifier.fillMaxWidth()
+        )
     }
 }
 
@@ -527,6 +532,8 @@ private fun DriverPayoutCard(
     isLoading: Boolean,
     onWithdrawClick: () -> Unit
 ) {
+    val payoutProgress = if (stats.pendingPayout <= 0) 0f else 1f
+
     Surface(
         modifier = Modifier.fillMaxWidth(),
         shape = RoundedCornerShape(26.dp),
@@ -554,7 +561,7 @@ private fun DriverPayoutCard(
             Spacer(modifier = Modifier.height(14.dp))
 
             LinearProgressIndicator(
-                progress = if (stats.pendingPayout <= 0) 0f else 1f,
+                progress = payoutProgress,
                 modifier = Modifier
                     .fillMaxWidth()
                     .height(8.dp)
@@ -750,7 +757,7 @@ private fun DriverWalletSafetyCard() {
                 Spacer(modifier = Modifier.height(6.dp))
 
                 Text(
-                    text = "Earnings are calculated from completed Firebase ride requests. No real payout, bank transfer, wallet withdrawal or payment gateway is connected yet.",
+                    text = "Earnings are calculated only from completed Firebase ride requests. Fare ranges are parsed safely, and no real payout, bank transfer, wallet withdrawal or payment gateway is connected yet.",
                     color = Color(0xFF9CA3AF),
                     style = MaterialTheme.typography.bodySmall,
                     fontWeight = FontWeight.Medium
@@ -776,6 +783,59 @@ private fun DocumentSnapshot.safeText(field: String): String {
     }
 }
 
+private fun DocumentSnapshot.safeNumber(field: String): Int? {
+    return try {
+        when (val value = get(field)) {
+            is Int -> value
+            is Long -> value.toInt()
+            is Double -> value.roundToInt()
+            is Float -> value.roundToInt()
+            is Number -> value.toInt()
+            is String -> parseFareTextToAmount(value)
+            else -> null
+        }
+    } catch (_: Exception) {
+        null
+    }
+}
+
+private fun DocumentSnapshot.safeDriverEarningAmount(): Int {
+    val numericFields = listOf(
+        "driverEarningAmount",
+        "driverEarnings",
+        "driverEarning",
+        "earningAmount",
+        "fareAmount",
+        "fareValue",
+        "priceAmount",
+        "totalFare"
+    )
+
+    numericFields.forEach { field ->
+        val value = safeNumber(field)
+        if (value != null && value > 0) {
+            return value
+        }
+    }
+
+    val textFields = listOf(
+        "fareEstimate",
+        "fare",
+        "estimatedFare",
+        "price",
+        "paymentAmount"
+    )
+
+    textFields.forEach { field ->
+        val amount = parseFareTextToAmount(safeText(field))
+        if (amount > 0) {
+            return amount
+        }
+    }
+
+    return 0
+}
+
 private fun DocumentSnapshot.safeSortTime(): Long {
     return try {
         getTimestamp("completedAt")?.seconds
@@ -787,28 +847,51 @@ private fun DocumentSnapshot.safeSortTime(): Long {
     }
 }
 
-private fun extractFareAmount(fare: String): Int {
-    return fare
-        .filter { it.isDigit() }
-        .toIntOrNull()
-        ?: 0
+private fun DocumentSnapshot.safeCompletedDateLabel(): String {
+    return try {
+        val timestamp = getTimestamp("completedAt")
+            ?: getTimestamp("updatedAt")
+            ?: getTimestamp("createdAt")
+            ?: return "recent"
+
+        val formatter = SimpleDateFormat("MMM d", Locale.getDefault())
+        formatter.format(timestamp.toDate())
+    } catch (_: Exception) {
+        "recent"
+    }
 }
 
-private fun normalizeFareText(fare: String): String {
+private fun parseFareTextToAmount(fare: String): Int {
     val cleanFare = fare.trim()
 
-    if (cleanFare.isBlank()) return "₨ 0"
+    if (cleanFare.isBlank()) {
+        return 0
+    }
 
-    val digitsOnly = cleanFare.filter { it.isDigit() }
+    val amountMatches = Regex("""\d[\d,]*""")
+        .findAll(cleanFare)
+        .mapNotNull { match ->
+            match.value.replace(",", "").toIntOrNull()
+        }
+        .filter { amount ->
+            amount > 0
+        }
+        .toList()
 
-    return when {
-        cleanFare.contains("₨") -> cleanFare
-        cleanFare.contains("Rs", ignoreCase = true) -> cleanFare
-            .replace("Rs.", "₨")
-            .replace("Rs", "₨")
-        cleanFare.contains("PKR", ignoreCase = true) -> cleanFare.replace("PKR", "₨")
-        digitsOnly.isNotBlank() -> "₨ $digitsOnly"
-        else -> cleanFare
+    if (amountMatches.isEmpty()) {
+        return 0
+    }
+
+    val looksLikeRange =
+        cleanFare.contains("-") ||
+                cleanFare.contains(" to ", ignoreCase = true) ||
+                cleanFare.contains("–") ||
+                cleanFare.contains("—")
+
+    return if (looksLikeRange && amountMatches.size >= 2) {
+        ((amountMatches[0] + amountMatches[1]).toFloat() / 2f).roundToInt()
+    } else {
+        amountMatches.first()
     }
 }
 

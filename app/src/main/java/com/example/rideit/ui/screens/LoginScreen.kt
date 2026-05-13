@@ -1,11 +1,14 @@
 package com.example.rideit.ui.screens
 
+import android.app.Activity
+import android.content.Context
+import android.content.ContextWrapper
 import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.background
-import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.fillMaxSize
@@ -15,30 +18,61 @@ import androidx.compose.foundation.layout.navigationBars
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.statusBars
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.windowInsetsPadding
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.text.BasicTextField
+import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.OutlinedTextField
-import androidx.compose.material3.OutlinedTextFieldDefaults
-import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.Immutable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.SolidColor
+import androidx.compose.ui.graphics.luminance
+import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.text.input.VisualTransformation
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import com.example.rideit.FirebaseManager
+
+@Immutable
+private data class LoginThemeColors(
+    val backgroundTop: Color,
+    val backgroundMiddle: Color,
+    val backgroundBottom: Color,
+    val card: Color,
+    val softField: Color,
+    val selectedTab: Color,
+    val unselectedTab: Color,
+    val accent: Color,
+    val accentBottom: Color,
+    val text: Color,
+    val subText: Color,
+    val mutedText: Color,
+    val onAccent: Color,
+    val error: Color,
+    val success: Color
+)
+
+private enum class LoginMethod {
+    Email,
+    Phone
+}
 
 @Composable
 fun LoginScreen(
@@ -52,19 +86,30 @@ fun LoginScreen(
     onCreateAccountClick: () -> Unit,
     onLoginSuccess: () -> Unit
 ) {
+    val context = LocalContext.current
+    val activity = remember(context) { context.findActivity() }
+
+    var selectedMethod by remember { mutableStateOf(LoginMethod.Email) }
+
     var email by remember { mutableStateOf("") }
     var password by remember { mutableStateOf("") }
     var passwordVisible by remember { mutableStateOf(false) }
+
+    var phoneNumber by remember { mutableStateOf("") }
+    var otpCode by remember { mutableStateOf("") }
+    var verificationId by remember { mutableStateOf("") }
+    var otpSent by remember { mutableStateOf(false) }
+
     var errorMessage by remember { mutableStateOf<String?>(null) }
     var successMessage by remember { mutableStateOf<String?>(null) }
     var isLoading by remember { mutableStateOf(false) }
 
     val isDriver = accountRole == FirebaseManager.ROLE_DRIVER
-    val purple = Color(0xFF8A35F2)
-    val red = Color(0xFFFF1212)
-    val glowColor = if (isDriver) purple else red
-    val darkCard = Color(0xFF101019)
-    val fieldBg = Color(0xFF1A1A25)
+
+    val colors = rememberLoginThemeColors(
+        isDriver = isDriver,
+        fallbackAccent = accentColor
+    )
 
     BackHandler {
         if (!isLoading) {
@@ -75,267 +120,171 @@ fun LoginScreen(
     Box(
         modifier = Modifier
             .fillMaxSize()
-            .background(Color(0xFF030307))
+            .background(colors.backgroundTop)
             .windowInsetsPadding(WindowInsets.statusBars)
             .windowInsetsPadding(WindowInsets.navigationBars)
             .padding(horizontal = 18.dp),
         contentAlignment = Alignment.Center
     ) {
-        Surface(
+        Box(
             modifier = Modifier
                 .fillMaxWidth()
-                .height(690.dp)
-                .border(
-                    width = 1.dp,
-                    color = Color.White.copy(alpha = 0.08f),
-                    shape = RoundedCornerShape(42.dp)
-                ),
-            shape = RoundedCornerShape(42.dp),
-            color = Color.Transparent,
-            shadowElevation = 24.dp
+                .height(720.dp)
+                .clip(RoundedCornerShape(42.dp))
+                .background(
+                    Brush.verticalGradient(
+                        colors = listOf(
+                            colors.backgroundTop,
+                            colors.backgroundMiddle,
+                            colors.backgroundBottom,
+                            colors.backgroundTop
+                        )
+                    )
+                )
         ) {
             Box(
                 modifier = Modifier
-                    .fillMaxSize()
+                    .align(Alignment.TopCenter)
+                    .size(260.dp)
                     .background(
-                        Brush.verticalGradient(
+                        Brush.radialGradient(
                             colors = listOf(
-                                Color(0xFF030307),
-                                glowColor.copy(alpha = if (isDriver) 0.28f else 0.22f),
-                                Color(0xFF07020A),
-                                Color(0xFF030307)
+                                colors.accent.copy(alpha = 0.46f),
+                                Color.Transparent
                             )
                         )
                     )
+            )
+
+            Box(
+                modifier = Modifier
+                    .align(Alignment.TopStart)
+                    .padding(start = 24.dp, top = 24.dp)
+                    .size(54.dp)
+                    .clip(CircleShape)
+                    .background(colors.card.copy(alpha = 0.82f))
+                    .clickable(enabled = !isLoading) {
+                        onBackClick()
+                    },
+                contentAlignment = Alignment.Center
             ) {
-                Box(
-                    modifier = Modifier
-                        .align(Alignment.TopCenter)
-                        .size(250.dp)
-                        .background(
-                            Brush.radialGradient(
-                                colors = listOf(
-                                    glowColor.copy(alpha = 0.52f),
-                                    Color.Transparent
-                                )
-                            )
-                        )
+                Text(
+                    text = "‹",
+                    color = colors.text,
+                    fontWeight = FontWeight.Black,
+                    style = MaterialTheme.typography.headlineSmall
+                )
+            }
+
+            Column(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .padding(horizontal = 24.dp, vertical = 26.dp),
+                horizontalAlignment = Alignment.CenterHorizontally
+            ) {
+                Spacer(modifier = Modifier.height(64.dp))
+
+                Text(
+                    text = "R I D E I T",
+                    color = colors.text.copy(alpha = 0.58f),
+                    fontWeight = FontWeight.Black,
+                    style = MaterialTheme.typography.titleMedium
                 )
 
-                Surface(
+                Spacer(modifier = Modifier.height(8.dp))
+
+                Text(
+                    text = accountSubtitle,
+                    color = colors.subText,
+                    fontWeight = FontWeight.Medium,
+                    textAlign = TextAlign.Center,
+                    style = MaterialTheme.typography.bodySmall
+                )
+
+                Spacer(modifier = Modifier.height(18.dp))
+
+                Box(
                     modifier = Modifier
-                        .align(Alignment.TopStart)
-                        .padding(start = 24.dp, top = 24.dp)
-                        .size(54.dp),
-                    shape = CircleShape,
-                    color = Color.White.copy(alpha = 0.10f),
-                    shadowElevation = 12.dp
+                        .fillMaxWidth()
+                        .clip(RoundedCornerShape(28.dp))
+                        .background(colors.card)
+                        .padding(horizontal = 18.dp, vertical = 22.dp)
                 ) {
-                    Box(
-                        modifier = Modifier
-                            .fillMaxSize()
-                            .clickable(enabled = !isLoading) {
-                                onBackClick()
-                            },
-                        contentAlignment = Alignment.Center
+                    Column(
+                        horizontalAlignment = Alignment.CenterHorizontally
                     ) {
                         Text(
-                            text = "‹",
-                            color = Color.White,
+                            text = accountTitle,
+                            color = colors.text,
                             fontWeight = FontWeight.Black,
-                            style = MaterialTheme.typography.headlineSmall
+                            style = MaterialTheme.typography.titleLarge,
+                            textAlign = TextAlign.Center
                         )
-                    }
-                }
 
-                Column(
-                    modifier = Modifier
-                        .fillMaxSize()
-                        .padding(horizontal = 24.dp, vertical = 26.dp),
-                    horizontalAlignment = Alignment.CenterHorizontally
-                ) {
-                    Spacer(modifier = Modifier.height(64.dp))
+                        Spacer(modifier = Modifier.height(5.dp))
 
-                    Text(
-                        text = "R I D E I T",
-                        color = Color.White.copy(alpha = 0.50f),
-                        fontWeight = FontWeight.Black,
-                        style = MaterialTheme.typography.titleMedium
-                    )
+                        Text(
+                            text = if (selectedMethod == LoginMethod.Email) {
+                                "Use email and password to sign in"
+                            } else {
+                                "Use phone number and OTP to sign in"
+                            },
+                            color = colors.subText,
+                            fontWeight = FontWeight.Medium,
+                            textAlign = TextAlign.Center,
+                            style = MaterialTheme.typography.bodySmall
+                        )
 
-                    Spacer(modifier = Modifier.height(8.dp))
+                        Spacer(modifier = Modifier.height(18.dp))
 
-                    Text(
-                        text = accountSubtitle,
-                        color = Color(0xFFC5C0CF),
-                        fontWeight = FontWeight.Medium,
-                        textAlign = TextAlign.Center,
-                        style = MaterialTheme.typography.bodySmall
-                    )
+                        LoginMethodTabs(
+                            selectedMethod = selectedMethod,
+                            colors = colors,
+                            onEmailClick = {
+                                selectedMethod = LoginMethod.Email
+                                errorMessage = null
+                                successMessage = null
+                            },
+                            onPhoneClick = {
+                                selectedMethod = LoginMethod.Phone
+                                errorMessage = null
+                                successMessage = null
+                            }
+                        )
 
-                    Spacer(modifier = Modifier.height(18.dp))
+                        Spacer(modifier = Modifier.height(20.dp))
 
-                    Surface(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .border(
-                                width = 1.dp,
-                                color = Color.White.copy(alpha = 0.07f),
-                                shape = RoundedCornerShape(28.dp)
-                            ),
-                        shape = RoundedCornerShape(28.dp),
-                        color = darkCard.copy(alpha = 0.96f),
-                        shadowElevation = 20.dp
-                    ) {
-                        Column(
-                            modifier = Modifier.padding(horizontal = 18.dp, vertical = 18.dp),
-                            horizontalAlignment = Alignment.CenterHorizontally
-                        ) {
-                            Text(
-                                text = accountTitle,
-                                color = Color.White,
-                                fontWeight = FontWeight.Black,
-                                style = MaterialTheme.typography.titleLarge,
-                                textAlign = TextAlign.Center
-                            )
-
-                            Spacer(modifier = Modifier.height(5.dp))
-
-                            Text(
-                                text = "Use your email and password to sign in",
-                                color = Color(0xFFAAA6B6),
-                                fontWeight = FontWeight.Medium,
-                                textAlign = TextAlign.Center,
-                                style = MaterialTheme.typography.bodySmall
-                            )
-
-                            Spacer(modifier = Modifier.height(12.dp))
-
-                            RoleWarningPill(
-                                text = if (isDriver) {
-                                    "🚘 Driver account opens Driver Dashboard only."
-                                } else {
-                                    "🚕 Rider account opens Rider Map only."
-                                },
-                                accentColor = glowColor
-                            )
-
-                            Spacer(modifier = Modifier.height(14.dp))
-
-                            LoginLabel("EMAIL")
-
-                            Spacer(modifier = Modifier.height(6.dp))
-
-                            OutlinedTextField(
-                                value = email,
-                                onValueChange = {
+                        if (selectedMethod == LoginMethod.Email) {
+                            EmailLoginContent(
+                                email = email,
+                                password = password,
+                                passwordVisible = passwordVisible,
+                                isLoading = isLoading,
+                                colors = colors,
+                                onEmailChange = {
                                     email = it
                                     errorMessage = null
                                     successMessage = null
                                 },
-                                modifier = Modifier
-                                    .fillMaxWidth()
-                                    .height(58.dp),
-                                placeholder = {
-                                    Text(
-                                        text = "you@example.com",
-                                        color = Color(0xFF6F6B78)
-                                    )
-                                },
-                                leadingIcon = {
-                                    Text(
-                                        text = "✉",
-                                        color = Color(0xFF6F6B78)
-                                    )
-                                },
-                                singleLine = true,
-                                shape = RoundedCornerShape(20.dp),
-                                colors = OutlinedTextFieldDefaults.colors(
-                                    focusedTextColor = Color.White,
-                                    unfocusedTextColor = Color.White,
-                                    focusedContainerColor = fieldBg,
-                                    unfocusedContainerColor = fieldBg,
-                                    disabledContainerColor = fieldBg,
-                                    focusedBorderColor = Color.White.copy(alpha = 0.16f),
-                                    unfocusedBorderColor = Color.White.copy(alpha = 0.12f),
-                                    cursorColor = glowColor
-                                )
-                            )
-
-                            Spacer(modifier = Modifier.height(12.dp))
-
-                            LoginLabel("PASSWORD")
-
-                            Spacer(modifier = Modifier.height(6.dp))
-
-                            OutlinedTextField(
-                                value = password,
-                                onValueChange = {
+                                onPasswordChange = {
                                     password = it
                                     errorMessage = null
                                     successMessage = null
                                 },
-                                modifier = Modifier
-                                    .fillMaxWidth()
-                                    .height(58.dp),
-                                placeholder = {
-                                    Text(
-                                        text = "••••••••",
-                                        color = Color(0xFF6F6B78)
-                                    )
+                                onPasswordVisibilityClick = {
+                                    passwordVisible = !passwordVisible
                                 },
-                                leadingIcon = {
-                                    Text(
-                                        text = "🔒",
-                                        color = Color(0xFF6F6B78)
-                                    )
-                                },
-                                trailingIcon = {
-                                    TextButton(
-                                        onClick = {
-                                            passwordVisible = !passwordVisible
-                                        }
-                                    ) {
-                                        Text(
-                                            text = if (passwordVisible) "Hide" else "Show",
-                                            color = Color(0xFFB8B4C6),
-                                            fontWeight = FontWeight.Bold
-                                        )
-                                    }
-                                },
-                                visualTransformation = if (passwordVisible) {
-                                    VisualTransformation.None
-                                } else {
-                                    PasswordVisualTransformation()
-                                },
-                                singleLine = true,
-                                shape = RoundedCornerShape(20.dp),
-                                colors = OutlinedTextFieldDefaults.colors(
-                                    focusedTextColor = Color.White,
-                                    unfocusedTextColor = Color.White,
-                                    focusedContainerColor = fieldBg,
-                                    unfocusedContainerColor = fieldBg,
-                                    disabledContainerColor = fieldBg,
-                                    focusedBorderColor = Color.White.copy(alpha = 0.16f),
-                                    unfocusedBorderColor = Color.White.copy(alpha = 0.12f),
-                                    cursorColor = glowColor
-                                )
-                            )
-
-                            Spacer(modifier = Modifier.height(2.dp))
-
-                            TextButton(
-                                onClick = {
+                                onForgotPasswordClick = {
                                     if (email.isBlank()) {
-                                        errorMessage = "Enter your email first"
+                                        errorMessage = "Enter your email first."
                                         successMessage = null
-                                        return@TextButton
+                                        return@EmailLoginContent
                                     }
 
                                     FirebaseManager.resetPassword(
                                         email = email.trim(),
                                         onSuccess = {
-                                            successMessage = "Password reset email sent"
+                                            successMessage = "Password reset email sent."
                                             errorMessage = null
                                         },
                                         onError = {
@@ -343,26 +292,18 @@ fun LoginScreen(
                                             successMessage = null
                                         }
                                     )
-                                },
-                                modifier = Modifier.align(Alignment.End)
-                            ) {
-                                Text(
-                                    text = "Forgot password?",
-                                    color = Color(0xFFB8B4C6),
-                                    fontWeight = FontWeight.Medium,
-                                    style = MaterialTheme.typography.bodySmall
-                                )
-                            }
+                                }
+                            )
 
-                            Spacer(modifier = Modifier.height(6.dp))
+                            Spacer(modifier = Modifier.height(8.dp))
 
                             GlowButton(
                                 text = if (isLoading) "Signing In..." else primaryButtonText,
-                                accentColor = glowColor,
+                                colors = colors,
                                 enabled = !isLoading,
                                 onClick = {
                                     if (email.isBlank() || password.isBlank()) {
-                                        errorMessage = "Please enter email and password"
+                                        errorMessage = "Please enter email and password."
                                         successMessage = null
                                         return@GlowButton
                                     }
@@ -385,41 +326,145 @@ fun LoginScreen(
                                     )
                                 }
                             )
-
-                            Spacer(modifier = Modifier.height(10.dp))
-
-                            CreateAccountButton(
-                                text = if (isDriver) {
-                                    "New driver? Create Driver Account"
-                                } else {
-                                    "New rider? Create Rider Account"
+                        } else {
+                            PhoneLoginContent(
+                                phoneNumber = phoneNumber,
+                                otpCode = otpCode,
+                                otpSent = otpSent,
+                                isLoading = isLoading,
+                                colors = colors,
+                                onPhoneChange = {
+                                    phoneNumber = it
+                                    errorMessage = null
+                                    successMessage = null
                                 },
-                                accentColor = glowColor,
-                                enabled = !isLoading,
-                                onClick = onCreateAccountClick
+                                onOtpChange = {
+                                    otpCode = it.filter { char -> char.isDigit() }.take(6)
+                                    errorMessage = null
+                                    successMessage = null
+                                }
                             )
 
-                            errorMessage?.let {
-                                Spacer(modifier = Modifier.height(8.dp))
-                                Text(
-                                    text = it,
-                                    color = Color(0xFFFF6B6B),
-                                    fontWeight = FontWeight.Bold,
-                                    textAlign = TextAlign.Center,
-                                    style = MaterialTheme.typography.bodySmall
-                                )
-                            }
+                            Spacer(modifier = Modifier.height(12.dp))
 
-                            successMessage?.let {
+                            GlowButton(
+                                text = when {
+                                    isLoading -> "Please wait..."
+                                    otpSent -> "Verify OTP"
+                                    else -> "Send OTP"
+                                },
+                                colors = colors,
+                                enabled = !isLoading,
+                                onClick = {
+                                    if (activity == null) {
+                                        errorMessage = "Phone login requires an Android activity."
+                                        successMessage = null
+                                        return@GlowButton
+                                    }
+
+                                    if (!otpSent) {
+                                        isLoading = true
+                                        errorMessage = null
+                                        successMessage = null
+
+                                        FirebaseManager.sendPhoneLoginOtp(
+                                            activity = activity,
+                                            phoneNumber = phoneNumber,
+                                            expectedRole = accountRole,
+                                            onCodeSent = { newVerificationId ->
+                                                isLoading = false
+                                                verificationId = newVerificationId
+                                                otpSent = true
+                                                successMessage = "OTP sent. Please check your SMS."
+                                            },
+                                            onAutoVerified = {
+                                                isLoading = false
+                                                onLoginSuccess()
+                                            },
+                                            onError = {
+                                                isLoading = false
+                                                errorMessage = it
+                                                successMessage = null
+                                            }
+                                        )
+                                    } else {
+                                        isLoading = true
+                                        errorMessage = null
+                                        successMessage = null
+
+                                        FirebaseManager.verifyPhoneLoginOtp(
+                                            verificationId = verificationId,
+                                            otpCode = otpCode,
+                                            expectedRole = accountRole,
+                                            phoneNumber = phoneNumber,
+                                            onSuccess = {
+                                                isLoading = false
+                                                onLoginSuccess()
+                                            },
+                                            onError = {
+                                                isLoading = false
+                                                errorMessage = it
+                                                successMessage = null
+                                            }
+                                        )
+                                    }
+                                }
+                            )
+
+                            if (otpSent) {
                                 Spacer(modifier = Modifier.height(8.dp))
-                                Text(
-                                    text = it,
-                                    color = Color(0xFF22C55E),
-                                    fontWeight = FontWeight.Bold,
-                                    textAlign = TextAlign.Center,
-                                    style = MaterialTheme.typography.bodySmall
-                                )
+
+                                TextButton(
+                                    onClick = {
+                                        otpSent = false
+                                        verificationId = ""
+                                        otpCode = ""
+                                        successMessage = "You can request a new OTP."
+                                        errorMessage = null
+                                    }
+                                ) {
+                                    Text(
+                                        text = "Change phone number",
+                                        color = colors.subText,
+                                        fontWeight = FontWeight.Bold
+                                    )
+                                }
                             }
+                        }
+
+                        Spacer(modifier = Modifier.height(10.dp))
+
+                        CreateAccountButton(
+                            text = if (isDriver) {
+                                "New driver? Create Driver Account"
+                            } else {
+                                "New rider? Create Rider Account"
+                            },
+                            colors = colors,
+                            enabled = !isLoading,
+                            onClick = onCreateAccountClick
+                        )
+
+                        errorMessage?.let {
+                            Spacer(modifier = Modifier.height(8.dp))
+                            Text(
+                                text = it,
+                                color = colors.error,
+                                fontWeight = FontWeight.Bold,
+                                textAlign = TextAlign.Center,
+                                style = MaterialTheme.typography.bodySmall
+                            )
+                        }
+
+                        successMessage?.let {
+                            Spacer(modifier = Modifier.height(8.dp))
+                            Text(
+                                text = it,
+                                color = colors.success,
+                                fontWeight = FontWeight.Bold,
+                                textAlign = TextAlign.Center,
+                                style = MaterialTheme.typography.bodySmall
+                            )
                         }
                     }
                 }
@@ -429,12 +474,209 @@ fun LoginScreen(
 }
 
 @Composable
+private fun LoginMethodTabs(
+    selectedMethod: LoginMethod,
+    colors: LoginThemeColors,
+    onEmailClick: () -> Unit,
+    onPhoneClick: () -> Unit
+) {
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .height(48.dp)
+            .clip(RoundedCornerShape(18.dp))
+            .background(colors.softField)
+            .padding(4.dp),
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        LoginTabButton(
+            text = "Email",
+            selected = selectedMethod == LoginMethod.Email,
+            colors = colors,
+            modifier = Modifier.weight(1f),
+            onClick = onEmailClick
+        )
+
+        LoginTabButton(
+            text = "Phone",
+            selected = selectedMethod == LoginMethod.Phone,
+            colors = colors,
+            modifier = Modifier.weight(1f),
+            onClick = onPhoneClick
+        )
+    }
+}
+
+@Composable
+private fun LoginTabButton(
+    text: String,
+    selected: Boolean,
+    colors: LoginThemeColors,
+    modifier: Modifier,
+    onClick: () -> Unit
+) {
+    Box(
+        modifier = modifier
+            .fillMaxSize()
+            .clip(RoundedCornerShape(15.dp))
+            .background(
+                if (selected) {
+                    colors.selectedTab
+                } else {
+                    colors.unselectedTab
+                }
+            )
+            .clickable { onClick() },
+        contentAlignment = Alignment.Center
+    ) {
+        Text(
+            text = text,
+            color = if (selected) colors.onAccent else colors.subText,
+            fontWeight = FontWeight.Black,
+            style = MaterialTheme.typography.bodyMedium
+        )
+    }
+}
+
+@Composable
+private fun EmailLoginContent(
+    email: String,
+    password: String,
+    passwordVisible: Boolean,
+    isLoading: Boolean,
+    colors: LoginThemeColors,
+    onEmailChange: (String) -> Unit,
+    onPasswordChange: (String) -> Unit,
+    onPasswordVisibilityClick: () -> Unit,
+    onForgotPasswordClick: () -> Unit
+) {
+    LoginLabel(
+        text = "EMAIL",
+        colors = colors
+    )
+
+    Spacer(modifier = Modifier.height(10.dp))
+
+    CleanLoginInputField(
+        value = email,
+        onValueChange = onEmailChange,
+        placeholder = "you@example.com",
+        leadingIcon = "✉",
+        keyboardType = KeyboardType.Email,
+        enabled = !isLoading,
+        colors = colors
+    )
+
+    Spacer(modifier = Modifier.height(18.dp))
+
+    LoginLabel(
+        text = "PASSWORD",
+        colors = colors
+    )
+
+    Spacer(modifier = Modifier.height(10.dp))
+
+    CleanLoginInputField(
+        value = password,
+        onValueChange = onPasswordChange,
+        placeholder = "••••••••",
+        leadingIcon = "🔒",
+        keyboardType = KeyboardType.Password,
+        enabled = !isLoading,
+        visualTransformation = if (passwordVisible) {
+            VisualTransformation.None
+        } else {
+            PasswordVisualTransformation()
+        },
+        trailingContent = {
+            TextButton(
+                onClick = onPasswordVisibilityClick,
+                enabled = !isLoading
+            ) {
+                Text(
+                    text = if (passwordVisible) "Hide" else "Show",
+                    color = colors.subText,
+                    fontWeight = FontWeight.Bold
+                )
+            }
+        },
+        colors = colors
+    )
+
+    Spacer(modifier = Modifier.height(6.dp))
+
+    TextButton(
+        onClick = onForgotPasswordClick,
+        modifier = Modifier.fillMaxWidth()
+    ) {
+        Text(
+            text = "Forgot password?",
+            color = colors.subText,
+            fontWeight = FontWeight.Medium,
+            style = MaterialTheme.typography.bodySmall,
+            modifier = Modifier.fillMaxWidth(),
+            textAlign = TextAlign.End
+        )
+    }
+}
+
+@Composable
+private fun PhoneLoginContent(
+    phoneNumber: String,
+    otpCode: String,
+    otpSent: Boolean,
+    isLoading: Boolean,
+    colors: LoginThemeColors,
+    onPhoneChange: (String) -> Unit,
+    onOtpChange: (String) -> Unit
+) {
+    LoginLabel(
+        text = "PHONE NUMBER",
+        colors = colors
+    )
+
+    Spacer(modifier = Modifier.height(10.dp))
+
+    CleanLoginInputField(
+        value = phoneNumber,
+        onValueChange = onPhoneChange,
+        placeholder = "+923001234567",
+        leadingIcon = "📱",
+        keyboardType = KeyboardType.Phone,
+        enabled = !isLoading && !otpSent,
+        colors = colors
+    )
+
+    if (otpSent) {
+        Spacer(modifier = Modifier.height(18.dp))
+
+        LoginLabel(
+            text = "OTP CODE",
+            colors = colors
+        )
+
+        Spacer(modifier = Modifier.height(10.dp))
+
+        CleanLoginInputField(
+            value = otpCode,
+            onValueChange = onOtpChange,
+            placeholder = "6-digit code",
+            leadingIcon = "🔐",
+            keyboardType = KeyboardType.Number,
+            enabled = !isLoading,
+            colors = colors
+        )
+    }
+}
+
+@Composable
 private fun LoginLabel(
-    text: String
+    text: String,
+    colors: LoginThemeColors
 ) {
     Text(
         text = text,
-        color = Color(0xFFAAA6B6),
+        color = colors.subText,
         fontWeight = FontWeight.Black,
         style = MaterialTheme.typography.labelMedium,
         modifier = Modifier.fillMaxWidth()
@@ -442,107 +684,226 @@ private fun LoginLabel(
 }
 
 @Composable
-private fun RoleWarningPill(
-    text: String,
-    accentColor: Color
+private fun CleanLoginInputField(
+    value: String,
+    onValueChange: (String) -> Unit,
+    placeholder: String,
+    leadingIcon: String,
+    keyboardType: KeyboardType,
+    enabled: Boolean,
+    colors: LoginThemeColors,
+    modifier: Modifier = Modifier,
+    visualTransformation: VisualTransformation = VisualTransformation.None,
+    trailingContent: @Composable (() -> Unit)? = null
 ) {
-    Surface(
-        modifier = Modifier.fillMaxWidth(),
-        shape = RoundedCornerShape(16.dp),
-        color = accentColor.copy(alpha = 0.18f),
-        shadowElevation = 0.dp
+    Box(
+        modifier = modifier
+            .fillMaxWidth()
+            .height(56.dp)
+            .clip(RoundedCornerShape(20.dp))
+            .background(colors.softField)
+            .padding(horizontal = 16.dp),
+        contentAlignment = Alignment.CenterStart
     ) {
-        Text(
-            text = text,
-            modifier = Modifier.padding(horizontal = 12.dp, vertical = 9.dp),
-            color = if (accentColor == Color(0xFFFF1212)) {
-                Color(0xFFFFB4B4)
-            } else {
-                Color(0xFFD6C2FF)
-            },
-            fontWeight = FontWeight.Black,
-            textAlign = TextAlign.Center,
-            style = MaterialTheme.typography.bodySmall
-        )
+        Row(
+            modifier = Modifier.fillMaxSize(),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Text(
+                text = leadingIcon,
+                color = colors.mutedText
+            )
+
+            Spacer(modifier = Modifier.width(10.dp))
+
+            Box(
+                modifier = Modifier.weight(1f),
+                contentAlignment = Alignment.CenterStart
+            ) {
+                if (value.isBlank()) {
+                    Text(
+                        text = placeholder,
+                        color = colors.mutedText,
+                        fontWeight = FontWeight.Medium,
+                        style = MaterialTheme.typography.bodyMedium
+                    )
+                }
+
+                BasicTextField(
+                    value = value,
+                    onValueChange = onValueChange,
+                    enabled = enabled,
+                    singleLine = true,
+                    visualTransformation = visualTransformation,
+                    keyboardOptions = KeyboardOptions(
+                        keyboardType = keyboardType
+                    ),
+                    cursorBrush = SolidColor(colors.accent),
+                    textStyle = TextStyle(
+                        color = colors.text,
+                        fontWeight = FontWeight.Medium,
+                        fontSize = MaterialTheme.typography.bodyMedium.fontSize
+                    ),
+                    modifier = Modifier.fillMaxWidth()
+                )
+            }
+
+            trailingContent?.invoke()
+        }
     }
 }
 
 @Composable
 private fun GlowButton(
     text: String,
-    accentColor: Color,
+    colors: LoginThemeColors,
     enabled: Boolean,
     onClick: () -> Unit
 ) {
-    Surface(
+    Box(
         modifier = Modifier
             .fillMaxWidth()
             .height(54.dp)
+            .clip(RoundedCornerShape(22.dp))
+            .background(
+                Brush.verticalGradient(
+                    colors = listOf(
+                        colors.accent.copy(alpha = if (enabled) 1f else 0.55f),
+                        colors.accentBottom.copy(alpha = if (enabled) 1f else 0.55f)
+                    )
+                )
+            )
             .clickable(enabled = enabled) {
                 onClick()
             },
-        shape = RoundedCornerShape(22.dp),
-        color = Color.Transparent,
-        shadowElevation = 18.dp
+        contentAlignment = Alignment.Center
     ) {
-        Box(
-            modifier = Modifier
-                .fillMaxSize()
-                .background(
-                    Brush.verticalGradient(
-                        colors = listOf(
-                            accentColor.copy(alpha = if (enabled) 1f else 0.55f),
-                            if (accentColor == Color(0xFFFF1212)) {
-                                Color(0xFFC90013).copy(alpha = if (enabled) 1f else 0.55f)
-                            } else {
-                                Color(0xFF6D19E8).copy(alpha = if (enabled) 1f else 0.55f)
-                            }
-                        )
-                    )
-                ),
-            contentAlignment = Alignment.Center
-        ) {
-            Text(
-                text = text,
-                color = Color.White,
-                fontWeight = FontWeight.Black,
-                style = MaterialTheme.typography.titleMedium
-            )
-        }
+        Text(
+            text = text,
+            color = colors.onAccent,
+            fontWeight = FontWeight.Black,
+            style = MaterialTheme.typography.titleMedium
+        )
     }
 }
 
 @Composable
 private fun CreateAccountButton(
     text: String,
-    accentColor: Color,
+    colors: LoginThemeColors,
     enabled: Boolean,
     onClick: () -> Unit
 ) {
-    Surface(
+    Box(
         modifier = Modifier
             .fillMaxWidth()
             .height(52.dp)
+            .clip(RoundedCornerShape(22.dp))
+            .background(colors.accent.copy(alpha = 0.14f))
             .clickable(enabled = enabled) {
                 onClick()
-            }
-            .border(
-                width = 1.5.dp,
-                color = accentColor.copy(alpha = 0.70f),
-                shape = RoundedCornerShape(22.dp)
-            ),
-        shape = RoundedCornerShape(22.dp),
-        color = accentColor.copy(alpha = 0.14f),
-        shadowElevation = 8.dp
+            },
+        contentAlignment = Alignment.Center
     ) {
-        Box(contentAlignment = Alignment.Center) {
-            Text(
-                text = text,
-                color = Color.White,
-                fontWeight = FontWeight.Black,
-                style = MaterialTheme.typography.titleSmall,
-                textAlign = TextAlign.Center
-            )
+        Text(
+            text = text,
+            color = colors.text,
+            fontWeight = FontWeight.Black,
+            style = MaterialTheme.typography.titleSmall,
+            textAlign = TextAlign.Center
+        )
+    }
+}
+
+@Composable
+private fun rememberLoginThemeColors(
+    isDriver: Boolean,
+    fallbackAccent: Color
+): LoginThemeColors {
+    val scheme = MaterialTheme.colorScheme
+
+    val isRoseTheme =
+        scheme.primary == Color(0xFFFF5CA8) ||
+                scheme.primary == Color(0xFFEC4899) ||
+                scheme.primaryContainer == Color(0xFFFFD6E8)
+
+    val isLightTheme = scheme.background.luminance() > 0.5f
+
+    return remember(scheme.primary, scheme.background, isDriver, fallbackAccent) {
+        when {
+            isRoseTheme -> {
+                val accent = if (isDriver) Color(0xFFEC4899) else Color(0xFFFF5CA8)
+
+                LoginThemeColors(
+                    backgroundTop = Color(0xFFFFF7FB),
+                    backgroundMiddle = Color(0xFFFFEAF3),
+                    backgroundBottom = Color(0xFFFFFBFD),
+                    card = Color.White,
+                    softField = Color(0xFFFFF7FB),
+                    selectedTab = accent,
+                    unselectedTab = Color.Transparent,
+                    accent = accent,
+                    accentBottom = Color(0xFFBE185D),
+                    text = Color(0xFF24111A),
+                    subText = Color(0xFF7A445A),
+                    mutedText = Color(0xFF9D5570),
+                    onAccent = Color.White,
+                    error = Color(0xFFE11D48),
+                    success = Color(0xFF16A34A)
+                )
+            }
+
+            isLightTheme -> {
+                val accent = if (isDriver) Color(0xFF8A35F2) else Color(0xFFFF1212)
+
+                LoginThemeColors(
+                    backgroundTop = Color(0xFFF8FAFC),
+                    backgroundMiddle = Color(0xFFEDE9FE),
+                    backgroundBottom = Color.White,
+                    card = Color.White,
+                    softField = Color(0xFFF8FAFC),
+                    selectedTab = accent,
+                    unselectedTab = Color.Transparent,
+                    accent = accent,
+                    accentBottom = if (isDriver) Color(0xFF6D19E8) else Color(0xFFC90013),
+                    text = Color(0xFF111827),
+                    subText = Color(0xFF6B7280),
+                    mutedText = Color(0xFF9CA3AF),
+                    onAccent = Color.White,
+                    error = Color(0xFFEF4444),
+                    success = Color(0xFF16A34A)
+                )
+            }
+
+            else -> {
+                val accent = if (isDriver) Color(0xFF8A35F2) else Color(0xFFFF1212)
+
+                LoginThemeColors(
+                    backgroundTop = Color(0xFF030307),
+                    backgroundMiddle = accent.copy(alpha = if (isDriver) 0.28f else 0.22f),
+                    backgroundBottom = Color(0xFF07020A),
+                    card = Color(0xFF101019).copy(alpha = 0.96f),
+                    softField = Color(0xFF1A1A25),
+                    selectedTab = accent,
+                    unselectedTab = Color.Transparent,
+                    accent = accent,
+                    accentBottom = if (isDriver) Color(0xFF6D19E8) else Color(0xFFC90013),
+                    text = Color.White,
+                    subText = Color(0xFFB8B4C6),
+                    mutedText = Color(0xFF6F6B78),
+                    onAccent = Color.White,
+                    error = Color(0xFFFF6B6B),
+                    success = Color(0xFF22C55E)
+                )
+            }
         }
+    }
+}
+
+private tailrec fun Context.findActivity(): Activity? {
+    return when (this) {
+        is Activity -> this
+        is ContextWrapper -> baseContext.findActivity()
+        else -> null
     }
 }

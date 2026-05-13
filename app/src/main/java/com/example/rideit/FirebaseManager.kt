@@ -1,10 +1,17 @@
 package com.example.rideit
 
+import android.app.Activity
+import com.google.firebase.FirebaseException
 import com.google.firebase.Timestamp
 import com.google.firebase.auth.FirebaseAuth
+import com.google.firebase.auth.PhoneAuthCredential
+import com.google.firebase.auth.PhoneAuthOptions
+import com.google.firebase.auth.PhoneAuthProvider
+import com.google.firebase.auth.UserProfileChangeRequest
 import com.google.firebase.firestore.DocumentSnapshot
 import com.google.firebase.firestore.FirebaseFirestore
 import com.google.firebase.firestore.SetOptions
+import java.util.concurrent.TimeUnit
 
 object FirebaseManager {
 
@@ -18,11 +25,30 @@ object FirebaseManager {
     const val PAYMENT_CARD = "card"
     const val PAYMENT_WALLET = "wallet"
 
+    const val THEME_SYSTEM = "system"
+    const val THEME_LIGHT = "light"
+    const val THEME_DARK = "dark"
+    const val THEME_ROSE = "rose"
+
+    const val GENDER_WOMAN = "woman"
+    const val GENDER_MAN = "man"
+    const val GENDER_PREFER_NOT_TO_SAY = "prefer_not_to_say"
+    const val GENDER_OTHER = "other"
+
     data class RiderPaymentProfile(
         val selectedPaymentMethod: String = PAYMENT_CASH,
         val cardLastFour: String = "",
         val cardHolderName: String = "",
         val walletBalance: Long = 1250L
+    )
+
+    data class RideitUserProfile(
+        val fullName: String = "",
+        val email: String = "",
+        val phoneNumber: String = "",
+        val role: String = ROLE_RIDER,
+        val gender: String = GENDER_PREFER_NOT_TO_SAY,
+        val preferredThemeMode: String = THEME_SYSTEM
     )
 
     fun login(
@@ -32,9 +58,15 @@ object FirebaseManager {
         onSuccess: () -> Unit,
         onError: (String) -> Unit
     ) {
-        val cleanEmail = email.trim()
+        val cleanEmail = email.trim().lowercase()
+        val cleanPassword = password.trim()
 
-        auth.signInWithEmailAndPassword(cleanEmail, password)
+        if (cleanEmail.isBlank() || cleanPassword.isBlank()) {
+            onError("Please enter email and password.")
+            return
+        }
+
+        auth.signInWithEmailAndPassword(cleanEmail, cleanPassword)
             .addOnSuccessListener { authResult ->
                 val user = authResult.user
 
@@ -55,7 +87,11 @@ object FirebaseManager {
                                 createOrUpdateUserRole(
                                     uid = user.uid,
                                     email = cleanEmail,
+                                    fullName = user.displayName.orEmpty(),
                                     role = expectedRole,
+                                    gender = null,
+                                    preferredThemeMode = null,
+                                    phoneNumber = user.phoneNumber.orEmpty(),
                                     onSuccess = onSuccess,
                                     onError = {
                                         auth.signOut()
@@ -65,7 +101,19 @@ object FirebaseManager {
                             }
 
                             savedRole == expectedRole -> {
-                                onSuccess()
+                                val savedName = snapshot.getString("fullName")
+                                    ?: snapshot.getString("displayName")
+                                    ?: snapshot.getString("name")
+                                    ?: ""
+
+                                if (savedName.isNotBlank() && user.displayName != savedName) {
+                                    updateAuthDisplayNameOnly(
+                                        fullName = savedName,
+                                        onComplete = onSuccess
+                                    )
+                                } else {
+                                    onSuccess()
+                                }
                             }
 
                             else -> {
@@ -78,31 +126,51 @@ object FirebaseManager {
                                 }
 
                                 onError(
-                                    "This email is registered as a ${savedRole.uppercase()} account. Please use $correctAccountText."
+                                    "This account is registered as ${savedRole.uppercase()}. Please use $correctAccountText."
                                 )
                             }
                         }
                     }
                     .addOnFailureListener { exception ->
                         auth.signOut()
-                        onError(exception.message ?: "Failed to check user role")
+                        onError(exception.message ?: "Failed to check user role.")
                     }
             }
-            .addOnFailureListener { exception ->
-                onError(exception.message ?: "Login failed")
+            .addOnFailureListener {
+                onError("Wrong email or password. Please check your account details and try again.")
             }
     }
 
     fun signup(
+        fullName: String,
         email: String,
         password: String,
         role: String,
+        gender: String = GENDER_PREFER_NOT_TO_SAY,
+        preferredThemeMode: String = THEME_SYSTEM,
         onSuccess: () -> Unit,
         onError: (String) -> Unit
     ) {
-        val cleanEmail = email.trim()
+        val cleanEmail = email.trim().lowercase()
+        val cleanPassword = password.trim()
+        val cleanName = sanitizeFullName(fullName)
 
-        auth.createUserWithEmailAndPassword(cleanEmail, password)
+        if (cleanName.length < 2) {
+            onError("Please enter your real full name.")
+            return
+        }
+
+        if (cleanEmail.isBlank() || cleanPassword.isBlank()) {
+            onError("Please enter email and password.")
+            return
+        }
+
+        if (cleanPassword.length < 6) {
+            onError("Password must be at least 6 characters.")
+            return
+        }
+
+        auth.createUserWithEmailAndPassword(cleanEmail, cleanPassword)
             .addOnSuccessListener { authResult ->
                 val user = authResult.user
 
@@ -112,26 +180,218 @@ object FirebaseManager {
                     return@addOnSuccessListener
                 }
 
-                createOrUpdateUserRole(
-                    uid = user.uid,
-                    email = cleanEmail,
-                    role = role,
-                    onSuccess = onSuccess,
-                    onError = {
-                        auth.signOut()
-                        onError(it)
+                val profileUpdates = UserProfileChangeRequest.Builder()
+                    .setDisplayName(cleanName)
+                    .build()
+
+                user.updateProfile(profileUpdates)
+                    .addOnCompleteListener {
+                        createOrUpdateUserRole(
+                            uid = user.uid,
+                            email = cleanEmail,
+                            fullName = cleanName,
+                            role = role,
+                            gender = gender,
+                            preferredThemeMode = preferredThemeMode,
+                            phoneNumber = user.phoneNumber.orEmpty(),
+                            onSuccess = onSuccess,
+                            onError = {
+                                auth.signOut()
+                                onError(it)
+                            }
+                        )
                     }
-                )
             }
             .addOnFailureListener { exception ->
-                onError(exception.message ?: "Signup failed")
+                onError(exception.message ?: "Signup failed.")
+            }
+    }
+
+    fun sendPhoneLoginOtp(
+        activity: Activity,
+        phoneNumber: String,
+        expectedRole: String,
+        onCodeSent: (String) -> Unit,
+        onAutoVerified: () -> Unit,
+        onError: (String) -> Unit
+    ) {
+        val cleanPhone = sanitizePhoneNumber(phoneNumber)
+
+        if (!isValidInternationalPhone(cleanPhone)) {
+            onError("Enter phone number with country code, example +923001234567.")
+            return
+        }
+
+        val callbacks = object : PhoneAuthProvider.OnVerificationStateChangedCallbacks() {
+            override fun onVerificationCompleted(credential: PhoneAuthCredential) {
+                signInWithPhoneCredential(
+                    credential = credential,
+                    expectedRole = expectedRole,
+                    phoneNumber = cleanPhone,
+                    onSuccess = onAutoVerified,
+                    onError = onError
+                )
+            }
+
+            override fun onVerificationFailed(exception: FirebaseException) {
+                onError(exception.message ?: "Phone verification failed.")
+            }
+
+            override fun onCodeSent(
+                verificationId: String,
+                token: PhoneAuthProvider.ForceResendingToken
+            ) {
+                onCodeSent(verificationId)
+            }
+        }
+
+        val options = PhoneAuthOptions.newBuilder(auth)
+            .setPhoneNumber(cleanPhone)
+            .setTimeout(60L, TimeUnit.SECONDS)
+            .setActivity(activity)
+            .setCallbacks(callbacks)
+            .build()
+
+        PhoneAuthProvider.verifyPhoneNumber(options)
+    }
+
+    fun verifyPhoneLoginOtp(
+        verificationId: String,
+        otpCode: String,
+        expectedRole: String,
+        phoneNumber: String,
+        onSuccess: () -> Unit,
+        onError: (String) -> Unit
+    ) {
+        val cleanOtp = otpCode.trim()
+        val cleanPhone = sanitizePhoneNumber(phoneNumber)
+
+        if (verificationId.isBlank()) {
+            onError("Please request OTP first.")
+            return
+        }
+
+        if (cleanOtp.length < 6) {
+            onError("Enter the 6-digit OTP code.")
+            return
+        }
+
+        val credential = PhoneAuthProvider.getCredential(
+            verificationId,
+            cleanOtp
+        )
+
+        signInWithPhoneCredential(
+            credential = credential,
+            expectedRole = expectedRole,
+            phoneNumber = cleanPhone,
+            onSuccess = onSuccess,
+            onError = onError
+        )
+    }
+
+    private fun signInWithPhoneCredential(
+        credential: PhoneAuthCredential,
+        expectedRole: String,
+        phoneNumber: String,
+        onSuccess: () -> Unit,
+        onError: (String) -> Unit
+    ) {
+        auth.signInWithCredential(credential)
+            .addOnSuccessListener { authResult ->
+                val user = authResult.user
+
+                if (user == null) {
+                    auth.signOut()
+                    onError("Phone login failed. User account not found.")
+                    return@addOnSuccessListener
+                }
+
+                val cleanPhone = sanitizePhoneNumber(
+                    user.phoneNumber ?: phoneNumber
+                )
+
+                firestore.collection("users")
+                    .document(user.uid)
+                    .get()
+                    .addOnSuccessListener { snapshot ->
+                        val savedRole = snapshot.getString("role")
+
+                        when {
+                            savedRole == null -> {
+                                createOrUpdateUserRole(
+                                    uid = user.uid,
+                                    email = user.email.orEmpty(),
+                                    fullName = user.displayName.orEmpty().ifBlank {
+                                        if (expectedRole == ROLE_DRIVER) {
+                                            "Rideit Driver"
+                                        } else {
+                                            "Rideit Rider"
+                                        }
+                                    },
+                                    role = expectedRole,
+                                    gender = null,
+                                    preferredThemeMode = null,
+                                    phoneNumber = cleanPhone,
+                                    onSuccess = onSuccess,
+                                    onError = {
+                                        auth.signOut()
+                                        onError(it)
+                                    }
+                                )
+                            }
+
+                            savedRole == expectedRole -> {
+                                val phoneData = hashMapOf<String, Any>(
+                                    "phoneNumber" to cleanPhone,
+                                    "phoneVerified" to true,
+                                    "updatedAt" to Timestamp.now()
+                                )
+
+                                firestore.collection("users")
+                                    .document(user.uid)
+                                    .set(phoneData, SetOptions.merge())
+                                    .addOnSuccessListener {
+                                        onSuccess()
+                                    }
+                                    .addOnFailureListener { exception ->
+                                        onError(exception.message ?: "Failed to update phone profile.")
+                                    }
+                            }
+
+                            else -> {
+                                auth.signOut()
+
+                                val correctAccountText = if (savedRole == ROLE_DRIVER) {
+                                    "Driver Login"
+                                } else {
+                                    "Rider Login"
+                                }
+
+                                onError(
+                                    "This phone number is registered as ${savedRole.uppercase()}. Please use $correctAccountText."
+                                )
+                            }
+                        }
+                    }
+                    .addOnFailureListener { exception ->
+                        auth.signOut()
+                        onError(exception.message ?: "Failed to check phone account role.")
+                    }
+            }
+            .addOnFailureListener {
+                onError("Invalid OTP or phone login failed.")
             }
     }
 
     private fun createOrUpdateUserRole(
         uid: String,
         email: String,
+        fullName: String,
         role: String,
+        gender: String?,
+        preferredThemeMode: String?,
+        phoneNumber: String,
         onSuccess: () -> Unit,
         onError: (String) -> Unit
     ) {
@@ -140,18 +400,47 @@ object FirebaseManager {
         userDocument
             .get()
             .addOnSuccessListener { snapshot ->
+                val safeGender = sanitizeGender(gender)
+                val safeTheme = sanitizeThemeMode(preferredThemeMode)
+                val safeName = sanitizeFullName(fullName)
+                val safePhone = sanitizePhoneNumber(phoneNumber)
+
                 val userData = hashMapOf<String, Any>(
                     "uid" to uid,
-                    "email" to email,
+                    "email" to email.trim().lowercase(),
                     "role" to role,
                     "updatedAt" to Timestamp.now()
                 )
+
+                if (safeName.isNotBlank()) {
+                    userData["fullName"] = safeName
+                    userData["displayName"] = safeName
+                    userData["name"] = safeName
+                }
+
+                if (safePhone.isNotBlank()) {
+                    userData["phoneNumber"] = safePhone
+                    userData["phoneVerified"] = true
+                }
+
+                if (gender != null) {
+                    userData["gender"] = safeGender
+                }
+
+                if (preferredThemeMode != null) {
+                    userData["preferredThemeMode"] = safeTheme
+                }
 
                 if (!snapshot.exists()) {
                     userData["createdAt"] = Timestamp.now()
                     userData["riderSelectedPaymentMethod"] = PAYMENT_CASH
                     userData["riderWalletBalance"] = 1250L
                     userData["riderPaymentMode"] = "safe_demo"
+                    userData["preferredLanguageCode"] = "en"
+                    userData["preferredCurrencyCode"] = "PKR"
+                    userData["preferredThemeMode"] = safeTheme
+                    userData["gender"] = safeGender
+                    userData["phoneNumber"] = safePhone
                 }
 
                 userDocument
@@ -160,11 +449,125 @@ object FirebaseManager {
                         onSuccess()
                     }
                     .addOnFailureListener { exception ->
-                        onError(exception.message ?: "Failed to save user role")
+                        onError(exception.message ?: "Failed to save user profile.")
                     }
             }
             .addOnFailureListener { exception ->
-                onError(exception.message ?: "Failed to check user profile")
+                onError(exception.message ?: "Failed to check user profile.")
+            }
+    }
+
+    fun loadCurrentUserProfile(
+        onSuccess: (RideitUserProfile) -> Unit,
+        onError: (String) -> Unit
+    ) {
+        val currentUser = auth.currentUser
+
+        if (currentUser == null) {
+            onError("Please login again to load profile.")
+            return
+        }
+
+        firestore.collection("users")
+            .document(currentUser.uid)
+            .get()
+            .addOnSuccessListener { snapshot ->
+                val fullName = snapshot.getString("fullName")
+                    ?: snapshot.getString("displayName")
+                    ?: snapshot.getString("name")
+                    ?: currentUser.displayName
+                    ?: currentUserDisplayName("Rideit User")
+
+                onSuccess(
+                    RideitUserProfile(
+                        fullName = sanitizeFullName(fullName),
+                        email = snapshot.getString("email") ?: currentUser.email.orEmpty(),
+                        phoneNumber = snapshot.getString("phoneNumber")
+                            ?: currentUser.phoneNumber.orEmpty(),
+                        role = snapshot.getString("role") ?: ROLE_RIDER,
+                        gender = snapshot.getString("gender") ?: GENDER_PREFER_NOT_TO_SAY,
+                        preferredThemeMode = snapshot.getString("preferredThemeMode") ?: THEME_SYSTEM
+                    )
+                )
+            }
+            .addOnFailureListener { exception ->
+                onError(exception.message ?: "Failed to load profile.")
+            }
+    }
+
+    fun updateCurrentUserProfile(
+        fullName: String,
+        phoneNumber: String,
+        onSuccess: () -> Unit,
+        onError: (String) -> Unit
+    ) {
+        val currentUser = auth.currentUser
+
+        if (currentUser == null) {
+            onError("Please login again to update profile.")
+            return
+        }
+
+        val safeName = sanitizeFullName(fullName)
+        val safePhone = phoneNumber.trim().take(24)
+
+        if (safeName.length < 2) {
+            onError("Please enter a valid full name.")
+            return
+        }
+
+        val profileUpdates = UserProfileChangeRequest.Builder()
+            .setDisplayName(safeName)
+            .build()
+
+        currentUser.updateProfile(profileUpdates)
+            .addOnSuccessListener {
+                val profileData = hashMapOf<String, Any>(
+                    "fullName" to safeName,
+                    "displayName" to safeName,
+                    "name" to safeName,
+                    "phoneNumber" to safePhone,
+                    "updatedAt" to Timestamp.now()
+                )
+
+                firestore.collection("users")
+                    .document(currentUser.uid)
+                    .set(profileData, SetOptions.merge())
+                    .addOnSuccessListener {
+                        onSuccess()
+                    }
+                    .addOnFailureListener { exception ->
+                        onError(exception.message ?: "Failed to save profile.")
+                    }
+            }
+            .addOnFailureListener { exception ->
+                onError(exception.message ?: "Failed to update account name.")
+            }
+    }
+
+    private fun updateAuthDisplayNameOnly(
+        fullName: String,
+        onComplete: () -> Unit
+    ) {
+        val currentUser = auth.currentUser ?: run {
+            onComplete()
+            return
+        }
+
+        val safeName = sanitizeFullName(fullName)
+
+        if (safeName.isBlank()) {
+            onComplete()
+            return
+        }
+
+        val profileUpdates = UserProfileChangeRequest.Builder()
+            .setDisplayName(safeName)
+            .build()
+
+        currentUser.updateProfile(profileUpdates)
+            .addOnCompleteListener {
+                onComplete()
             }
     }
 
@@ -186,7 +589,7 @@ object FirebaseManager {
                 onSuccess(paymentProfileFromSnapshot(snapshot))
             }
             .addOnFailureListener { exception ->
-                onError(exception.message ?: "Failed to load payment method")
+                onError(exception.message ?: "Failed to load payment method.")
             }
     }
 
@@ -236,7 +639,7 @@ object FirebaseManager {
                 onSuccess()
             }
             .addOnFailureListener { exception ->
-                onError(exception.message ?: "Failed to save payment method")
+                onError(exception.message ?: "Failed to save payment method.")
             }
     }
 
@@ -267,7 +670,7 @@ object FirebaseManager {
                 onSuccess()
             }
             .addOnFailureListener { exception ->
-                onError(exception.message ?: "Failed to remove saved card")
+                onError(exception.message ?: "Failed to remove saved card.")
             }
     }
 
@@ -355,22 +758,17 @@ object FirebaseManager {
 
         val requestData = hashMapOf<String, Any>(
             "requestId" to requestRef.id,
-
             "riderId" to currentUserUid,
             "riderEmail" to currentUserEmail,
-
             "userId" to currentUserUid,
             "userEmail" to currentUserEmail,
-
             "pickupAddress" to cleanPickup,
             "dropoffAddress" to cleanDropoff,
             "pickupText" to cleanPickup,
             "dropText" to cleanDropoff,
-
             "rideType" to cleanRideType,
             "fareEstimate" to cleanFareEstimate,
             "fare" to cleanFareEstimate,
-
             "paymentMethodId" to safePaymentMethod,
             "paymentMethodTitle" to paymentTitle,
             "paymentStatus" to paymentStatus,
@@ -378,7 +776,6 @@ object FirebaseManager {
             "paymentGateway" to "none",
             "paymentCaptured" to false,
             "paymentAddedAtBooking" to true,
-
             "status" to "pending",
             "createdAt" to Timestamp.now(),
             "updatedAt" to Timestamp.now()
@@ -398,7 +795,7 @@ object FirebaseManager {
                 onSuccess(requestRef.id)
             }
             .addOnFailureListener { exception ->
-                onError(exception.message ?: "Failed to save ride request")
+                onError(exception.message ?: "Failed to save ride request.")
             }
     }
 
@@ -493,7 +890,7 @@ object FirebaseManager {
                 )
             }
             .addOnFailureListener { exception ->
-                onError(exception.message ?: "Failed to restore active ride")
+                onError(exception.message ?: "Failed to restore active ride.")
             }
     }
 
@@ -530,7 +927,7 @@ object FirebaseManager {
                 onSuccess()
             }
             .addOnFailureListener { exception ->
-                onError(exception.message ?: "Failed to cancel ride request")
+                onError(exception.message ?: "Failed to cancel ride request.")
             }
     }
 
@@ -567,7 +964,7 @@ object FirebaseManager {
                 onSuccess()
             }
             .addOnFailureListener { exception ->
-                onError(exception.message ?: "Failed to complete trip")
+                onError(exception.message ?: "Failed to complete trip.")
             }
     }
 
@@ -604,7 +1001,7 @@ object FirebaseManager {
                 onSuccess()
             }
             .addOnFailureListener { exception ->
-                onError(exception.message ?: "Failed to cancel trip")
+                onError(exception.message ?: "Failed to cancel trip.")
             }
     }
 
@@ -657,7 +1054,7 @@ object FirebaseManager {
                 onSuccess()
             }
             .addOnFailureListener { exception ->
-                onError(exception.message ?: "Failed to save feedback")
+                onError(exception.message ?: "Failed to save feedback.")
             }
     }
 
@@ -666,12 +1063,19 @@ object FirebaseManager {
         onSuccess: () -> Unit,
         onError: (String) -> Unit
     ) {
-        auth.sendPasswordResetEmail(email.trim())
+        val cleanEmail = email.trim().lowercase()
+
+        if (cleanEmail.isBlank()) {
+            onError("Enter your email first.")
+            return
+        }
+
+        auth.sendPasswordResetEmail(cleanEmail)
             .addOnSuccessListener {
                 onSuccess()
             }
-            .addOnFailureListener { exception ->
-                onError(exception.message ?: "Password reset failed")
+            .addOnFailureListener {
+                onError("Could not send reset email. Make sure this account exists.")
             }
     }
 
@@ -708,23 +1112,29 @@ object FirebaseManager {
             ?.trim()
             .orEmpty()
 
-        if (emailPrefix.isBlank()) {
-            return fallback
-        }
-
-        return emailPrefix
-            .split(" ")
-            .filter { it.isNotBlank() }
-            .joinToString(" ") { word ->
-                word.replaceFirstChar { char ->
-                    if (char.isLowerCase()) {
-                        char.titlecase()
-                    } else {
-                        char.toString()
+        if (emailPrefix.isNotBlank()) {
+            return emailPrefix
+                .split(" ")
+                .filter { it.isNotBlank() }
+                .joinToString(" ") { word ->
+                    word.replaceFirstChar { char ->
+                        if (char.isLowerCase()) {
+                            char.titlecase()
+                        } else {
+                            char.toString()
+                        }
                     }
                 }
-            }
-            .ifBlank { fallback }
+                .ifBlank { fallback }
+        }
+
+        val phone = user.phoneNumber.orEmpty()
+
+        if (phone.isNotBlank()) {
+            return phone
+        }
+
+        return fallback
     }
 
     fun currentDriverDisplayName(): String {
@@ -757,11 +1167,66 @@ object FirebaseManager {
         onError: (String) -> Unit
     ) {
         signup(
+            fullName = email.substringBefore("@"),
             email = email,
             password = password,
             role = ROLE_RIDER,
+            gender = GENDER_PREFER_NOT_TO_SAY,
+            preferredThemeMode = THEME_SYSTEM,
             onSuccess = onSuccess,
             onError = onError
         )
+    }
+
+    private fun sanitizeFullName(
+        fullName: String?
+    ): String {
+        return fullName
+            ?.trim()
+            ?.replace(Regex("\\s+"), " ")
+            ?.take(40)
+            .orEmpty()
+    }
+
+    private fun sanitizePhoneNumber(
+        phoneNumber: String?
+    ): String {
+        return phoneNumber
+            ?.trim()
+            ?.replace(" ", "")
+            ?.replace("-", "")
+            ?.replace("(", "")
+            ?.replace(")", "")
+            .orEmpty()
+    }
+
+    private fun isValidInternationalPhone(
+        phoneNumber: String
+    ): Boolean {
+        return phoneNumber.startsWith("+") &&
+                phoneNumber.length in 10..16 &&
+                phoneNumber.drop(1).all { it.isDigit() }
+    }
+
+    private fun sanitizeGender(
+        gender: String?
+    ): String {
+        return when (gender?.trim()?.lowercase()) {
+            GENDER_WOMAN -> GENDER_WOMAN
+            GENDER_MAN -> GENDER_MAN
+            GENDER_OTHER -> GENDER_OTHER
+            else -> GENDER_PREFER_NOT_TO_SAY
+        }
+    }
+
+    private fun sanitizeThemeMode(
+        themeMode: String?
+    ): String {
+        return when (themeMode?.trim()?.lowercase()) {
+            THEME_LIGHT -> THEME_LIGHT
+            THEME_DARK -> THEME_DARK
+            THEME_ROSE -> THEME_ROSE
+            else -> THEME_SYSTEM
+        }
     }
 }

@@ -2,7 +2,19 @@ package com.example.rideit.ui.screens
 
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
-import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.navigationBarsPadding
+import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.statusBarsPadding
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.CircleShape
@@ -14,11 +26,13 @@ import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.Immutable
+import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.luminance
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 
@@ -42,24 +56,47 @@ data class PromoOffer(
     val color: Color
 )
 
+@Immutable
+private data class NotificationsThemeColors(
+    val backgroundTop: Color,
+    val backgroundMiddle: Color,
+    val backgroundBottom: Color,
+    val card: Color,
+    val unreadCard: Color,
+    val innerCard: Color,
+    val iconCard: Color,
+    val primary: Color,
+    val secondary: Color,
+    val text: Color,
+    val subText: Color,
+    val border: Color,
+    val success: Color,
+    val warning: Color,
+    val payment: Color,
+    val onPrimary: Color,
+    val heroEnd: Color
+)
+
 @Composable
 fun NotificationsScreen(
     onBackClick: () -> Unit
 ) {
+    val colors = rememberNotificationsThemeColors()
+
     val promos = listOf(
         PromoOffer(
             id = "1",
             title = "50% OFF",
             subtitle = "On your next Mini ride",
             code = "RIDE50",
-            color = Color(0xFF8A35F2)
+            color = colors.primary
         ),
         PromoOffer(
             id = "2",
             title = "Free Comfort Upgrade",
             subtitle = "Available this weekend",
             code = "COMFORT",
-            color = Color(0xFF2563EB)
+            color = colors.secondary
         )
     )
 
@@ -108,63 +145,43 @@ fun NotificationsScreen(
             .background(
                 Brush.verticalGradient(
                     colors = listOf(
-                        Color(0xFF050505),
-                        Color(0xFF15080B),
-                        Color(0xFF090909)
+                        colors.backgroundTop,
+                        colors.backgroundMiddle,
+                        colors.backgroundBottom
                     )
                 )
             )
-            .padding(20.dp)
     ) {
         Column(
-            modifier = Modifier.fillMaxSize()
+            modifier = Modifier
+                .fillMaxSize()
+                .statusBarsPadding()
+                .navigationBarsPadding()
+                .padding(horizontal = 20.dp)
+                .padding(top = 22.dp, bottom = 20.dp)
         ) {
-            Spacer(modifier = Modifier.height(34.dp))
-
-            Row(
-                verticalAlignment = Alignment.CenterVertically
-            ) {
-                OutlinedButton(
-                    onClick = onBackClick,
-                    shape = RoundedCornerShape(16.dp),
-                    colors = ButtonDefaults.outlinedButtonColors(
-                        contentColor = Color.White
-                    )
-                ) {
-                    Text("‹ Back")
-                }
-
-                Spacer(modifier = Modifier.width(14.dp))
-
-                Column {
-                    Text(
-                        text = "Notifications",
-                        color = Color.White,
-                        fontWeight = FontWeight.Bold,
-                        style = MaterialTheme.typography.headlineMedium
-                    )
-
-                    Text(
-                        text = "Ride alerts, promos and updates",
-                        color = Color(0xFF9CA3AF),
-                        style = MaterialTheme.typography.bodySmall
-                    )
-                }
-            }
+            NotificationsTopBar(
+                colors = colors,
+                onBackClick = onBackClick
+            )
 
             Spacer(modifier = Modifier.height(24.dp))
 
             Text(
                 text = "Promotions",
-                color = Color.White,
-                fontWeight = FontWeight.Bold,
+                color = colors.text,
+                fontWeight = FontWeight.Black,
                 style = MaterialTheme.typography.titleLarge
             )
 
             Spacer(modifier = Modifier.height(14.dp))
 
             promos.forEach { promo ->
-                PromoCard(promo = promo)
+                PromoCard(
+                    promo = promo,
+                    colors = colors
+                )
+
                 Spacer(modifier = Modifier.height(12.dp))
             }
 
@@ -175,8 +192,8 @@ fun NotificationsScreen(
             ) {
                 Text(
                     text = "Latest Updates",
-                    color = Color.White,
-                    fontWeight = FontWeight.Bold,
+                    color = colors.text,
+                    fontWeight = FontWeight.Black,
                     style = MaterialTheme.typography.titleLarge
                 )
 
@@ -184,12 +201,12 @@ fun NotificationsScreen(
 
                 Surface(
                     shape = RoundedCornerShape(50),
-                    color = Color(0xFF8A35F2)
+                    color = colors.primary
                 ) {
                     Text(
                         text = "2 New",
                         modifier = Modifier.padding(horizontal = 12.dp, vertical = 6.dp),
-                        color = Color.White,
+                        color = colors.onPrimary,
                         fontWeight = FontWeight.Bold,
                         style = MaterialTheme.typography.bodySmall
                     )
@@ -202,7 +219,10 @@ fun NotificationsScreen(
                 verticalArrangement = Arrangement.spacedBy(12.dp)
             ) {
                 items(notifications) { notification ->
-                    NotificationCard(notification = notification)
+                    NotificationCard(
+                        notification = notification,
+                        colors = colors
+                    )
                 }
 
                 item {
@@ -214,8 +234,50 @@ fun NotificationsScreen(
 }
 
 @Composable
+private fun NotificationsTopBar(
+    colors: NotificationsThemeColors,
+    onBackClick: () -> Unit
+) {
+    Row(
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        OutlinedButton(
+            onClick = onBackClick,
+            shape = RoundedCornerShape(16.dp),
+            colors = ButtonDefaults.outlinedButtonColors(
+                contentColor = colors.text
+            )
+        ) {
+            Text(
+                text = "‹ Back",
+                fontWeight = FontWeight.Bold
+            )
+        }
+
+        Spacer(modifier = Modifier.width(14.dp))
+
+        Column {
+            Text(
+                text = "Notifications",
+                color = colors.text,
+                fontWeight = FontWeight.Black,
+                style = MaterialTheme.typography.headlineMedium
+            )
+
+            Text(
+                text = "Ride alerts, promos and updates",
+                color = colors.subText,
+                style = MaterialTheme.typography.bodySmall,
+                fontWeight = FontWeight.Medium
+            )
+        }
+    }
+}
+
+@Composable
 private fun PromoCard(
-    promo: PromoOffer
+    promo: PromoOffer,
+    colors: NotificationsThemeColors
 ) {
     Surface(
         modifier = Modifier.fillMaxWidth(),
@@ -230,8 +292,8 @@ private fun PromoCard(
                     Brush.linearGradient(
                         colors = listOf(
                             promo.color,
-                            promo.color.copy(alpha = 0.75f),
-                            Color(0xFF111827)
+                            promo.color.copy(alpha = 0.82f),
+                            colors.heroEnd
                         )
                     )
                 )
@@ -240,8 +302,8 @@ private fun PromoCard(
             Column {
                 Text(
                     text = promo.title,
-                    color = Color.White,
-                    fontWeight = FontWeight.Bold,
+                    color = colors.onPrimary,
+                    fontWeight = FontWeight.Black,
                     style = MaterialTheme.typography.headlineMedium
                 )
 
@@ -249,20 +311,21 @@ private fun PromoCard(
 
                 Text(
                     text = promo.subtitle,
-                    color = Color(0xFFE5E7EB),
-                    style = MaterialTheme.typography.bodyMedium
+                    color = Color.White.copy(alpha = 0.88f),
+                    style = MaterialTheme.typography.bodyMedium,
+                    fontWeight = FontWeight.Medium
                 )
 
                 Spacer(modifier = Modifier.height(16.dp))
 
                 Surface(
                     shape = RoundedCornerShape(50),
-                    color = Color.White.copy(alpha = 0.18f)
+                    color = Color.White.copy(alpha = 0.20f)
                 ) {
                     Text(
                         text = "Code: ${promo.code}",
                         modifier = Modifier.padding(horizontal = 14.dp, vertical = 8.dp),
-                        color = Color.White,
+                        color = colors.onPrimary,
                         fontWeight = FontWeight.Bold
                     )
                 }
@@ -273,7 +336,7 @@ private fun PromoCard(
                     .align(Alignment.TopEnd)
                     .size(62.dp)
                     .clip(CircleShape)
-                    .background(Color.White.copy(alpha = 0.18f)),
+                    .background(Color.White.copy(alpha = 0.20f)),
                 contentAlignment = Alignment.Center
             ) {
                 Text(
@@ -287,14 +350,15 @@ private fun PromoCard(
 
 @Composable
 private fun NotificationCard(
-    notification: RideitNotification
+    notification: RideitNotification,
+    colors: NotificationsThemeColors
 ) {
     val accentColor = when (notification.type) {
-        "Ride" -> Color(0xFF8A35F2)
-        "Offer" -> Color(0xFFE17A00)
-        "Trip" -> Color(0xFF16A34A)
-        "Payment" -> Color(0xFF2563EB)
-        else -> Color(0xFF8A35F2)
+        "Ride" -> colors.primary
+        "Offer" -> colors.warning
+        "Trip" -> colors.success
+        "Payment" -> colors.payment
+        else -> colors.primary
     }
 
     Surface(
@@ -302,11 +366,11 @@ private fun NotificationCard(
             .fillMaxWidth()
             .border(
                 width = if (notification.unread) 1.5.dp else 1.dp,
-                color = if (notification.unread) accentColor else Color(0xFF2A2A31),
+                color = if (notification.unread) accentColor else colors.border,
                 shape = RoundedCornerShape(24.dp)
             ),
         shape = RoundedCornerShape(24.dp),
-        color = if (notification.unread) Color(0xFF21182E) else Color(0xFF1B1B1D),
+        color = if (notification.unread) colors.unreadCard else colors.card,
         shadowElevation = if (notification.unread) 10.dp else 4.dp
     ) {
         Row(
@@ -317,7 +381,7 @@ private fun NotificationCard(
                 modifier = Modifier
                     .size(54.dp)
                     .clip(RoundedCornerShape(18.dp))
-                    .background(accentColor.copy(alpha = 0.20f)),
+                    .background(accentColor.copy(alpha = 0.18f)),
                 contentAlignment = Alignment.Center
             ) {
                 Text(
@@ -336,8 +400,8 @@ private fun NotificationCard(
                 ) {
                     Text(
                         text = notification.title,
-                        color = Color.White,
-                        fontWeight = FontWeight.Bold,
+                        color = colors.text,
+                        fontWeight = FontWeight.Black,
                         style = MaterialTheme.typography.titleMedium
                     )
 
@@ -357,8 +421,9 @@ private fun NotificationCard(
 
                 Text(
                     text = notification.message,
-                    color = Color(0xFF9CA3AF),
-                    style = MaterialTheme.typography.bodySmall
+                    color = colors.subText,
+                    style = MaterialTheme.typography.bodySmall,
+                    fontWeight = FontWeight.Medium
                 )
 
                 Spacer(modifier = Modifier.height(10.dp))
@@ -368,23 +433,24 @@ private fun NotificationCard(
                 ) {
                     Surface(
                         shape = RoundedCornerShape(50),
-                        color = accentColor.copy(alpha = 0.18f)
+                        color = accentColor.copy(alpha = 0.14f)
                     ) {
                         Text(
                             text = notification.type,
-                            modifier = Modifier.padding(horizontal = 10.dp, vertical = 5.dp),
+                            modifier = Modifier.padding(horizontal = 9.dp, vertical = 4.dp),
                             color = accentColor,
                             fontWeight = FontWeight.Bold,
-                            style = MaterialTheme.typography.bodySmall
+                            style = MaterialTheme.typography.labelSmall
                         )
                     }
 
-                    Spacer(modifier = Modifier.weight(1f))
+                    Spacer(modifier = Modifier.width(8.dp))
 
                     Text(
                         text = notification.time,
-                        color = Color(0xFF6B7280),
-                        style = MaterialTheme.typography.bodySmall
+                        color = colors.subText,
+                        style = MaterialTheme.typography.labelSmall,
+                        fontWeight = FontWeight.Medium
                     )
                 }
             }
@@ -392,3 +458,78 @@ private fun NotificationCard(
     }
 }
 
+@Composable
+private fun rememberNotificationsThemeColors(): NotificationsThemeColors {
+    val scheme = MaterialTheme.colorScheme
+
+    val isRoseTheme =
+        scheme.primary == Color(0xFFFF5CA8) ||
+                scheme.primary == Color(0xFFEC4899) ||
+                scheme.primaryContainer == Color(0xFFFFD6E8)
+
+    val isLightTheme = scheme.background.luminance() > 0.5f
+
+    return remember(scheme.primary, scheme.background) {
+        when {
+            isRoseTheme -> NotificationsThemeColors(
+                backgroundTop = Color(0xFFFFF7FB),
+                backgroundMiddle = Color(0xFFFFEAF3),
+                backgroundBottom = Color(0xFFFFFBFD),
+                card = Color.White,
+                unreadCard = Color(0xFFFFEAF3),
+                innerCard = Color(0xFFFFEAF3),
+                iconCard = Color(0xFFFFD6E8),
+                primary = Color(0xFFFF5CA8),
+                secondary = Color(0xFFEC4899),
+                text = Color(0xFF24111A),
+                subText = Color(0xFF7A445A),
+                border = Color(0xFFF9A8D4),
+                success = Color(0xFF16A34A),
+                warning = Color(0xFFDB7C00),
+                payment = Color(0xFFEC4899),
+                onPrimary = Color.White,
+                heroEnd = Color(0xFFBE185D)
+            )
+
+            isLightTheme -> NotificationsThemeColors(
+                backgroundTop = Color(0xFFF8FAFC),
+                backgroundMiddle = Color(0xFFEDE9FE),
+                backgroundBottom = Color.White,
+                card = Color.White,
+                unreadCard = Color(0xFFF3EEFF),
+                innerCard = Color(0xFFF1F5F9),
+                iconCard = Color(0xFFEBDDFF),
+                primary = scheme.primary,
+                secondary = Color(0xFF2563EB),
+                text = Color(0xFF111827),
+                subText = Color(0xFF6B7280),
+                border = Color(0xFFE5E7EB),
+                success = Color(0xFF16A34A),
+                warning = Color(0xFFDB7C00),
+                payment = Color(0xFF2563EB),
+                onPrimary = Color.White,
+                heroEnd = Color(0xFF111827)
+            )
+
+            else -> NotificationsThemeColors(
+                backgroundTop = Color(0xFF050505),
+                backgroundMiddle = Color(0xFF15080B),
+                backgroundBottom = Color(0xFF090909),
+                card = Color(0xFF1B1B1D),
+                unreadCard = Color(0xFF21182E),
+                innerCard = Color(0xFF252529),
+                iconCard = Color(0xFF2A2138),
+                primary = Color(0xFF8A35F2),
+                secondary = Color(0xFF2563EB),
+                text = Color.White,
+                subText = Color(0xFF9CA3AF),
+                border = Color(0xFF2A2A31),
+                success = Color(0xFF16A34A),
+                warning = Color(0xFFE17A00),
+                payment = Color(0xFF2563EB),
+                onPrimary = Color.White,
+                heroEnd = Color(0xFF111827)
+            )
+        }
+    }
+}

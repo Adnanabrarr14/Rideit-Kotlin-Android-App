@@ -4,6 +4,7 @@ import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -12,7 +13,10 @@ import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
@@ -36,6 +40,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.luminance
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
@@ -62,6 +67,25 @@ data class TripHistoryItem(
     val sortTimeMillis: Long
 )
 
+@Immutable
+private data class TripHistoryThemeColors(
+    val backgroundTop: Color,
+    val backgroundMiddle: Color,
+    val backgroundBottom: Color,
+    val card: Color,
+    val innerCard: Color,
+    val iconCard: Color,
+    val primary: Color,
+    val secondary: Color,
+    val text: Color,
+    val subText: Color,
+    val border: Color,
+    val success: Color,
+    val danger: Color,
+    val warning: Color,
+    val onPrimary: Color
+)
+
 @Composable
 fun TripHistoryScreen(
     onBackClick: () -> Unit
@@ -70,6 +94,7 @@ fun TripHistoryScreen(
     var firebaseError by remember { mutableStateOf<String?>(null) }
     var trips by remember { mutableStateOf<List<TripHistoryItem>>(emptyList()) }
 
+    val colors = rememberTripHistoryThemeColors()
     val riderId = remember { FirebaseManager.currentUserId().orEmpty() }
     val firestore = remember { FirebaseFirestore.getInstance() }
 
@@ -201,19 +226,21 @@ fun TripHistoryScreen(
             .background(
                 Brush.verticalGradient(
                     colors = listOf(
-                        Color(0xFF050505),
-                        Color(0xFF15080B),
-                        Color(0xFF090909)
+                        colors.backgroundTop,
+                        colors.backgroundMiddle,
+                        colors.backgroundBottom
                     )
                 )
             )
-            .padding(20.dp)
     ) {
         Column(
-            modifier = Modifier.fillMaxSize()
+            modifier = Modifier
+                .fillMaxSize()
+                .statusBarsPadding()
+                .navigationBarsPadding()
+                .padding(horizontal = 20.dp)
+                .padding(top = 22.dp, bottom = 20.dp)
         ) {
-            Spacer(modifier = Modifier.height(34.dp))
-
             Row(
                 verticalAlignment = Alignment.CenterVertically
             ) {
@@ -221,10 +248,13 @@ fun TripHistoryScreen(
                     onClick = onBackClick,
                     shape = RoundedCornerShape(16.dp),
                     colors = ButtonDefaults.outlinedButtonColors(
-                        contentColor = Color.White
+                        contentColor = colors.text
                     )
                 ) {
-                    Text("‹ Back")
+                    Text(
+                        text = "‹ Back",
+                        fontWeight = FontWeight.Bold
+                    )
                 }
 
                 Spacer(modifier = Modifier.width(14.dp))
@@ -232,15 +262,16 @@ fun TripHistoryScreen(
                 Column {
                     Text(
                         text = "Trip History",
-                        color = Color.White,
-                        fontWeight = FontWeight.Bold,
+                        color = colors.text,
+                        fontWeight = FontWeight.Black,
                         style = MaterialTheme.typography.headlineMedium
                     )
 
                     Text(
                         text = "Your real Firebase Rideit activity",
-                        color = Color(0xFF9CA3AF),
-                        style = MaterialTheme.typography.bodySmall
+                        color = colors.subText,
+                        style = MaterialTheme.typography.bodySmall,
+                        fontWeight = FontWeight.Medium
                     )
                 }
             }
@@ -252,13 +283,14 @@ fun TripHistoryScreen(
                 totalSpent = totalSpent,
                 averageRating = averageRating,
                 completedTrips = completedTrips,
-                cancelledTrips = cancelledTrips
+                cancelledTrips = cancelledTrips,
+                colors = colors
             )
 
             Spacer(modifier = Modifier.height(18.dp))
 
             if (isLoading) {
-                TripHistoryLoadingCard()
+                TripHistoryLoadingCard(colors = colors)
                 Spacer(modifier = Modifier.height(14.dp))
             }
 
@@ -266,7 +298,8 @@ fun TripHistoryScreen(
                 TripHistoryMessageCard(
                     title = "Unable to load trips",
                     message = error,
-                    success = false
+                    success = false,
+                    colors = colors
                 )
 
                 Spacer(modifier = Modifier.height(14.dp))
@@ -276,7 +309,8 @@ fun TripHistoryScreen(
                 TripHistoryMessageCard(
                     title = "No Firebase trips yet",
                     message = "Book and complete a real Rideit trip, then it will appear here automatically.",
-                    success = true
+                    success = true,
+                    colors = colors
                 )
 
                 Spacer(modifier = Modifier.height(14.dp))
@@ -291,7 +325,10 @@ fun TripHistoryScreen(
                     verticalArrangement = Arrangement.spacedBy(14.dp)
                 ) {
                     items(trips) { trip ->
-                        TripCard(trip = trip)
+                        TripCard(
+                            trip = trip,
+                            colors = colors
+                        )
                     }
 
                     item {
@@ -309,12 +346,13 @@ private fun TripStatsCard(
     totalSpent: Int,
     averageRating: Double,
     completedTrips: Int,
-    cancelledTrips: Int
+    cancelledTrips: Int,
+    colors: TripHistoryThemeColors
 ) {
     Surface(
         modifier = Modifier.fillMaxWidth(),
         shape = RoundedCornerShape(28.dp),
-        color = Color(0xFF1B1B1D),
+        color = colors.card,
         shadowElevation = 18.dp
     ) {
         Column(
@@ -327,17 +365,19 @@ private fun TripStatsCard(
             ) {
                 StatItem(
                     title = "Trips",
-                    value = tripCount.toString()
+                    value = tripCount.toString(),
+                    colors = colors
                 )
 
-                StatDivider()
+                StatDivider(colors = colors)
 
                 StatItem(
                     title = "Spent",
-                    value = formatRupees(totalSpent)
+                    value = formatRupees(totalSpent),
+                    colors = colors
                 )
 
-                StatDivider()
+                StatDivider(colors = colors)
 
                 StatItem(
                     title = "Rating",
@@ -345,7 +385,8 @@ private fun TripStatsCard(
                         String.format(Locale.US, "%.1f", averageRating)
                     } else {
                         "—"
-                    }
+                    },
+                    colors = colors
                 )
             }
 
@@ -358,13 +399,13 @@ private fun TripStatsCard(
                 MiniStatPill(
                     label = "Completed",
                     value = completedTrips.toString(),
-                    color = Color(0xFF22C55E)
+                    color = colors.success
                 )
 
                 MiniStatPill(
                     label = "Cancelled",
                     value = cancelledTrips.toString(),
-                    color = Color(0xFFEF4444)
+                    color = colors.danger
                 )
             }
         }
@@ -394,15 +435,16 @@ private fun MiniStatPill(
 @Composable
 private fun StatItem(
     title: String,
-    value: String
+    value: String,
+    colors: TripHistoryThemeColors
 ) {
     Column(
         horizontalAlignment = Alignment.CenterHorizontally
     ) {
         Text(
             text = value,
-            color = Color.White,
-            fontWeight = FontWeight.Bold,
+            color = colors.text,
+            fontWeight = FontWeight.Black,
             style = MaterialTheme.typography.titleLarge,
             maxLines = 1,
             overflow = TextOverflow.Ellipsis
@@ -410,32 +452,46 @@ private fun StatItem(
 
         Text(
             text = title,
-            color = Color(0xFF9CA3AF),
-            style = MaterialTheme.typography.bodySmall
+            color = colors.subText,
+            style = MaterialTheme.typography.bodySmall,
+            fontWeight = FontWeight.Medium
         )
     }
 }
 
 @Composable
-private fun StatDivider() {
+private fun StatDivider(
+    colors: TripHistoryThemeColors
+) {
     Box(
         modifier = Modifier
             .height(38.dp)
             .width(1.dp)
-            .background(Color(0xFF303036))
+            .background(colors.border)
     )
 }
 
 @Composable
 private fun TripCard(
-    trip: TripHistoryItem
+    trip: TripHistoryItem,
+    colors: TripHistoryThemeColors
 ) {
-    val accentColor = statusColor(trip.status, trip.rideType)
+    val accentColor = statusColor(
+        status = trip.status,
+        rideType = trip.rideType,
+        colors = colors
+    )
 
     Surface(
-        modifier = Modifier.fillMaxWidth(),
+        modifier = Modifier
+            .fillMaxWidth()
+            .border(
+                width = 1.dp,
+                color = colors.border,
+                shape = RoundedCornerShape(26.dp)
+            ),
         shape = RoundedCornerShape(26.dp),
-        color = Color(0xFF1B1B1D),
+        color = colors.card,
         shadowElevation = 10.dp
     ) {
         Column(
@@ -453,7 +509,7 @@ private fun TripCard(
                     Text(
                         text = trip.rideType,
                         color = accentColor,
-                        fontWeight = FontWeight.Bold,
+                        fontWeight = FontWeight.Black,
                         style = MaterialTheme.typography.bodyMedium,
                         maxLines = 1,
                         overflow = TextOverflow.Ellipsis
@@ -464,8 +520,8 @@ private fun TripCard(
 
                 Text(
                     text = trip.fare,
-                    color = Color.White,
-                    fontWeight = FontWeight.Bold,
+                    color = colors.text,
+                    fontWeight = FontWeight.Black,
                     style = MaterialTheme.typography.titleLarge
                 )
             }
@@ -473,9 +529,10 @@ private fun TripCard(
             Spacer(modifier = Modifier.height(14.dp))
 
             TripLocationRow(
-                dotColor = Color(0xFF22C55E),
+                dotColor = colors.success,
                 title = trip.pickup,
-                subtitle = "Pickup"
+                subtitle = "Pickup",
+                colors = colors
             )
 
             Spacer(modifier = Modifier.height(10.dp))
@@ -483,7 +540,8 @@ private fun TripCard(
             TripLocationRow(
                 dotColor = accentColor,
                 title = trip.dropoff,
-                subtitle = "Dropoff"
+                subtitle = "Dropoff",
+                colors = colors
             )
 
             if (trip.feedback.isNotBlank()) {
@@ -492,15 +550,15 @@ private fun TripCard(
                 Surface(
                     modifier = Modifier.fillMaxWidth(),
                     shape = RoundedCornerShape(18.dp),
-                    color = Color(0xFF252529)
+                    color = colors.innerCard
                 ) {
                     Column(
                         modifier = Modifier.padding(14.dp)
                     ) {
                         Text(
                             text = "Your feedback",
-                            color = Color(0xFF9CA3AF),
-                            fontWeight = FontWeight.Bold,
+                            color = colors.subText,
+                            fontWeight = FontWeight.Black,
                             style = MaterialTheme.typography.labelMedium
                         )
 
@@ -508,8 +566,9 @@ private fun TripCard(
 
                         Text(
                             text = trip.feedback,
-                            color = Color.White,
+                            color = colors.text,
                             style = MaterialTheme.typography.bodySmall,
+                            fontWeight = FontWeight.Medium,
                             maxLines = 3,
                             overflow = TextOverflow.Ellipsis
                         )
@@ -522,7 +581,7 @@ private fun TripCard(
             Surface(
                 modifier = Modifier.fillMaxWidth(),
                 shape = RoundedCornerShape(18.dp),
-                color = Color(0xFF252529)
+                color = colors.innerCard
             ) {
                 Row(
                     modifier = Modifier.padding(14.dp),
@@ -531,23 +590,25 @@ private fun TripCard(
                     Column(modifier = Modifier.weight(1f)) {
                         Text(
                             text = trip.date,
-                            color = Color.White,
-                            fontWeight = FontWeight.Bold,
+                            color = colors.text,
+                            fontWeight = FontWeight.Black,
                             style = MaterialTheme.typography.bodyMedium
                         )
 
                         Text(
                             text = "${trip.time} • Driver: ${trip.driverName}",
-                            color = Color(0xFF9CA3AF),
+                            color = colors.subText,
                             style = MaterialTheme.typography.bodySmall,
+                            fontWeight = FontWeight.Medium,
                             maxLines = 1,
                             overflow = TextOverflow.Ellipsis
                         )
 
                         Text(
                             text = "Rating: ${if (trip.rating == "—") "Not rated" else "⭐ ${trip.rating}"}",
-                            color = Color(0xFF9CA3AF),
+                            color = colors.subText,
                             style = MaterialTheme.typography.bodySmall,
+                            fontWeight = FontWeight.Medium,
                             maxLines = 1,
                             overflow = TextOverflow.Ellipsis
                         )
@@ -558,7 +619,7 @@ private fun TripCard(
                     Text(
                         text = trip.status,
                         color = accentColor,
-                        fontWeight = FontWeight.Bold,
+                        fontWeight = FontWeight.Black,
                         style = MaterialTheme.typography.bodyMedium
                     )
                 }
@@ -571,7 +632,8 @@ private fun TripCard(
 private fun TripLocationRow(
     dotColor: Color,
     title: String,
-    subtitle: String
+    subtitle: String,
+    colors: TripHistoryThemeColors
 ) {
     Row(
         verticalAlignment = Alignment.CenterVertically
@@ -588,8 +650,8 @@ private fun TripLocationRow(
         Column {
             Text(
                 text = title,
-                color = Color.White,
-                fontWeight = FontWeight.Bold,
+                color = colors.text,
+                fontWeight = FontWeight.Black,
                 style = MaterialTheme.typography.bodyLarge,
                 maxLines = 1,
                 overflow = TextOverflow.Ellipsis
@@ -597,19 +659,22 @@ private fun TripLocationRow(
 
             Text(
                 text = subtitle,
-                color = Color(0xFF9CA3AF),
-                style = MaterialTheme.typography.bodySmall
+                color = colors.subText,
+                style = MaterialTheme.typography.bodySmall,
+                fontWeight = FontWeight.Medium
             )
         }
     }
 }
 
 @Composable
-private fun TripHistoryLoadingCard() {
+private fun TripHistoryLoadingCard(
+    colors: TripHistoryThemeColors
+) {
     Surface(
         modifier = Modifier.fillMaxWidth(),
         shape = RoundedCornerShape(24.dp),
-        color = Color(0xFF1B1B1D),
+        color = colors.card,
         shadowElevation = 10.dp
     ) {
         Column(
@@ -617,8 +682,8 @@ private fun TripHistoryLoadingCard() {
         ) {
             Text(
                 text = "Loading Firebase trips...",
-                color = Color.White,
-                fontWeight = FontWeight.Bold,
+                color = colors.text,
+                fontWeight = FontWeight.Black,
                 style = MaterialTheme.typography.titleMedium
             )
 
@@ -629,8 +694,8 @@ private fun TripHistoryLoadingCard() {
                     .fillMaxWidth()
                     .height(8.dp)
                     .clip(RoundedCornerShape(50)),
-                color = Color(0xFF8A35F2),
-                trackColor = Color(0xFF303036)
+                color = colors.primary,
+                trackColor = colors.innerCard
             )
         }
     }
@@ -640,14 +705,15 @@ private fun TripHistoryLoadingCard() {
 private fun TripHistoryMessageCard(
     title: String,
     message: String,
-    success: Boolean
+    success: Boolean,
+    colors: TripHistoryThemeColors
 ) {
-    val color = if (success) Color(0xFF8A35F2) else Color(0xFFEF4444)
+    val color = if (success) colors.primary else colors.danger
 
     Surface(
         modifier = Modifier.fillMaxWidth(),
         shape = RoundedCornerShape(24.dp),
-        color = Color(0xFF1B1B1D),
+        color = colors.card,
         shadowElevation = 10.dp
     ) {
         Row(
@@ -673,8 +739,8 @@ private fun TripHistoryMessageCard(
             Column(modifier = Modifier.weight(1f)) {
                 Text(
                     text = title,
-                    color = Color.White,
-                    fontWeight = FontWeight.Bold,
+                    color = colors.text,
+                    fontWeight = FontWeight.Black,
                     style = MaterialTheme.typography.titleMedium
                 )
 
@@ -682,30 +748,108 @@ private fun TripHistoryMessageCard(
 
                 Text(
                     text = message,
-                    color = Color(0xFF9CA3AF),
-                    style = MaterialTheme.typography.bodySmall
+                    color = colors.subText,
+                    style = MaterialTheme.typography.bodySmall,
+                    fontWeight = FontWeight.Medium
                 )
             }
         }
     }
 }
 
-private fun rideColor(type: String): Color {
-    return when (type.lowercase()) {
-        "mini" -> Color(0xFF8A35F2)
-        "comfort" -> Color(0xFF2563EB)
-        "business" -> Color(0xFFE17A00)
-        else -> Color(0xFF8A35F2)
+@Composable
+private fun rememberTripHistoryThemeColors(): TripHistoryThemeColors {
+    val scheme = MaterialTheme.colorScheme
+
+    val isRoseTheme =
+        scheme.primary == Color(0xFFFF5CA8) ||
+                scheme.primary == Color(0xFFEC4899) ||
+                scheme.primaryContainer == Color(0xFFFFD6E8)
+
+    val isLightTheme = scheme.background.luminance() > 0.5f
+
+    return remember(scheme.primary, scheme.background) {
+        when {
+            isRoseTheme -> TripHistoryThemeColors(
+                backgroundTop = Color(0xFFFFF7FB),
+                backgroundMiddle = Color(0xFFFFEAF3),
+                backgroundBottom = Color(0xFFFFFBFD),
+                card = Color.White,
+                innerCard = Color(0xFFFFEAF3),
+                iconCard = Color(0xFFFFD6E8),
+                primary = Color(0xFFFF5CA8),
+                secondary = Color(0xFFEC4899),
+                text = Color(0xFF24111A),
+                subText = Color(0xFF7A445A),
+                border = Color(0xFFF9A8D4),
+                success = Color(0xFF16A34A),
+                danger = Color(0xFFE11D48),
+                warning = Color(0xFFDB7C00),
+                onPrimary = Color.White
+            )
+
+            isLightTheme -> TripHistoryThemeColors(
+                backgroundTop = Color(0xFFF8FAFC),
+                backgroundMiddle = Color(0xFFEDE9FE),
+                backgroundBottom = Color.White,
+                card = Color.White,
+                innerCard = Color(0xFFF1F5F9),
+                iconCard = Color(0xFFEBDDFF),
+                primary = scheme.primary,
+                secondary = Color(0xFF2563EB),
+                text = Color(0xFF111827),
+                subText = Color(0xFF6B7280),
+                border = Color(0xFFE5E7EB),
+                success = Color(0xFF16A34A),
+                danger = Color(0xFFEF4444),
+                warning = Color(0xFFDB7C00),
+                onPrimary = Color.White
+            )
+
+            else -> TripHistoryThemeColors(
+                backgroundTop = Color(0xFF050505),
+                backgroundMiddle = Color(0xFF15080B),
+                backgroundBottom = Color(0xFF090909),
+                card = Color(0xFF1B1B1D),
+                innerCard = Color(0xFF252529),
+                iconCard = Color(0xFF2A2138),
+                primary = Color(0xFF8A35F2),
+                secondary = Color(0xFF2563EB),
+                text = Color.White,
+                subText = Color(0xFF9CA3AF),
+                border = Color(0xFF303036),
+                success = Color(0xFF22C55E),
+                danger = Color(0xFFEF4444),
+                warning = Color(0xFFE17A00),
+                onPrimary = Color.White
+            )
+        }
     }
 }
 
-private fun statusColor(status: String, rideType: String): Color {
+private fun rideColor(
+    type: String,
+    colors: TripHistoryThemeColors
+): Color {
+    return when (type.lowercase()) {
+        "mini" -> colors.primary
+        "comfort" -> colors.secondary
+        "business" -> colors.warning
+        else -> colors.primary
+    }
+}
+
+private fun statusColor(
+    status: String,
+    rideType: String,
+    colors: TripHistoryThemeColors
+): Color {
     return when (status.lowercase()) {
-        "completed" -> rideColor(rideType)
-        "cancelled by you" -> Color(0xFFEF4444)
-        "cancelled by driver" -> Color(0xFFE17A00)
-        "declined" -> Color(0xFFEF4444)
-        else -> rideColor(rideType)
+        "completed" -> rideColor(rideType, colors)
+        "cancelled by you" -> colors.danger
+        "cancelled by driver" -> colors.warning
+        "declined" -> colors.danger
+        else -> rideColor(rideType, colors)
     }
 }
 

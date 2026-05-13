@@ -7,7 +7,6 @@ import androidx.compose.animation.fadeOut
 import androidx.compose.animation.slideInVertically
 import androidx.compose.animation.slideOutVertically
 import androidx.compose.foundation.background
-import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -32,6 +31,11 @@ import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.saveable.rememberSaveable
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -40,6 +44,7 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
+import com.example.rideit.FirebaseManager
 
 @Composable
 fun PremiumTripReceiptPreviewSheet(
@@ -54,6 +59,39 @@ fun PremiumTripReceiptPreviewSheet(
     onDoneClick: () -> Unit,
     onViewHistoryClick: () -> Unit
 ) {
+    var paymentDisplayText by rememberSaveable {
+        mutableStateOf("Cash")
+    }
+
+    LaunchedEffect(visible) {
+        if (visible) {
+            FirebaseManager.loadRiderPaymentProfile(
+                onSuccess = { profile ->
+                    paymentDisplayText = when (profile.selectedPaymentMethod) {
+                        FirebaseManager.PAYMENT_CARD -> {
+                            if (profile.cardLastFour.isNotBlank()) {
+                                "Debit / Credit Card •••• ${profile.cardLastFour}"
+                            } else {
+                                "Debit / Credit Card"
+                            }
+                        }
+
+                        FirebaseManager.PAYMENT_WALLET -> {
+                            "Rideit Wallet"
+                        }
+
+                        else -> {
+                            "Cash"
+                        }
+                    }
+                },
+                onError = {
+                    paymentDisplayText = "Cash"
+                }
+            )
+        }
+    }
+
     AnimatedVisibility(
         visible = visible,
         enter = fadeIn(animationSpec = tween(180)),
@@ -124,7 +162,7 @@ fun PremiumTripReceiptPreviewSheet(
                                 contentAlignment = Alignment.Center
                             ) {
                                 Text(
-                                    text = "₨",
+                                    text = "Rs",
                                     style = MaterialTheme.typography.headlineMedium,
                                     fontWeight = FontWeight.Black,
                                     color = MaterialTheme.colorScheme.primary
@@ -202,7 +240,7 @@ fun PremiumTripReceiptPreviewSheet(
 
                                 ReceiptInfoRow(
                                     title = "Payment",
-                                    value = "Demo payment"
+                                    value = paymentDisplayText
                                 )
 
                                 if (rating != null) {
@@ -279,7 +317,7 @@ fun PremiumTripReceiptPreviewSheet(
                             shape = RoundedCornerShape(20.dp)
                         ) {
                             Text(
-                                text = "View in Trip History Demo",
+                                text = "View in Trip History",
                                 fontWeight = FontWeight.Bold
                             )
                         }

@@ -29,7 +29,9 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.Immutable
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.blur
@@ -37,17 +39,35 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.scale
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.luminance
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
+
+@Immutable
+private data class AccountTypeThemeColors(
+    val backgroundTop: Color,
+    val backgroundMiddle: Color,
+    val backgroundBottom: Color,
+    val card: Color,
+    val cardBorder: Color,
+    val primary: Color,
+    val riderAccent: Color,
+    val driverAccent: Color,
+    val text: Color,
+    val subText: Color,
+    val mutedText: Color,
+    val onPrimary: Color,
+    val choiceCard: Color,
+    val choiceCardAlt: Color
+)
 
 @Composable
 fun AccountTypeScreen(
     onRiderLoginClick: () -> Unit,
     onDriverLoginClick: () -> Unit
 ) {
-    val purple = Color(0xFF8A35F2)
-    val red = Color(0xFFFF1212)
+    val colors = rememberAccountTypeThemeColors()
 
     val infiniteTransition = rememberInfiniteTransition(label = "rideit_logo_animation")
 
@@ -84,7 +104,7 @@ fun AccountTypeScreen(
     Box(
         modifier = Modifier
             .fillMaxSize()
-            .background(Color(0xFF030307))
+            .background(colors.backgroundTop)
             .windowInsetsPadding(WindowInsets.statusBars)
             .windowInsetsPadding(WindowInsets.navigationBars)
             .padding(horizontal = 20.dp),
@@ -96,7 +116,7 @@ fun AccountTypeScreen(
                 .height(620.dp)
                 .border(
                     width = 1.dp,
-                    color = Color.White.copy(alpha = 0.08f),
+                    color = colors.cardBorder,
                     shape = RoundedCornerShape(42.dp)
                 ),
             shape = RoundedCornerShape(42.dp),
@@ -109,10 +129,10 @@ fun AccountTypeScreen(
                     .background(
                         Brush.verticalGradient(
                             colors = listOf(
-                                Color(0xFF030307),
-                                Color(0xFF160522),
-                                Color(0xFF21000A),
-                                Color(0xFF030307)
+                                colors.backgroundTop,
+                                colors.backgroundMiddle,
+                                colors.backgroundBottom,
+                                colors.backgroundTop
                             )
                         )
                     )
@@ -125,8 +145,8 @@ fun AccountTypeScreen(
                         .background(
                             Brush.radialGradient(
                                 colors = listOf(
-                                    purple.copy(alpha = 0.48f),
-                                    red.copy(alpha = 0.20f),
+                                    colors.primary.copy(alpha = 0.48f),
+                                    colors.riderAccent.copy(alpha = 0.20f),
                                     Color.Transparent
                                 )
                             )
@@ -141,7 +161,7 @@ fun AccountTypeScreen(
                         .background(
                             Brush.radialGradient(
                                 colors = listOf(
-                                    red.copy(alpha = 0.30f),
+                                    colors.riderAccent.copy(alpha = 0.30f),
                                     Color.Transparent
                                 )
                             )
@@ -157,14 +177,15 @@ fun AccountTypeScreen(
                     AnimatedRideitLogo(
                         glowScale = glowScale,
                         glowAlpha = glowAlpha,
-                        ringScale = ringScale
+                        ringScale = ringScale,
+                        colors = colors
                     )
 
                     Spacer(modifier = Modifier.height(30.dp))
 
                     Text(
                         text = "Welcome to\nRideit",
-                        color = Color.White,
+                        color = colors.text,
                         fontWeight = FontWeight.Black,
                         textAlign = TextAlign.Center,
                         style = MaterialTheme.typography.headlineLarge
@@ -174,7 +195,7 @@ fun AccountTypeScreen(
 
                     Text(
                         text = "Choose how you want to continue",
-                        color = Color(0xFFB8B4C6),
+                        color = colors.subText,
                         fontWeight = FontWeight.Medium,
                         textAlign = TextAlign.Center,
                         style = MaterialTheme.typography.bodyLarge
@@ -187,7 +208,8 @@ fun AccountTypeScreen(
                         title = "Rider Login",
                         badge = "User",
                         subtitle = "Book rides, track drivers\nand manage payments.",
-                        accentColor = red,
+                        accentColor = colors.riderAccent,
+                        colors = colors,
                         onClick = onRiderLoginClick
                     )
 
@@ -198,7 +220,8 @@ fun AccountTypeScreen(
                         title = "Driver Login",
                         badge = "Driver",
                         subtitle = "Go online, accept rides\nand view earnings.",
-                        accentColor = purple,
+                        accentColor = colors.driverAccent,
+                        colors = colors,
                         onClick = onDriverLoginClick
                     )
 
@@ -206,7 +229,7 @@ fun AccountTypeScreen(
 
                     Text(
                         text = "Powered by Firebase Auth • Secure & Safe",
-                        color = Color.White.copy(alpha = 0.22f),
+                        color = colors.mutedText,
                         textAlign = TextAlign.Center,
                         style = MaterialTheme.typography.bodySmall,
                         fontWeight = FontWeight.Medium
@@ -221,11 +244,9 @@ fun AccountTypeScreen(
 private fun AnimatedRideitLogo(
     glowScale: Float,
     glowAlpha: Float,
-    ringScale: Float
+    ringScale: Float,
+    colors: AccountTypeThemeColors
 ) {
-    val purple = Color(0xFF8A35F2)
-    val red = Color(0xFFFF1212)
-
     Box(
         modifier = Modifier.size(132.dp),
         contentAlignment = Alignment.Center
@@ -238,8 +259,8 @@ private fun AnimatedRideitLogo(
                 .background(
                     brush = Brush.radialGradient(
                         colors = listOf(
-                            purple.copy(alpha = glowAlpha),
-                            red.copy(alpha = glowAlpha * 0.45f),
+                            colors.primary.copy(alpha = glowAlpha),
+                            colors.riderAccent.copy(alpha = glowAlpha * 0.45f),
                             Color.Transparent
                         )
                     ),
@@ -255,10 +276,10 @@ private fun AnimatedRideitLogo(
                     width = 2.dp,
                     brush = Brush.sweepGradient(
                         colors = listOf(
-                            purple,
-                            red,
-                            Color(0xFFB05CFF),
-                            purple
+                            colors.primary,
+                            colors.riderAccent,
+                            colors.driverAccent,
+                            colors.primary
                         )
                     ),
                     shape = CircleShape
@@ -277,9 +298,9 @@ private fun AnimatedRideitLogo(
                     .background(
                         Brush.radialGradient(
                             colors = listOf(
-                                Color(0xFFB05CFF),
-                                purple,
-                                Color(0xFF4B148D)
+                                colors.driverAccent,
+                                colors.primary,
+                                colors.riderAccent
                             )
                         )
                     )
@@ -292,7 +313,7 @@ private fun AnimatedRideitLogo(
             ) {
                 Text(
                     text = "R",
-                    color = Color.White,
+                    color = colors.onPrimary,
                     fontWeight = FontWeight.Black,
                     style = MaterialTheme.typography.headlineLarge
                 )
@@ -308,6 +329,7 @@ private fun AccountChoiceCard(
     badge: String,
     subtitle: String,
     accentColor: Color,
+    colors: AccountTypeThemeColors,
     onClick: () -> Unit
 ) {
     Surface(
@@ -317,11 +339,11 @@ private fun AccountChoiceCard(
             .clickable { onClick() }
             .border(
                 width = 1.dp,
-                color = Color.White.copy(alpha = 0.07f),
+                color = colors.cardBorder,
                 shape = RoundedCornerShape(26.dp)
             ),
         shape = RoundedCornerShape(26.dp),
-        color = Color(0xFF101019).copy(alpha = 0.92f),
+        color = colors.choiceCard,
         shadowElevation = 14.dp
     ) {
         Row(
@@ -336,7 +358,7 @@ private fun AccountChoiceCard(
                         Brush.radialGradient(
                             colors = listOf(
                                 accentColor.copy(alpha = 0.45f),
-                                Color(0xFF1A1222)
+                                colors.choiceCardAlt
                             )
                         )
                     ),
@@ -356,7 +378,7 @@ private fun AccountChoiceCard(
                 ) {
                     Text(
                         text = title,
-                        color = Color.White,
+                        color = colors.text,
                         fontWeight = FontWeight.Black,
                         style = MaterialTheme.typography.titleMedium
                     )
@@ -381,7 +403,7 @@ private fun AccountChoiceCard(
 
                 Text(
                     text = subtitle,
-                    color = Color(0xFFAAA6B6),
+                    color = colors.subText,
                     fontWeight = FontWeight.Medium,
                     style = MaterialTheme.typography.bodySmall
                 )
@@ -392,6 +414,73 @@ private fun AccountChoiceCard(
                 color = accentColor,
                 fontWeight = FontWeight.Black,
                 style = MaterialTheme.typography.titleLarge
+            )
+        }
+    }
+}
+
+@Composable
+private fun rememberAccountTypeThemeColors(): AccountTypeThemeColors {
+    val scheme = MaterialTheme.colorScheme
+
+    val isRoseTheme =
+        scheme.primary == Color(0xFFFF5CA8) ||
+                scheme.primary == Color(0xFFEC4899) ||
+                scheme.primaryContainer == Color(0xFFFFD6E8)
+
+    val isLightTheme = scheme.background.luminance() > 0.5f
+
+    return remember(scheme.primary, scheme.background) {
+        when {
+            isRoseTheme -> AccountTypeThemeColors(
+                backgroundTop = Color(0xFFFFF7FB),
+                backgroundMiddle = Color(0xFFFFEAF3),
+                backgroundBottom = Color(0xFFFFFBFD),
+                card = Color.White,
+                cardBorder = Color(0xFFF9A8D4),
+                primary = Color(0xFFFF5CA8),
+                riderAccent = Color(0xFFEC4899),
+                driverAccent = Color(0xFFFF7ABC),
+                text = Color(0xFF24111A),
+                subText = Color(0xFF7A445A),
+                mutedText = Color(0xFF9D5570),
+                onPrimary = Color.White,
+                choiceCard = Color.White,
+                choiceCardAlt = Color(0xFFFFEAF3)
+            )
+
+            isLightTheme -> AccountTypeThemeColors(
+                backgroundTop = Color(0xFFF8FAFC),
+                backgroundMiddle = Color(0xFFEDE9FE),
+                backgroundBottom = Color.White,
+                card = Color.White,
+                cardBorder = Color(0xFFE5E7EB),
+                primary = Color(0xFF8A35F2),
+                riderAccent = Color(0xFFFF1212),
+                driverAccent = Color(0xFF8A35F2),
+                text = Color(0xFF111827),
+                subText = Color(0xFF6B7280),
+                mutedText = Color(0xFF9CA3AF),
+                onPrimary = Color.White,
+                choiceCard = Color.White,
+                choiceCardAlt = Color(0xFFEBDDFF)
+            )
+
+            else -> AccountTypeThemeColors(
+                backgroundTop = Color(0xFF030307),
+                backgroundMiddle = Color(0xFF160522),
+                backgroundBottom = Color(0xFF21000A),
+                card = Color(0xFF101019),
+                cardBorder = Color.White.copy(alpha = 0.08f),
+                primary = Color(0xFF8A35F2),
+                riderAccent = Color(0xFFFF1212),
+                driverAccent = Color(0xFF8A35F2),
+                text = Color.White,
+                subText = Color(0xFFB8B4C6),
+                mutedText = Color.White.copy(alpha = 0.22f),
+                onPrimary = Color.White,
+                choiceCard = Color(0xFF101019).copy(alpha = 0.92f),
+                choiceCardAlt = Color(0xFF1A1222)
             )
         }
     }
