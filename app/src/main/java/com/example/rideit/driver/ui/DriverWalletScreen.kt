@@ -1,18 +1,26 @@
 package com.example.rideit.driver.ui
 
+import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.navigationBars
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.statusBars
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.layout.windowInsetsPadding
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -45,8 +53,24 @@ import com.google.firebase.firestore.DocumentSnapshot
 import com.google.firebase.firestore.FirebaseFirestore
 import com.google.firebase.firestore.ListenerRegistration
 import java.text.SimpleDateFormat
+import java.util.Calendar
 import java.util.Locale
 import kotlin.math.roundToInt
+
+@Immutable
+private data class DriverWalletTrip(
+    val id: String,
+    val riderName: String,
+    val pickup: String,
+    val dropoff: String,
+    val earningAmount: Int,
+    val earningText: String,
+    val dateText: String,
+    val paymentMethod: String,
+    val ratingText: String,
+    val feedbackText: String,
+    val sortTime: Long
+)
 
 @Immutable
 private data class DriverWalletStats(
@@ -57,7 +81,9 @@ private data class DriverWalletStats(
     val completedTrips: Int = 0,
     val todayTrips: Int = 0,
     val pendingPayout: Int = 0,
-    val averagePerTrip: Int = 0
+    val averagePerTrip: Int = 0,
+    val ratedTrips: Int = 0,
+    val averageRating: Double = 0.0
 )
 
 @Composable
@@ -69,22 +95,11 @@ fun DriverWalletScreen(
     val driverId = remember { FirebaseManager.currentUserId().orEmpty() }
 
     var stats by remember { mutableStateOf(DriverWalletStats()) }
+    var recentTrips by remember { mutableStateOf<List<DriverWalletTrip>>(emptyList()) }
     var isLoading by remember { mutableStateOf(true) }
 
     var statusMessage by rememberSaveable {
         mutableStateOf("Loading driver wallet...")
-    }
-
-    var recentOne by rememberSaveable {
-        mutableStateOf("No completed trips yet")
-    }
-
-    var recentTwo by rememberSaveable {
-        mutableStateOf("Driver wallet ready")
-    }
-
-    var recentThree by rememberSaveable {
-        mutableStateOf("Safe demo payout mode")
     }
 
     DisposableEffect(driverId) {
@@ -92,24 +107,28 @@ fun DriverWalletScreen(
 
         if (driverId.isBlank()) {
             isLoading = false
+            stats = DriverWalletStats()
+            recentTrips = emptyList()
             statusMessage = "Driver account not found. Please login again."
         } else {
             isLoading = true
-            statusMessage = "Listening for completed trips..."
+            statusMessage = "Listening for completed Firebase trips..."
 
             listenerRegistration = firestore.collection("ride_requests")
                 .whereEqualTo("driverId", driverId)
-                .limit(100)
+                .limit(120)
                 .addSnapshotListener { snapshots, error ->
                     if (error != null) {
                         isLoading = false
+                        stats = DriverWalletStats()
+                        recentTrips = emptyList()
                         statusMessage = error.message ?: "Failed to load driver wallet."
                         return@addSnapshotListener
                     }
 
-                    val documents = snapshots?.documents.orEmpty()
-
-                    val completedDocs = documents
+                    val completedDocs = snapshots
+                        ?.documents
+                        .orEmpty()
                         .filter { document ->
                             document.safeText("status").trim().lowercase() == "completed"
                         }
@@ -118,18 +137,12 @@ fun DriverWalletScreen(
                         }
 
                     val todayCompletedDocs = completedDocs.filter { document ->
-                        isToday(
-                            document.getTimestamp("completedAt")
-                                ?: document.getTimestamp("updatedAt")
-                                ?: document.getTimestamp("createdAt")
-                        )
+                        isToday(document.safeFinalTimestamp())
                     }
 
                     val weekCompletedDocs = completedDocs.filter { document ->
                         isWithinLastDays(
-                            timestamp = document.getTimestamp("completedAt")
-                                ?: document.getTimestamp("updatedAt")
-                                ?: document.getTimestamp("createdAt"),
+                            timestamp = document.safeFinalTimestamp(),
                             days = 7
                         )
                     }
@@ -146,6 +159,10 @@ fun DriverWalletScreen(
                         document.safeDriverEarningAmount()
                     }
 
+                    val ratings = completedDocs.mapNotNull { document ->
+                        document.safeNumber("riderRating")?.takeIf { it in 1..5 }
+                    }
+
                     val averagePerTrip = if (completedDocs.isNotEmpty()) {
                         (totalEarnings.toFloat() / completedDocs.size.toFloat()).roundToInt()
                     } else {
@@ -160,26 +177,16 @@ fun DriverWalletScreen(
                         completedTrips = completedDocs.size,
                         todayTrips = todayCompletedDocs.size,
                         pendingPayout = totalEarnings,
-                        averagePerTrip = averagePerTrip
+                        averagePerTrip = averagePerTrip,
+                        ratedTrips = ratings.size,
+                        averageRating = if (ratings.isNotEmpty()) ratings.average() else 0.0
                     )
 
-                    val recentRows = completedDocs
-                        .take(3)
+                    recentTrips = completedDocs
+                        .take(5)
                         .map { document ->
-                            val fareText = formatRupees(document.safeDriverEarningAmount())
-
-                            val pickup = document.safeText("pickupAddress")
-                                .ifBlank { document.safeText("pickupText") }
-                                .ifBlank { "Pickup" }
-
-                            val completedDate = document.safeCompletedDateLabel()
-
-                            "Completed trip • $fareText • ${pickup.take(22)} • $completedDate"
+                            document.toDriverWalletTrip()
                         }
-
-                    recentOne = recentRows.getOrNull(0) ?: "No completed trips yet"
-                    recentTwo = recentRows.getOrNull(1) ?: "Earnings appear after completed rides"
-                    recentThree = recentRows.getOrNull(2) ?: "Safe demo payout mode"
 
                     statusMessage = if (completedDocs.isEmpty()) {
                         "No completed trips yet"
@@ -212,9 +219,10 @@ fun DriverWalletScreen(
         Column(
             modifier = Modifier
                 .fillMaxSize()
+                .windowInsetsPadding(WindowInsets.statusBars)
+                .windowInsetsPadding(WindowInsets.navigationBars)
                 .verticalScroll(rememberScrollState())
-                .padding(horizontal = 20.dp)
-                .padding(top = 34.dp, bottom = 22.dp)
+                .padding(horizontal = 20.dp, vertical = 18.dp)
         ) {
             DriverWalletTopBar(
                 driverName = driverName,
@@ -223,9 +231,7 @@ fun DriverWalletScreen(
 
             Spacer(modifier = Modifier.height(18.dp))
 
-            DriverWalletStatusPill(
-                text = statusMessage
-            )
+            DriverWalletStatusPill(text = statusMessage)
 
             Spacer(modifier = Modifier.height(14.dp))
 
@@ -258,14 +264,15 @@ fun DriverWalletScreen(
             Spacer(modifier = Modifier.height(18.dp))
 
             DriverRecentEarningsCard(
-                recentOne = recentOne,
-                recentTwo = recentTwo,
-                recentThree = recentThree
+                trips = recentTrips,
+                isLoading = isLoading
             )
 
             Spacer(modifier = Modifier.height(14.dp))
 
             DriverWalletSafetyCard()
+
+            Spacer(modifier = Modifier.height(18.dp))
         }
     }
 }
@@ -293,12 +300,14 @@ private fun DriverWalletTopBar(
 
         Spacer(modifier = Modifier.width(14.dp))
 
-        Column {
+        Column(modifier = Modifier.weight(1f)) {
             Text(
                 text = "Driver Wallet",
                 color = Color.White,
                 fontWeight = FontWeight.Black,
-                style = MaterialTheme.typography.headlineMedium
+                style = MaterialTheme.typography.headlineMedium,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis
             )
 
             Text(
@@ -326,7 +335,9 @@ private fun DriverWalletStatusPill(
             color = Color(0xFFE5E7EB),
             fontWeight = FontWeight.Bold,
             style = MaterialTheme.typography.labelMedium,
-            modifier = Modifier.padding(horizontal = 12.dp, vertical = 8.dp)
+            modifier = Modifier.padding(horizontal = 12.dp, vertical = 8.dp),
+            maxLines = 2,
+            overflow = TextOverflow.Ellipsis
         )
     }
 }
@@ -364,7 +375,10 @@ private fun DriverWalletHeroCard(
                         text = "Available Earnings",
                         color = Color.White,
                         fontWeight = FontWeight.Black,
-                        style = MaterialTheme.typography.titleLarge
+                        style = MaterialTheme.typography.titleLarge,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis,
+                        modifier = Modifier.weight(1f, fill = false)
                     )
 
                     Spacer(modifier = Modifier.width(10.dp))
@@ -386,16 +400,18 @@ private fun DriverWalletHeroCard(
                 Spacer(modifier = Modifier.height(18.dp))
 
                 Text(
-                    text = if (isLoading) "₨ ..." else formatRupees(stats.availableBalance),
+                    text = if (isLoading) "Rs ..." else formatRupees(stats.availableBalance),
                     color = Color.White,
                     fontWeight = FontWeight.Black,
-                    style = MaterialTheme.typography.displaySmall
+                    style = MaterialTheme.typography.displaySmall,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis
                 )
 
                 Spacer(modifier = Modifier.height(8.dp))
 
                 Text(
-                    text = "${stats.completedTrips} completed trips • synced from Firebase",
+                    text = "${stats.completedTrips} completed trips • Firebase synced",
                     color = Color(0xFFE5E7EB),
                     style = MaterialTheme.typography.bodyMedium,
                     fontWeight = FontWeight.Medium
@@ -428,20 +444,19 @@ private fun DriverWalletStatsGrid(
 ) {
     Column {
         Row(
-            modifier = Modifier.fillMaxWidth()
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.spacedBy(12.dp)
         ) {
             DriverWalletMetricCard(
                 title = "Today",
-                value = if (isLoading) "₨ ..." else formatRupees(stats.todayEarnings),
+                value = if (isLoading) "Rs ..." else formatRupees(stats.todayEarnings),
                 subtitle = "${stats.todayTrips} trips",
                 modifier = Modifier.weight(1f)
             )
 
-            Spacer(modifier = Modifier.width(12.dp))
-
             DriverWalletMetricCard(
                 title = "This Week",
-                value = if (isLoading) "₨ ..." else formatRupees(stats.weekEarnings),
+                value = if (isLoading) "Rs ..." else formatRupees(stats.weekEarnings),
                 subtitle = "Last 7 days",
                 modifier = Modifier.weight(1f)
             )
@@ -450,33 +465,50 @@ private fun DriverWalletStatsGrid(
         Spacer(modifier = Modifier.height(12.dp))
 
         Row(
-            modifier = Modifier.fillMaxWidth()
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.spacedBy(12.dp)
         ) {
             DriverWalletMetricCard(
                 title = "Total",
-                value = if (isLoading) "₨ ..." else formatRupees(stats.totalEarnings),
-                subtitle = "All completed rides",
+                value = if (isLoading) "Rs ..." else formatRupees(stats.totalEarnings),
+                subtitle = "Completed rides",
                 modifier = Modifier.weight(1f)
             )
 
-            Spacer(modifier = Modifier.width(12.dp))
-
             DriverWalletMetricCard(
                 title = "Average",
-                value = if (isLoading) "₨ ..." else formatRupees(stats.averagePerTrip),
-                subtitle = "Per completed trip",
+                value = if (isLoading) "Rs ..." else formatRupees(stats.averagePerTrip),
+                subtitle = "Per trip",
                 modifier = Modifier.weight(1f)
             )
         }
 
         Spacer(modifier = Modifier.height(12.dp))
 
-        DriverWalletMetricCard(
-            title = "Completed Trips",
-            value = if (isLoading) "..." else stats.completedTrips.toString(),
-            subtitle = "Only completed rides count toward earnings",
-            modifier = Modifier.fillMaxWidth()
-        )
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.spacedBy(12.dp)
+        ) {
+            DriverWalletMetricCard(
+                title = "Completed",
+                value = if (isLoading) "..." else stats.completedTrips.toString(),
+                subtitle = "Earned rides only",
+                modifier = Modifier.weight(1f)
+            )
+
+            DriverWalletMetricCard(
+                title = "Rating",
+                value = if (isLoading) {
+                    "..."
+                } else if (stats.averageRating > 0.0) {
+                    String.format(Locale.US, "%.1f", stats.averageRating)
+                } else {
+                    "—"
+                },
+                subtitle = "${stats.ratedTrips} rated trips",
+                modifier = Modifier.weight(1f)
+            )
+        }
     }
 }
 
@@ -500,7 +532,9 @@ private fun DriverWalletMetricCard(
                 text = title,
                 color = Color(0xFF9CA3AF),
                 fontWeight = FontWeight.Bold,
-                style = MaterialTheme.typography.labelMedium
+                style = MaterialTheme.typography.labelMedium,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis
             )
 
             Spacer(modifier = Modifier.height(8.dp))
@@ -520,7 +554,9 @@ private fun DriverWalletMetricCard(
                 text = subtitle,
                 color = Color(0xFF9CA3AF),
                 fontWeight = FontWeight.Medium,
-                style = MaterialTheme.typography.bodySmall
+                style = MaterialTheme.typography.bodySmall,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis
             )
         }
     }
@@ -552,7 +588,7 @@ private fun DriverPayoutCard(
             Spacer(modifier = Modifier.height(8.dp))
 
             Text(
-                text = "Withdrawals are demo-only for now. Real bank, JazzCash, EasyPaisa or Stripe payout can be connected later near launch readiness.",
+                text = "Withdrawals are demo-only for now. Real bank, JazzCash, EasyPaisa, Stripe, or in-app payout can be connected later.",
                 color = Color(0xFF9CA3AF),
                 style = MaterialTheme.typography.bodySmall,
                 fontWeight = FontWeight.Medium
@@ -612,7 +648,9 @@ private fun DriverPayoutCard(
                             text = "Request Demo Withdrawal",
                             color = Color.White,
                             fontWeight = FontWeight.Black,
-                            style = MaterialTheme.typography.titleMedium
+                            style = MaterialTheme.typography.titleMedium,
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis
                         )
 
                         Text(
@@ -641,9 +679,8 @@ private fun DriverPayoutCard(
 
 @Composable
 private fun DriverRecentEarningsCard(
-    recentOne: String,
-    recentTwo: String,
-    recentThree: String
+    trips: List<DriverWalletTrip>,
+    isLoading: Boolean
 ) {
     Surface(
         modifier = Modifier.fillMaxWidth(),
@@ -662,39 +699,145 @@ private fun DriverRecentEarningsCard(
 
             Spacer(modifier = Modifier.height(14.dp))
 
-            DriverEarningRow(
-                icon = "✓",
-                text = recentOne
-            )
+            when {
+                isLoading -> {
+                    DriverEarningEmptyRow(
+                        icon = "…",
+                        title = "Loading recent earnings",
+                        subtitle = "Checking completed trips from Firebase"
+                    )
+                }
 
-            Spacer(modifier = Modifier.height(12.dp))
+                trips.isEmpty() -> {
+                    DriverEarningEmptyRow(
+                        icon = "₨",
+                        title = "No completed trips yet",
+                        subtitle = "Earnings will appear here after driver completes a trip."
+                    )
+                }
 
-            DriverEarningRow(
-                icon = "₨",
-                text = recentTwo
-            )
+                else -> {
+                    trips.forEachIndexed { index, trip ->
+                        DriverEarningTripRow(trip = trip)
 
-            Spacer(modifier = Modifier.height(12.dp))
-
-            DriverEarningRow(
-                icon = "🔒",
-                text = recentThree
-            )
+                        if (index != trips.lastIndex) {
+                            Spacer(modifier = Modifier.height(12.dp))
+                        }
+                    }
+                }
+            }
         }
     }
 }
 
 @Composable
-private fun DriverEarningRow(
-    icon: String,
-    text: String
+private fun DriverEarningTripRow(
+    trip: DriverWalletTrip
 ) {
     Row(
-        verticalAlignment = Alignment.CenterVertically
+        verticalAlignment = Alignment.Top
     ) {
         Box(
             modifier = Modifier
-                .size(42.dp)
+                .size(44.dp)
+                .clip(RoundedCornerShape(15.dp))
+                .background(Color(0xFF22C55E).copy(alpha = 0.14f)),
+            contentAlignment = Alignment.Center
+        ) {
+            Text(
+                text = "✓",
+                color = Color(0xFF22C55E),
+                fontWeight = FontWeight.Black
+            )
+        }
+
+        Spacer(modifier = Modifier.width(12.dp))
+
+        Column(modifier = Modifier.weight(1f)) {
+            Row(
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Text(
+                    text = trip.earningText,
+                    color = Color.White,
+                    fontWeight = FontWeight.Black,
+                    style = MaterialTheme.typography.titleSmall,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis
+                )
+
+                Spacer(modifier = Modifier.width(8.dp))
+
+                Surface(
+                    shape = RoundedCornerShape(50),
+                    color = Color(0xFF8A35F2).copy(alpha = 0.16f)
+                ) {
+                    Text(
+                        text = trip.paymentMethod,
+                        color = Color(0xFFB98CFF),
+                        fontWeight = FontWeight.Bold,
+                        style = MaterialTheme.typography.labelSmall,
+                        modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp),
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis
+                    )
+                }
+            }
+
+            Spacer(modifier = Modifier.height(4.dp))
+
+            Text(
+                text = "${trip.riderName} • ${trip.dateText}",
+                color = Color(0xFFE5E7EB),
+                fontWeight = FontWeight.Bold,
+                style = MaterialTheme.typography.bodySmall,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis
+            )
+
+            Spacer(modifier = Modifier.height(3.dp))
+
+            Text(
+                text = "${trip.pickup} → ${trip.dropoff}",
+                color = Color(0xFF9CA3AF),
+                fontWeight = FontWeight.Medium,
+                style = MaterialTheme.typography.bodySmall,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis
+            )
+
+            if (trip.ratingText != "—" || trip.feedbackText.isNotBlank()) {
+                Spacer(modifier = Modifier.height(5.dp))
+
+                Text(
+                    text = if (trip.feedbackText.isNotBlank()) {
+                        "⭐ ${trip.ratingText} • ${trip.feedbackText}"
+                    } else {
+                        "⭐ ${trip.ratingText}"
+                    },
+                    color = Color(0xFFFACC15),
+                    fontWeight = FontWeight.Bold,
+                    style = MaterialTheme.typography.labelSmall,
+                    maxLines = 2,
+                    overflow = TextOverflow.Ellipsis
+                )
+            }
+        }
+    }
+}
+
+@Composable
+private fun DriverEarningEmptyRow(
+    icon: String,
+    title: String,
+    subtitle: String
+) {
+    Row(
+        verticalAlignment = Alignment.Top
+    ) {
+        Box(
+            modifier = Modifier
+                .size(44.dp)
                 .clip(RoundedCornerShape(15.dp))
                 .background(Color.White.copy(alpha = 0.08f)),
             contentAlignment = Alignment.Center
@@ -708,15 +851,23 @@ private fun DriverEarningRow(
 
         Spacer(modifier = Modifier.width(12.dp))
 
-        Text(
-            text = text,
-            color = Color(0xFFE5E7EB),
-            fontWeight = FontWeight.Medium,
-            style = MaterialTheme.typography.bodySmall,
-            modifier = Modifier.weight(1f),
-            maxLines = 2,
-            overflow = TextOverflow.Ellipsis
-        )
+        Column(modifier = Modifier.weight(1f)) {
+            Text(
+                text = title,
+                color = Color.White,
+                fontWeight = FontWeight.Black,
+                style = MaterialTheme.typography.titleSmall
+            )
+
+            Spacer(modifier = Modifier.height(4.dp))
+
+            Text(
+                text = subtitle,
+                color = Color(0xFF9CA3AF),
+                fontWeight = FontWeight.Medium,
+                style = MaterialTheme.typography.bodySmall
+            )
+        }
     }
 }
 
@@ -757,7 +908,7 @@ private fun DriverWalletSafetyCard() {
                 Spacer(modifier = Modifier.height(6.dp))
 
                 Text(
-                    text = "Earnings are calculated only from completed Firebase ride requests. Fare ranges are parsed safely, and no real payout, bank transfer, wallet withdrawal or payment gateway is connected yet.",
+                    text = "Earnings are calculated only from completed Firebase ride requests. Cancelled and declined trips do not increase wallet balance. Real payout is not connected yet.",
                     color = Color(0xFF9CA3AF),
                     style = MaterialTheme.typography.bodySmall,
                     fontWeight = FontWeight.Medium
@@ -765,6 +916,48 @@ private fun DriverWalletSafetyCard() {
             }
         }
     }
+}
+
+private fun DocumentSnapshot.toDriverWalletTrip(): DriverWalletTrip {
+    val riderEmail = safeText("riderEmail")
+        .ifBlank { safeText("userEmail") }
+        .ifBlank { "Rider" }
+
+    val riderName = safeText("riderName")
+        .ifBlank { riderEmail.toReadableName() }
+
+    val pickup = safeText("pickupAddress")
+        .ifBlank { safeText("pickupText") }
+        .ifBlank { "Pickup" }
+
+    val dropoff = safeText("dropoffAddress")
+        .ifBlank { safeText("dropText") }
+        .ifBlank { safeText("dropoffText") }
+        .ifBlank { "Dropoff" }
+
+    val earningAmount = safeDriverEarningAmount()
+
+    val ratingText = safeNumber("riderRating")
+        ?.takeIf { it in 1..5 }
+        ?.toString()
+        ?: "—"
+
+    return DriverWalletTrip(
+        id = id,
+        riderName = riderName,
+        pickup = pickup,
+        dropoff = dropoff,
+        earningAmount = earningAmount,
+        earningText = formatRupees(earningAmount),
+        dateText = safeCompletedDateLabel(),
+        paymentMethod = safeText("paymentMethodTitle")
+            .ifBlank { safeText("paymentMethodId") }
+            .ifBlank { "Cash" }
+            .toPaymentLabel(),
+        ratingText = ratingText,
+        feedbackText = safeText("riderFeedback"),
+        sortTime = safeSortTime()
+    )
 }
 
 private fun DocumentSnapshot.safeText(field: String): String {
@@ -777,7 +970,7 @@ private fun DocumentSnapshot.safeText(field: String): String {
             is Number -> value.toString()
             is Boolean -> value.toString()
             else -> value.toString()
-        }
+        }.trim()
     } catch (_: Exception) {
         ""
     }
@@ -819,6 +1012,7 @@ private fun DocumentSnapshot.safeDriverEarningAmount(): Int {
     }
 
     val textFields = listOf(
+        "driverEarningText",
         "fareEstimate",
         "fare",
         "estimatedFare",
@@ -838,23 +1032,28 @@ private fun DocumentSnapshot.safeDriverEarningAmount(): Int {
 
 private fun DocumentSnapshot.safeSortTime(): Long {
     return try {
-        getTimestamp("completedAt")?.seconds
-            ?: getTimestamp("updatedAt")?.seconds
-            ?: getTimestamp("createdAt")?.seconds
-            ?: 0L
+        safeFinalTimestamp()?.seconds ?: 0L
     } catch (_: Exception) {
         0L
     }
 }
 
-private fun DocumentSnapshot.safeCompletedDateLabel(): String {
+private fun DocumentSnapshot.safeFinalTimestamp(): Timestamp? {
     return try {
-        val timestamp = getTimestamp("completedAt")
+        getTimestamp("completedAt")
+            ?: getTimestamp("driverEarningRecordedAt")
             ?: getTimestamp("updatedAt")
             ?: getTimestamp("createdAt")
-            ?: return "recent"
+    } catch (_: Exception) {
+        null
+    }
+}
 
-        val formatter = SimpleDateFormat("MMM d", Locale.getDefault())
+private fun DocumentSnapshot.safeCompletedDateLabel(): String {
+    return try {
+        val timestamp = safeFinalTimestamp() ?: return "recent"
+
+        val formatter = SimpleDateFormat("MMM d, h:mm a", Locale.getDefault())
         formatter.format(timestamp.toDate())
     } catch (_: Exception) {
         "recent"
@@ -889,26 +1088,25 @@ private fun parseFareTextToAmount(fare: String): Int {
                 cleanFare.contains("—")
 
     return if (looksLikeRange && amountMatches.size >= 2) {
-        ((amountMatches[0] + amountMatches[1]).toFloat() / 2f).roundToInt()
+        ((amountMatches[0] + amountMatches[1]) / 2f).roundToInt()
     } else {
         amountMatches.first()
     }
 }
 
-private fun formatRupees(amount: Int): String {
-    if (amount <= 0) return "₨ 0"
-
-    return "₨ ${String.format(Locale.US, "%,d", amount)}"
-}
-
 private fun isToday(timestamp: Timestamp?): Boolean {
-    if (timestamp == null) return false
+    if (timestamp == null) {
+        return false
+    }
 
     return try {
-        val formatter = SimpleDateFormat("yyyyMMdd", Locale.getDefault())
-        val today = formatter.format(System.currentTimeMillis())
-        val itemDate = formatter.format(timestamp.toDate())
-        today == itemDate
+        val now = Calendar.getInstance()
+        val target = Calendar.getInstance().apply {
+            time = timestamp.toDate()
+        }
+
+        now.get(Calendar.YEAR) == target.get(Calendar.YEAR) &&
+                now.get(Calendar.DAY_OF_YEAR) == target.get(Calendar.DAY_OF_YEAR)
     } catch (_: Exception) {
         false
     }
@@ -918,14 +1116,61 @@ private fun isWithinLastDays(
     timestamp: Timestamp?,
     days: Int
 ): Boolean {
-    if (timestamp == null) return false
+    if (timestamp == null) {
+        return false
+    }
 
     return try {
-        val now = System.currentTimeMillis()
-        val itemTime = timestamp.toDate().time
-        val diffMillis = now - itemTime
+        val nowMillis = System.currentTimeMillis()
+        val targetMillis = timestamp.toDate().time
+        val diffMillis = nowMillis - targetMillis
         diffMillis in 0..(days * 24L * 60L * 60L * 1000L)
     } catch (_: Exception) {
         false
+    }
+}
+
+private fun formatRupees(amount: Int): String {
+    if (amount <= 0) {
+        return "Rs 0"
+    }
+
+    return "Rs ${String.format(Locale.US, "%,d", amount)}"
+}
+
+private fun String.toReadableName(): String {
+    val source = substringBefore("@")
+        .replace(".", " ")
+        .replace("_", " ")
+        .replace("-", " ")
+        .trim()
+
+    if (source.isBlank()) {
+        return "Rideit Rider"
+    }
+
+    return source
+        .split(" ")
+        .filter { it.isNotBlank() }
+        .joinToString(" ") { word ->
+            word.replaceFirstChar { char ->
+                if (char.isLowerCase()) {
+                    char.titlecase()
+                } else {
+                    char.toString()
+                }
+            }
+        }
+        .ifBlank { "Rideit Rider" }
+}
+
+private fun String.toPaymentLabel(): String {
+    return when (trim().lowercase()) {
+        "cash" -> "Cash"
+        "card" -> "Card"
+        "wallet" -> "Wallet"
+        "debit / credit card" -> "Card"
+        "rideit wallet" -> "Wallet"
+        else -> trim().ifBlank { "Cash" }
     }
 }

@@ -24,9 +24,10 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
-import androidx.compose.material3.Divider
+import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.SnackbarHost
 import androidx.compose.material3.SnackbarHostState
 import androidx.compose.material3.Surface
@@ -52,7 +53,6 @@ import com.google.firebase.firestore.FirebaseFirestore
 import com.google.firebase.firestore.ListenerRegistration
 import kotlinx.coroutines.launch
 import java.text.SimpleDateFormat
-import java.util.Date
 import java.util.Locale
 import kotlin.math.roundToInt
 
@@ -68,6 +68,7 @@ private data class DriverTripHistoryItem(
     val distance: String,
     val rating: String,
     val feedback: String,
+    val feedbackTags: List<String>,
     val status: String,
     val statusColor: Color,
     val sortTimeMillis: Long
@@ -75,7 +76,7 @@ private data class DriverTripHistoryItem(
 
 @Composable
 fun DriverTripHistoryScreen(
-    driverName: String = "Shameer Khan",
+    driverName: String = FirebaseManager.currentDriverDisplayName(),
     onBackClick: () -> Unit
 ) {
     val snackbarHostState = remember { SnackbarHostState() }
@@ -94,13 +95,14 @@ fun DriverTripHistoryScreen(
         if (driverId.isBlank()) {
             isLoading = false
             firebaseError = "Driver account not found. Please login again."
+            trips = emptyList()
         } else {
             isLoading = true
             firebaseError = null
 
             listenerRegistration = firestore.collection("ride_requests")
                 .whereEqualTo("driverId", driverId)
-                .limit(50)
+                .limit(75)
                 .addSnapshotListener { snapshots, error ->
                     if (error != null) {
                         isLoading = false
@@ -137,22 +139,24 @@ fun DriverTripHistoryScreen(
                                 ?: document.getString("userEmail")
                                 ?: "Rider"
 
-                            val riderName = riderEmail
-                                .substringBefore("@")
-                                .replace(".", " ")
-                                .replace("_", " ")
-                                .split(" ")
-                                .filter { it.isNotBlank() }
-                                .joinToString(" ") { word ->
-                                    word.replaceFirstChar { char ->
-                                        if (char.isLowerCase()) char.titlecase() else char.toString()
+                            val riderName = document.getString("riderName")
+                                ?: riderEmail
+                                    .substringBefore("@")
+                                    .replace(".", " ")
+                                    .replace("_", " ")
+                                    .split(" ")
+                                    .filter { it.isNotBlank() }
+                                    .joinToString(" ") { word ->
+                                        word.replaceFirstChar { char ->
+                                            if (char.isLowerCase()) char.titlecase() else char.toString()
+                                        }
                                     }
-                                }
-                                .ifBlank { "Rideit Rider" }
+                                    .ifBlank { "Rideit Rider" }
 
-                            val fare = document.getString("fareEstimate")
+                            val fare = document.getString("driverEarningText")
+                                ?: document.getString("fareEstimate")
                                 ?: document.getString("fare")
-                                ?: "Fare pending"
+                                ?: "Rs 0"
 
                             val completedAt = document.getTimestamp("completedAt")
                             val cancelledAt = document.getTimestamp("cancelledAt")
@@ -179,10 +183,11 @@ fun DriverTripHistoryScreen(
                             }
 
                             val ratingValue = document.getLong("riderRating")?.toString()
-                                ?: document.getDouble("riderRating")?.toString()
+                                ?: document.getDouble("riderRating")?.toInt()?.toString()
                                 ?: "—"
 
                             val feedback = document.getString("riderFeedback").orEmpty()
+                            val feedbackTags = document.get("riderFeedbackTags").safeStringList()
 
                             DriverTripHistoryItem(
                                 requestId = document.id,
@@ -198,6 +203,7 @@ fun DriverTripHistoryScreen(
                                     ?: "—",
                                 rating = ratingValue,
                                 feedback = feedback,
+                                feedbackTags = feedbackTags,
                                 status = statusText,
                                 statusColor = statusColor,
                                 sortTimeMillis = finalTimestamp?.toDate()?.time ?: 0L
@@ -223,8 +229,11 @@ fun DriverTripHistoryScreen(
         .filter { it.status == "Completed" }
         .sumOf { extractFareAmount(it.fare) }
 
-    val averageRating = trips
+    val ratedTrips = trips
+        .filter { it.status == "Completed" }
         .mapNotNull { it.rating.toDoubleOrNull() }
+
+    val averageRating = ratedTrips
         .takeIf { it.isNotEmpty() }
         ?.average()
         ?: 0.0
@@ -254,7 +263,8 @@ fun DriverTripHistoryScreen(
                 completedTrips = completedTrips,
                 cancelledTrips = cancelledTrips,
                 totalEarnings = totalEarnings,
-                averageRating = averageRating
+                averageRating = averageRating,
+                ratedTrips = ratedTrips.size
             )
 
             Spacer(modifier = Modifier.height(16.dp))
@@ -277,6 +287,7 @@ fun DriverTripHistoryScreen(
 
             if (isLoading) {
                 DriverTripHistoryLoadingCard()
+                Spacer(modifier = Modifier.height(12.dp))
             }
 
             firebaseError?.let { error ->
@@ -310,14 +321,20 @@ fun DriverTripHistoryScreen(
                             trip = trip,
                             onClick = {
                                 scope.launch {
+                                    val ratingText = if (trip.rating != "—") {
+                                        " Rating: ${trip.rating}/5."
+                                    } else {
+                                        " No rating yet."
+                                    }
+
                                     val feedbackText = if (trip.feedback.isNotBlank()) {
-                                        " Rider feedback: ${trip.feedback}"
+                                        " Feedback: ${trip.feedback}"
                                     } else {
                                         ""
                                     }
 
                                     snackbarHostState.showSnackbar(
-                                        message = "${trip.status} trip with ${trip.riderName}.$feedbackText"
+                                        message = "${trip.status} trip with ${trip.riderName}.$ratingText$feedbackText"
                                     )
                                 }
                             }
@@ -428,7 +445,7 @@ private fun DriverTripHistoryHeader(
             Spacer(modifier = Modifier.height(20.dp))
 
             Text(
-                text = "Real completed and cancelled Firebase trips from your driver account appear here.",
+                text = "See real Firebase trips, earnings, rider rating and rider feedback.",
                 style = MaterialTheme.typography.bodyMedium,
                 color = Color.White.copy(alpha = 0.78f),
                 fontWeight = FontWeight.Medium
@@ -442,7 +459,8 @@ private fun DriverTripHistorySummaryCard(
     completedTrips: Int,
     cancelledTrips: Int,
     totalEarnings: Int,
-    averageRating: Double
+    averageRating: Double,
+    ratedTrips: Int
 ) {
     Surface(
         modifier = Modifier.fillMaxWidth(),
@@ -487,13 +505,13 @@ private fun DriverTripHistorySummaryCard(
                 )
 
                 HistoryMetricBox(
-                    title = "Rating",
+                    title = "Rider Rating",
                     value = if (averageRating > 0.0) {
                         String.format(Locale.US, "%.1f", averageRating)
                     } else {
                         "—"
                     },
-                    subtitle = "Average",
+                    subtitle = "$ratedTrips rated trips",
                     modifier = Modifier.weight(1f)
                 )
             }
@@ -718,6 +736,10 @@ private fun DriverTripHistoryCard(
     trip: DriverTripHistoryItem,
     onClick: () -> Unit
 ) {
+    val hasRating = trip.rating != "—"
+    val hasFeedback = trip.feedback.isNotBlank()
+    val hasTags = trip.feedbackTags.isNotEmpty()
+
     Surface(
         modifier = Modifier
             .fillMaxWidth()
@@ -736,16 +758,16 @@ private fun DriverTripHistoryCard(
             ) {
                 Box(
                     modifier = Modifier
-                        .size(52.dp)
+                        .size(48.dp)
                         .clip(CircleShape)
-                        .background(Color(0xFF8A35F2).copy(alpha = 0.12f)),
+                        .background(trip.statusColor.copy(alpha = 0.12f)),
                     contentAlignment = Alignment.Center
                 ) {
                     Text(
-                        text = trip.riderName.firstOrNull()?.uppercase() ?: "R",
-                        style = MaterialTheme.typography.titleLarge,
+                        text = if (trip.status == "Completed") "✓" else "!",
+                        color = trip.statusColor,
                         fontWeight = FontWeight.Black,
-                        color = Color(0xFF8A35F2)
+                        style = MaterialTheme.typography.titleLarge
                     )
                 }
 
@@ -761,15 +783,11 @@ private fun DriverTripHistoryCard(
                         overflow = TextOverflow.Ellipsis
                     )
 
-                    Spacer(modifier = Modifier.height(3.dp))
-
                     Text(
                         text = trip.date,
                         style = MaterialTheme.typography.bodySmall,
                         fontWeight = FontWeight.Medium,
-                        color = Color(0xFF6B7280),
-                        maxLines = 1,
-                        overflow = TextOverflow.Ellipsis
+                        color = Color(0xFF6B7280)
                     )
                 }
 
@@ -778,97 +796,137 @@ private fun DriverTripHistoryCard(
                         text = trip.fare,
                         style = MaterialTheme.typography.titleMedium,
                         fontWeight = FontWeight.Black,
-                        color = if (trip.status == "Completed") Color(0xFF16A34A) else Color(0xFF6B7280)
+                        color = Color(0xFF111827)
                     )
 
-                    Spacer(modifier = Modifier.height(4.dp))
-
-                    Surface(
-                        shape = RoundedCornerShape(50),
-                        color = trip.statusColor.copy(alpha = 0.10f)
-                    ) {
-                        Text(
-                            text = trip.status,
-                            modifier = Modifier.padding(horizontal = 9.dp, vertical = 4.dp),
-                            style = MaterialTheme.typography.labelSmall,
-                            fontWeight = FontWeight.Bold,
-                            color = trip.statusColor
-                        )
-                    }
+                    Text(
+                        text = trip.status,
+                        style = MaterialTheme.typography.labelMedium,
+                        fontWeight = FontWeight.Bold,
+                        color = trip.statusColor
+                    )
                 }
             }
 
             Spacer(modifier = Modifier.height(14.dp))
 
-            Divider(color = Color(0xFFE5E7EB))
+            DriverRouteMiniBlock(
+                pickup = trip.pickup,
+                dropoff = trip.dropoff
+            )
 
             Spacer(modifier = Modifier.height(14.dp))
 
-            TripHistoryRoutePoint(
-                dotColor = Color(0xFF16A34A),
-                label = "Pickup",
-                value = trip.pickup
+            DriverRiderFeedbackCard(
+                hasRating = hasRating,
+                rating = trip.rating,
+                hasFeedback = hasFeedback,
+                feedback = trip.feedback,
+                hasTags = hasTags,
+                tags = trip.feedbackTags
             )
-
-            Spacer(modifier = Modifier.height(12.dp))
-
-            TripHistoryRoutePoint(
-                dotColor = Color(0xFF8A35F2),
-                label = "Dropoff",
-                value = trip.dropoff
-            )
-
-            if (trip.feedback.isNotBlank()) {
-                Spacer(modifier = Modifier.height(14.dp))
-
-                Surface(
-                    modifier = Modifier.fillMaxWidth(),
-                    shape = RoundedCornerShape(20.dp),
-                    color = Color(0xFFF8FAFC)
-                ) {
-                    Column(
-                        modifier = Modifier.padding(13.dp)
-                    ) {
-                        Text(
-                            text = "Rider feedback",
-                            style = MaterialTheme.typography.labelSmall,
-                            fontWeight = FontWeight.Bold,
-                            color = Color(0xFF6B7280)
-                        )
-
-                        Spacer(modifier = Modifier.height(4.dp))
-
-                        Text(
-                            text = trip.feedback,
-                            style = MaterialTheme.typography.bodySmall,
-                            fontWeight = FontWeight.Medium,
-                            color = Color(0xFF111827),
-                            maxLines = 3,
-                            overflow = TextOverflow.Ellipsis
-                        )
-                    }
-                }
-            }
 
             Spacer(modifier = Modifier.height(14.dp))
 
-            Row(
+            Surface(
                 modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.SpaceBetween
+                shape = RoundedCornerShape(20.dp),
+                color = Color(0xFFF8FAFC)
             ) {
-                MiniTripInfo(
-                    title = "Distance",
-                    value = trip.distance
+                Column(
+                    modifier = Modifier.padding(14.dp)
+                ) {
+                    InfoRow(
+                        label = "Rider email",
+                        value = trip.riderEmail
+                    )
+
+                    Spacer(modifier = Modifier.height(8.dp))
+
+                    InfoRow(
+                        label = "Duration",
+                        value = trip.time
+                    )
+
+                    Spacer(modifier = Modifier.height(8.dp))
+
+                    InfoRow(
+                        label = "Distance",
+                        value = trip.distance
+                    )
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun DriverRiderFeedbackCard(
+    hasRating: Boolean,
+    rating: String,
+    hasFeedback: Boolean,
+    feedback: String,
+    hasTags: Boolean,
+    tags: List<String>
+) {
+    Surface(
+        modifier = Modifier.fillMaxWidth(),
+        shape = RoundedCornerShape(22.dp),
+        color = Color(0xFF111827)
+    ) {
+        Column(
+            modifier = Modifier.padding(15.dp)
+        ) {
+            Row(
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Text(
+                    text = "Rider rating",
+                    color = Color.White,
+                    fontWeight = FontWeight.Black,
+                    style = MaterialTheme.typography.titleSmall
                 )
 
-                MiniTripInfo(
-                    title = "Time",
-                    value = trip.time
-                )
+                Spacer(modifier = Modifier.weight(1f))
 
-                MiniTripInfo(
-                    title = "Rating",
-                    value = if (trip.rating == "—") "⭐ —" else "⭐ ${trip.rating}"
+                Text(
+                    text = if (hasRating) "⭐ $rating / 5" else "Not rated yet",
+                    color = if (hasRating) Color(0xFFFACC15) else Color(0xFF9CA3AF),
+                    fontWeight = FontWeight.Black,
+                    style = MaterialTheme.typography.bodyMedium
+                )
+            }
+
+            Spacer(modifier = Modifier.height(10.dp))
+
+            Text(
+                text = "Rider feedback",
+                color = Color(0xFFCBD5E1),
+                fontWeight = FontWeight.Bold,
+                style = MaterialTheme.typography.labelMedium
+            )
+
+            Spacer(modifier = Modifier.height(5.dp))
+
+            Text(
+                text = if (hasFeedback) feedback else "No written feedback from rider yet.",
+                color = if (hasFeedback) Color.White else Color(0xFF9CA3AF),
+                fontWeight = FontWeight.Medium,
+                style = MaterialTheme.typography.bodySmall,
+                maxLines = 4,
+                overflow = TextOverflow.Ellipsis
+            )
+
+            if (hasTags) {
+                Spacer(modifier = Modifier.height(10.dp))
+
+                Text(
+                    text = tags.joinToString(" • "),
+                    color = Color(0xFFB98CFF),
+                    fontWeight = FontWeight.Bold,
+                    style = MaterialTheme.typography.bodySmall,
+                    maxLines = 2,
+                    overflow = TextOverflow.Ellipsis
                 )
             }
         }
@@ -876,37 +934,66 @@ private fun DriverTripHistoryCard(
 }
 
 @Composable
-private fun TripHistoryRoutePoint(
+private fun DriverRouteMiniBlock(
+    pickup: String,
+    dropoff: String
+) {
+    Surface(
+        modifier = Modifier.fillMaxWidth(),
+        shape = RoundedCornerShape(20.dp),
+        color = Color(0xFFF8FAFC)
+    ) {
+        Column(
+            modifier = Modifier.padding(14.dp)
+        ) {
+            RouteLine(
+                dotColor = Color(0xFF16A34A),
+                title = "Pickup",
+                value = pickup
+            )
+
+            Spacer(modifier = Modifier.height(10.dp))
+
+            RouteLine(
+                dotColor = Color(0xFF8A35F2),
+                title = "Dropoff",
+                value = dropoff
+            )
+        }
+    }
+}
+
+@Composable
+private fun RouteLine(
     dotColor: Color,
-    label: String,
+    title: String,
     value: String
 ) {
     Row(
-        modifier = Modifier.fillMaxWidth(),
-        verticalAlignment = Alignment.Top
+        verticalAlignment = Alignment.CenterVertically
     ) {
         Box(
             modifier = Modifier
-                .size(12.dp)
+                .size(10.dp)
                 .clip(CircleShape)
                 .background(dotColor)
         )
 
-        Spacer(modifier = Modifier.width(12.dp))
+        Spacer(modifier = Modifier.width(10.dp))
 
-        Column(modifier = Modifier.weight(1f)) {
+        Column {
             Text(
-                text = label,
-                style = MaterialTheme.typography.labelSmall,
+                text = title,
+                color = Color(0xFF6B7280),
                 fontWeight = FontWeight.Bold,
-                color = Color(0xFF6B7280)
+                style = MaterialTheme.typography.labelMedium
             )
 
             Text(
                 text = value,
-                style = MaterialTheme.typography.bodyMedium,
-                fontWeight = FontWeight.Bold,
                 color = Color(0xFF111827),
+                fontWeight = FontWeight.Bold,
+                style = MaterialTheme.typography.bodyMedium,
                 maxLines = 1,
                 overflow = TextOverflow.Ellipsis
             )
@@ -915,25 +1002,27 @@ private fun TripHistoryRoutePoint(
 }
 
 @Composable
-private fun MiniTripInfo(
-    title: String,
+private fun InfoRow(
+    label: String,
     value: String
 ) {
-    Column {
+    Row(
+        modifier = Modifier.fillMaxWidth(),
+        verticalAlignment = Alignment.CenterVertically
+    ) {
         Text(
-            text = title,
-            style = MaterialTheme.typography.labelSmall,
+            text = label,
+            color = Color(0xFF6B7280),
             fontWeight = FontWeight.Bold,
-            color = Color(0xFF6B7280)
+            style = MaterialTheme.typography.bodySmall,
+            modifier = Modifier.weight(1f)
         )
-
-        Spacer(modifier = Modifier.height(2.dp))
 
         Text(
             text = value,
-            style = MaterialTheme.typography.bodyMedium,
-            fontWeight = FontWeight.Black,
             color = Color(0xFF111827),
+            fontWeight = FontWeight.Black,
+            style = MaterialTheme.typography.bodySmall,
             maxLines = 1,
             overflow = TextOverflow.Ellipsis
         )
@@ -943,12 +1032,19 @@ private fun MiniTripInfo(
 private fun normalizeFareText(fare: String): String {
     val cleanFare = fare.trim()
 
-    if (cleanFare.isBlank()) return "₨ 0"
+    if (cleanFare.isBlank()) {
+        return "Rs 0"
+    }
 
-    return cleanFare
-        .replace("Rs.", "₨")
-        .replace("Rs", "₨")
-        .replace("PKR", "₨")
+    if (
+        cleanFare.contains("Rs", ignoreCase = true) ||
+        cleanFare.contains("₨") ||
+        cleanFare.contains("$")
+    ) {
+        return cleanFare.replace("₨", "Rs")
+    }
+
+    return "Rs $cleanFare"
 }
 
 private fun extractFareAmount(fare: String): Int {
@@ -959,17 +1055,19 @@ private fun extractFareAmount(fare: String): Int {
 }
 
 private fun formatRupees(amount: Int): String {
-    if (amount <= 0) return "₨ 0"
+    if (amount <= 0) return "Rs 0"
 
-    return "₨ ${String.format(Locale.US, "%,d", amount)}"
+    return "Rs ${String.format(Locale.US, "%,d", amount)}"
 }
 
 private fun formatTripDate(timestamp: Timestamp?): String {
-    if (timestamp == null) return "Date pending"
+    if (timestamp == null) {
+        return "Date pending"
+    }
 
     return try {
-        val formatter = SimpleDateFormat("MMM dd, h:mm a", Locale.getDefault())
-        formatter.format(timestamp.toDate())
+        SimpleDateFormat("MMM dd, yyyy", Locale.getDefault())
+            .format(timestamp.toDate())
     } catch (_: Exception) {
         "Date pending"
     }
@@ -979,10 +1077,27 @@ private fun estimateTripTimeText(
     startedAt: Timestamp?,
     endedAt: Timestamp?
 ): String {
-    if (startedAt == null || endedAt == null) return "—"
+    if (startedAt == null || endedAt == null) {
+        return "Time pending"
+    }
 
     val diffMillis = endedAt.toDate().time - startedAt.toDate().time
-    val diffMinutes = (diffMillis / 60000L).coerceAtLeast(1L)
+    val minutes = (diffMillis / 60000L).coerceAtLeast(1L)
 
-    return "${diffMinutes} min"
+    return "$minutes min"
+}
+
+private fun Any?.safeStringList(): List<String> {
+    return when (this) {
+        is List<*> -> this.mapNotNull { item ->
+            item?.toString()?.trim()?.takeIf { it.isNotBlank() }
+        }
+
+        is String -> this
+            .split(",", "•")
+            .map { it.trim() }
+            .filter { it.isNotBlank() }
+
+        else -> emptyList()
+    }
 }

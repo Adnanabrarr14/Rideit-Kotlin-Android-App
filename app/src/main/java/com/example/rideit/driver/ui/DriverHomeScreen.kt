@@ -98,12 +98,14 @@ private data class PendingRideRequest(
 
 private data class DriverDashboardStats(
     val todayEarnings: Int = 0,
+    val weekEarnings: Int = 0,
+    val totalEarnings: Int = 0,
+    val averageTripEarning: Int = 0,
     val todayCompletedTrips: Int = 0,
     val totalCompletedTrips: Int = 0,
     val totalCancelledTrips: Int = 0,
     val averageRating: Double = 0.0,
     val acceptRatePercent: Int = 0,
-    val weekEarnings: Int = 0,
     val dailyTarget: Int = 10000
 )
 
@@ -365,16 +367,16 @@ fun DriverHomeScreen(
                         }
 
                         val completedDocs = documents.filter { document ->
-                            document.safeText("status").lowercase() == "completed"
+                            document.safeText("status").trim().lowercase() == "completed"
                         }
 
                         val cancelledDocs = documents.filter { document ->
-                            val status = document.safeText("status").lowercase()
+                            val status = document.safeText("status").trim().lowercase()
                             status == "cancelled_by_driver" || status == "cancelled_by_rider"
                         }
 
                         val declinedDocs = documents.filter { document ->
-                            document.safeText("status").lowercase() == "declined"
+                            document.safeText("status").trim().lowercase() == "declined"
                         }
 
                         val acceptedDecisionCount = completedDocs.size + cancelledDocs.size
@@ -406,31 +408,40 @@ fun DriverHomeScreen(
                         }
 
                         val todayEarnings = todayCompletedDocs.sumOf { document ->
-                            extractFareAmount(
-                                document.safeText("fareEstimate")
-                                    .ifBlank { document.safeText("fare") }
-                            )
+                            extractDriverEarningAmount(document)
                         }
 
                         val weekEarnings = weekCompletedDocs.sumOf { document ->
-                            extractFareAmount(
-                                document.safeText("fareEstimate")
-                                    .ifBlank { document.safeText("fare") }
-                            )
+                            extractDriverEarningAmount(document)
+                        }
+
+                        val totalEarnings = completedDocs.sumOf { document ->
+                            extractDriverEarningAmount(document)
+                        }
+
+                        val averageTripEarning = if (completedDocs.isNotEmpty()) {
+                            (totalEarnings.toFloat() / completedDocs.size.toFloat()).roundToInt()
+                        } else {
+                            0
                         }
 
                         val ratings = completedDocs.mapNotNull { document ->
                             document.safeNumber("riderRating")
+                                ?: document.safeNumber("rating")
+                                ?: document.safeNumber("driverRating")
+                                ?: document.safeNumber("feedbackRating")
                         }
 
                         dashboardStats = DriverDashboardStats(
                             todayEarnings = todayEarnings,
+                            weekEarnings = weekEarnings,
+                            totalEarnings = totalEarnings,
+                            averageTripEarning = averageTripEarning,
                             todayCompletedTrips = todayCompletedDocs.size,
                             totalCompletedTrips = completedDocs.size,
                             totalCancelledTrips = cancelledDocs.size,
                             averageRating = if (ratings.isNotEmpty()) ratings.average() else 0.0,
                             acceptRatePercent = acceptRate,
-                            weekEarnings = weekEarnings,
                             dailyTarget = 10000
                         )
                     } catch (_: Exception) {
@@ -526,6 +537,9 @@ fun DriverHomeScreen(
             DriverHeaderCard(
                 driverName = driverName,
                 isOnline = isOnline,
+                todayEarnings = dashboardStats.todayEarnings,
+                todayTrips = dashboardStats.todayCompletedTrips,
+                isLoading = isDashboardStatsLoading,
                 onOnlineChanged = { newValue ->
                     isOnline = newValue
                     resetRideRequestUi()
@@ -563,6 +577,7 @@ fun DriverHomeScreen(
                 statusText = firebaseStatusText,
                 pendingRideRequest = pendingRideRequest,
                 isCheckingRideRequest = isCheckingRideRequest,
+                hasActiveTrip = !activeRideRequestId.isNullOrBlank(),
                 onRefreshClick = {
                     checkForPendingRideRequest()
                 }
@@ -700,6 +715,13 @@ fun DriverHomeScreen(
                 Spacer(modifier = Modifier.height(16.dp))
             }
 
+            DriverEarningsOverviewCard(
+                stats = dashboardStats,
+                isLoading = isDashboardStatsLoading
+            )
+
+            Spacer(modifier = Modifier.height(16.dp))
+
             DriverStatsGrid(
                 stats = dashboardStats,
                 isLoading = isDashboardStatsLoading
@@ -750,6 +772,9 @@ fun DriverHomeScreen(
 private fun DriverHeaderCard(
     driverName: String,
     isOnline: Boolean,
+    todayEarnings: Int,
+    todayTrips: Int,
+    isLoading: Boolean,
     onOnlineChanged: (Boolean) -> Unit
 ) {
     Surface(
@@ -796,7 +821,7 @@ private fun DriverHeaderCard(
 
                 Column(modifier = Modifier.weight(1f)) {
                     Text(
-                        text = "Good day",
+                        text = "Driver dashboard",
                         style = MaterialTheme.typography.bodyMedium,
                         fontWeight = FontWeight.Medium,
                         color = Color.White.copy(alpha = 0.78f)
@@ -815,7 +840,26 @@ private fun DriverHeaderCard(
                 OnlinePulseDot(active = isOnline)
             }
 
-            Spacer(modifier = Modifier.height(22.dp))
+            Spacer(modifier = Modifier.height(18.dp))
+
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.spacedBy(10.dp)
+            ) {
+                HeaderMiniMetric(
+                    title = "Today",
+                    value = if (isLoading) "..." else formatRupees(todayEarnings),
+                    modifier = Modifier.weight(1f)
+                )
+
+                HeaderMiniMetric(
+                    title = "Trips",
+                    value = if (isLoading) "..." else todayTrips.toString(),
+                    modifier = Modifier.weight(1f)
+                )
+            }
+
+            Spacer(modifier = Modifier.height(16.dp))
 
             Surface(
                 modifier = Modifier.fillMaxWidth(),
@@ -838,13 +882,15 @@ private fun DriverHeaderCard(
 
                         Text(
                             text = if (isOnline) {
-                                "Tap Check to find new ride requests."
+                                "Ready for new Rideit requests."
                             } else {
                                 "Turn on Live to receive new rides."
                             },
                             style = MaterialTheme.typography.bodySmall,
                             fontWeight = FontWeight.Medium,
-                            color = Color.White.copy(alpha = 0.76f)
+                            color = Color.White.copy(alpha = 0.76f),
+                            maxLines = 2,
+                            overflow = TextOverflow.Ellipsis
                         )
                     }
 
@@ -860,6 +906,39 @@ private fun DriverHeaderCard(
                     )
                 }
             }
+        }
+    }
+}
+
+@Composable
+private fun HeaderMiniMetric(
+    title: String,
+    value: String,
+    modifier: Modifier = Modifier
+) {
+    Surface(
+        modifier = modifier,
+        shape = RoundedCornerShape(20.dp),
+        color = Color.White.copy(alpha = 0.12f)
+    ) {
+        Column(modifier = Modifier.padding(horizontal = 14.dp, vertical = 12.dp)) {
+            Text(
+                text = title,
+                style = MaterialTheme.typography.labelSmall,
+                fontWeight = FontWeight.Bold,
+                color = Color.White.copy(alpha = 0.72f)
+            )
+
+            Spacer(modifier = Modifier.height(3.dp))
+
+            Text(
+                text = value,
+                style = MaterialTheme.typography.titleMedium,
+                fontWeight = FontWeight.Black,
+                color = Color.White,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis
+            )
         }
     }
 }
@@ -909,12 +988,21 @@ private fun DriverRideRequestStatusCard(
     statusText: String,
     pendingRideRequest: PendingRideRequest?,
     isCheckingRideRequest: Boolean,
+    hasActiveTrip: Boolean,
     onRefreshClick: () -> Unit
 ) {
     val statusColor = when {
-        !isOnline -> Color(0xFF6B7280)
         pendingRideRequest != null -> Color(0xFF16A34A)
+        hasActiveTrip -> Color(0xFF2563EB)
+        !isOnline -> Color(0xFF6B7280)
         else -> Color(0xFF8A35F2)
+    }
+
+    val iconText = when {
+        pendingRideRequest != null -> "✓"
+        hasActiveTrip -> "↗"
+        isOnline -> "•"
+        else -> "×"
     }
 
     Surface(
@@ -937,7 +1025,7 @@ private fun DriverRideRequestStatusCard(
                     contentAlignment = Alignment.Center
                 ) {
                     Text(
-                        text = if (pendingRideRequest != null) "✓" else if (isOnline) "•" else "×",
+                        text = iconText,
                         color = statusColor,
                         fontWeight = FontWeight.Black,
                         style = MaterialTheme.typography.titleLarge
@@ -960,7 +1048,9 @@ private fun DriverRideRequestStatusCard(
                         text = statusText,
                         style = MaterialTheme.typography.bodySmall,
                         fontWeight = FontWeight.Medium,
-                        color = Color(0xFF6B7280)
+                        color = Color(0xFF6B7280),
+                        maxLines = 2,
+                        overflow = TextOverflow.Ellipsis
                     )
                 }
 
@@ -1457,6 +1547,124 @@ private fun RouteLineItem(
 }
 
 @Composable
+private fun DriverEarningsOverviewCard(
+    stats: DriverDashboardStats,
+    isLoading: Boolean
+) {
+    Surface(
+        modifier = Modifier.fillMaxWidth(),
+        shape = RoundedCornerShape(32.dp),
+        color = Color(0xFF111827),
+        shadowElevation = 12.dp,
+        tonalElevation = 6.dp
+    ) {
+        Column(
+            modifier = Modifier
+                .background(
+                    brush = Brush.linearGradient(
+                        colors = listOf(
+                            Color(0xFF111827),
+                            Color(0xFF1F2937),
+                            Color(0xFF312E81)
+                        )
+                    )
+                )
+                .padding(18.dp)
+        ) {
+            Text(
+                text = "Earnings overview",
+                style = MaterialTheme.typography.titleMedium,
+                fontWeight = FontWeight.Black,
+                color = Color.White
+            )
+
+            Spacer(modifier = Modifier.height(5.dp))
+
+            Text(
+                text = "Aligned with Driver Wallet completed Firebase trips.",
+                style = MaterialTheme.typography.bodySmall,
+                fontWeight = FontWeight.Medium,
+                color = Color.White.copy(alpha = 0.72f)
+            )
+
+            Spacer(modifier = Modifier.height(16.dp))
+
+            Text(
+                text = if (isLoading) "..." else formatRupees(stats.totalEarnings),
+                style = MaterialTheme.typography.headlineMedium,
+                fontWeight = FontWeight.Black,
+                color = Color.White,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis
+            )
+
+            Spacer(modifier = Modifier.height(12.dp))
+
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.spacedBy(10.dp)
+            ) {
+                OverviewMiniMetric(
+                    title = "Today",
+                    value = if (isLoading) "..." else formatRupees(stats.todayEarnings),
+                    modifier = Modifier.weight(1f)
+                )
+
+                OverviewMiniMetric(
+                    title = "Week",
+                    value = if (isLoading) "..." else formatRupees(stats.weekEarnings),
+                    modifier = Modifier.weight(1f)
+                )
+
+                OverviewMiniMetric(
+                    title = "Avg",
+                    value = if (isLoading) "..." else formatRupees(stats.averageTripEarning),
+                    modifier = Modifier.weight(1f)
+                )
+            }
+        }
+    }
+}
+
+@Composable
+private fun OverviewMiniMetric(
+    title: String,
+    value: String,
+    modifier: Modifier = Modifier
+) {
+    Surface(
+        modifier = modifier,
+        shape = RoundedCornerShape(20.dp),
+        color = Color.White.copy(alpha = 0.12f)
+    ) {
+        Column(
+            modifier = Modifier.padding(horizontal = 10.dp, vertical = 11.dp),
+            horizontalAlignment = Alignment.CenterHorizontally
+        ) {
+            Text(
+                text = title,
+                style = MaterialTheme.typography.labelSmall,
+                fontWeight = FontWeight.Bold,
+                color = Color.White.copy(alpha = 0.72f),
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis
+            )
+
+            Spacer(modifier = Modifier.height(3.dp))
+
+            Text(
+                text = value,
+                style = MaterialTheme.typography.bodyMedium,
+                fontWeight = FontWeight.Black,
+                color = Color.White,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis
+            )
+        }
+    }
+}
+
+@Composable
 private fun DriverStatsGrid(
     stats: DriverDashboardStats,
     isLoading: Boolean
@@ -1474,9 +1682,28 @@ private fun DriverStatsGrid(
             )
 
             DriverStatCard(
-                title = "Trips",
-                value = if (isLoading) "..." else stats.totalCompletedTrips.toString(),
-                subtitle = "Completed",
+                title = "Week",
+                value = if (isLoading) "..." else formatRupees(stats.weekEarnings),
+                subtitle = "Last 7 days",
+                modifier = Modifier.weight(1f)
+            )
+        }
+
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.spacedBy(12.dp)
+        ) {
+            DriverStatCard(
+                title = "Total",
+                value = if (isLoading) "..." else formatRupees(stats.totalEarnings),
+                subtitle = "All completed rides",
+                modifier = Modifier.weight(1f)
+            )
+
+            DriverStatCard(
+                title = "Average",
+                value = if (isLoading) "..." else formatRupees(stats.averageTripEarning),
+                subtitle = "Per completed trip",
                 modifier = Modifier.weight(1f)
             )
         }
@@ -1499,9 +1726,9 @@ private fun DriverStatsGrid(
             )
 
             DriverStatCard(
-                title = "Accept",
-                value = if (isLoading) "..." else "${stats.acceptRatePercent}%",
-                subtitle = "Ride rate",
+                title = "Trips",
+                value = if (isLoading) "..." else stats.totalCompletedTrips.toString(),
+                subtitle = "Completed",
                 modifier = Modifier.weight(1f)
             )
         }
@@ -1641,8 +1868,8 @@ private fun DriverTodayEarningsCard(
                 )
 
                 EarningsMiniMetric(
-                    title = "Week",
-                    value = formatRupees(stats.weekEarnings)
+                    title = "Accept",
+                    value = "${stats.acceptRatePercent}%"
                 )
 
                 EarningsMiniMetric(
@@ -1874,6 +2101,7 @@ private fun DocumentSnapshot.safeSortTime(): Long {
             ?: getTimestamp("acceptedAt")?.seconds
             ?: getTimestamp("driverArrivedAt")?.seconds
             ?: getTimestamp("rideStartedAt")?.seconds
+            ?: getTimestamp("completedAt")?.seconds
             ?: getTimestamp("createdAt")?.seconds
             ?: 0L
     } catch (_: Exception) {
@@ -1906,6 +2134,46 @@ private fun cleanTripStatus(status: String): String {
         "ride_started" -> "Started"
         else -> status.replace("_", " ").replaceFirstChar { it.uppercase() }
     }
+}
+
+private fun extractDriverEarningAmount(document: DocumentSnapshot): Int {
+    val directAmount = listOf(
+        "driverEarningAmount",
+        "driverEarning",
+        "driverEarnings",
+        "driverFare",
+        "driverAmount",
+        "driverPayout",
+        "driverPayoutAmount",
+        "earningAmount",
+        "earningsAmount"
+    ).mapNotNull { field ->
+        document.safeNumber(field)
+    }.firstOrNull { amount ->
+        amount > 0.0
+    }
+
+    if (directAmount != null) {
+        return directAmount.roundToInt()
+    }
+
+    val textAmount = listOf(
+        "driverEarningText",
+        "driverEarningFormatted",
+        "driverFareText",
+        "fareEstimate",
+        "fare",
+        "estimatedFare",
+        "price",
+        "totalFare",
+        "rideFare"
+    ).map { field ->
+        document.safeText(field)
+    }.firstOrNull { value ->
+        value.isNotBlank()
+    }.orEmpty()
+
+    return extractFareAmount(textAmount)
 }
 
 private fun extractFareAmount(fare: String): Int {

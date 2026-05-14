@@ -17,8 +17,6 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.material3.Button
-import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.DrawerValue
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.ModalDrawerSheet
@@ -33,7 +31,6 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.graphics.luminance
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.navigation.NavHostController
@@ -88,7 +85,7 @@ fun RideitNavGraph(
                 accountSubtitle = "Sign in to book your ride instantly",
                 primaryButtonText = "Sign In as Rider",
                 createAccountText = "Create Rider Account",
-                accentColor = MaterialTheme.colorScheme.secondary,
+                accentColor = Color(0xFFFF1212),
                 onBackClick = {
                     navController.popBackStack()
                 },
@@ -115,7 +112,7 @@ fun RideitNavGraph(
                 accountSubtitle = "Sign in to drive, earn and manage trips",
                 primaryButtonText = "Sign In as Driver",
                 createAccountText = "Create Driver Account",
-                accentColor = MaterialTheme.colorScheme.primary,
+                accentColor = Color(0xFF8A35F2),
                 onBackClick = {
                     navController.popBackStack()
                 },
@@ -141,7 +138,7 @@ fun RideitNavGraph(
                 accountTitle = "Create Rider Account",
                 accountSubtitle = "Create your rider account to book rides",
                 primaryButtonText = "Create Rider Account",
-                accentColor = MaterialTheme.colorScheme.secondary,
+                accentColor = Color(0xFFFF1212),
                 onBackClick = {
                     navController.popBackStack()
                 },
@@ -162,7 +159,7 @@ fun RideitNavGraph(
                 accountTitle = "Create Driver Account",
                 accountSubtitle = "Create your driver account to start earning",
                 primaryButtonText = "Create Driver Account",
-                accentColor = MaterialTheme.colorScheme.primary,
+                accentColor = Color(0xFF8A35F2),
                 onBackClick = {
                     navController.popBackStack()
                 },
@@ -408,24 +405,14 @@ private fun RiderMapWithDrawer(
         Box(modifier = Modifier.fillMaxSize()) {
             MapScreen()
 
-            Button(
+            DrawerMenuButton(
                 onClick = {
                     scope.launch { drawerState.open() }
                 },
                 modifier = Modifier
                     .align(Alignment.TopStart)
-                    .padding(top = 14.dp, start = 16.dp),
-                shape = RoundedCornerShape(18.dp),
-                colors = ButtonDefaults.buttonColors(
-                    containerColor = MaterialTheme.colorScheme.surface,
-                    contentColor = MaterialTheme.colorScheme.onSurface
-                )
-            ) {
-                Text(
-                    text = "☰",
-                    fontWeight = FontWeight.Bold
-                )
-            }
+                    .padding(top = 8.dp, start = 8.dp)
+            )
         }
     }
 }
@@ -477,24 +464,41 @@ private fun DriverHomeWithDrawer(
         Box(modifier = Modifier.fillMaxSize()) {
             DriverHomeScreen()
 
-            Button(
+            DrawerMenuButton(
                 onClick = {
                     scope.launch { drawerState.open() }
                 },
                 modifier = Modifier
                     .align(Alignment.TopStart)
-                    .padding(top = 14.dp, start = 16.dp),
-                shape = RoundedCornerShape(18.dp),
-                colors = ButtonDefaults.buttonColors(
-                    containerColor = MaterialTheme.colorScheme.surface,
-                    contentColor = MaterialTheme.colorScheme.onSurface
-                )
-            ) {
-                Text(
-                    text = "☰",
-                    fontWeight = FontWeight.Bold
-                )
-            }
+                    .padding(top = 6.dp, start = 4.dp)
+            )
+        }
+    }
+}
+
+@Composable
+private fun DrawerMenuButton(
+    onClick: () -> Unit,
+    modifier: Modifier = Modifier
+) {
+    Surface(
+        modifier = modifier
+            .size(50.dp)
+            .clickable { onClick() },
+        shape = RoundedCornerShape(18.dp),
+        color = Color(0xFF111827),
+        shadowElevation = 12.dp,
+        tonalElevation = 6.dp
+    ) {
+        Box(
+            contentAlignment = Alignment.Center
+        ) {
+            Text(
+                text = "☰",
+                color = Color.White,
+                fontWeight = FontWeight.Black,
+                style = MaterialTheme.typography.titleLarge
+            )
         }
     }
 }
@@ -511,13 +515,11 @@ private fun RiderDrawer(
     onSettingsClick: () -> Unit,
     onLogout: () -> Unit
 ) {
-    val colors = rememberDrawerThemeColors()
-
     ModalDrawerSheet(
         modifier = Modifier
             .fillMaxHeight()
-            .widthIn(max = 310.dp),
-        drawerContainerColor = colors.drawerContainer
+            .widthIn(max = 330.dp),
+        drawerContainerColor = Color(0xFF111113)
     ) {
         Column(
             modifier = Modifier
@@ -525,29 +527,27 @@ private fun RiderDrawer(
                 .background(
                     Brush.verticalGradient(
                         colors = listOf(
-                            colors.drawerContainer,
-                            colors.drawerMiddle,
-                            colors.drawerContainer
+                            Color(0xFF111113),
+                            Color(0xFF1A1018),
+                            Color(0xFF090909)
                         )
                     )
                 )
-                .padding(22.dp)
+                .padding(start = 18.dp, end = 18.dp, top = 18.dp, bottom = 22.dp)
         ) {
             DrawerHeader(
                 title = riderName,
                 subtitle = "Rider Account",
-                avatar = riderName.drawerAvatarLetter(defaultLetter = "R"),
-                colors = colors
+                avatar = riderName.drawerAvatarLetter(defaultLetter = "R")
             )
 
-            Spacer(modifier = Modifier.height(30.dp))
+            Spacer(modifier = Modifier.height(24.dp))
 
             DrawerItem(
                 icon = "🚕",
                 title = "Rider Home",
                 subtitle = "Book and track your rides",
                 selected = true,
-                colors = colors,
                 onClick = onRiderHomeClick
             )
 
@@ -556,7 +556,6 @@ private fun RiderDrawer(
                 title = "Profile",
                 subtitle = "Manage your rider account",
                 selected = false,
-                colors = colors,
                 onClick = onProfileClick
             )
 
@@ -565,7 +564,6 @@ private fun RiderDrawer(
                 title = "Trip History",
                 subtitle = "View previous rides",
                 selected = false,
-                colors = colors,
                 onClick = onTripHistoryClick
             )
 
@@ -574,7 +572,6 @@ private fun RiderDrawer(
                 title = "Payment Methods",
                 subtitle = "Cash and card",
                 selected = false,
-                colors = colors,
                 onClick = onPaymentClick
             )
 
@@ -583,7 +580,6 @@ private fun RiderDrawer(
                 title = "Rideit Wallet",
                 subtitle = "Balance and demo top-up",
                 selected = false,
-                colors = colors,
                 onClick = onWalletClick
             )
 
@@ -592,7 +588,6 @@ private fun RiderDrawer(
                 title = "Notifications",
                 subtitle = "Alerts, offers and promos",
                 selected = false,
-                colors = colors,
                 onClick = onNotificationsClick
             )
 
@@ -601,16 +596,12 @@ private fun RiderDrawer(
                 title = "Settings",
                 subtitle = "App preferences",
                 selected = false,
-                colors = colors,
                 onClick = onSettingsClick
             )
 
             Spacer(modifier = Modifier.weight(1f))
 
-            LogoutButton(
-                colors = colors,
-                onLogout = onLogout
-            )
+            LogoutButton(onLogout = onLogout)
         }
     }
 }
@@ -624,13 +615,11 @@ private fun DriverDrawer(
     onSettingsClick: () -> Unit,
     onLogout: () -> Unit
 ) {
-    val colors = rememberDrawerThemeColors()
-
     ModalDrawerSheet(
         modifier = Modifier
             .fillMaxHeight()
-            .widthIn(max = 310.dp),
-        drawerContainerColor = colors.drawerContainer
+            .widthIn(max = 330.dp),
+        drawerContainerColor = Color(0xFF111113)
     ) {
         Column(
             modifier = Modifier
@@ -638,29 +627,27 @@ private fun DriverDrawer(
                 .background(
                     Brush.verticalGradient(
                         colors = listOf(
-                            colors.drawerContainer,
-                            colors.drawerMiddle,
-                            colors.drawerContainer
+                            Color(0xFF111113),
+                            Color(0xFF111827),
+                            Color(0xFF090909)
                         )
                     )
                 )
-                .padding(22.dp)
+                .padding(start = 18.dp, end = 18.dp, top = 18.dp, bottom = 22.dp)
         ) {
             DrawerHeader(
                 title = driverName,
                 subtitle = "Driver Account",
-                avatar = driverName.drawerAvatarLetter(defaultLetter = "D"),
-                colors = colors
+                avatar = driverName.drawerAvatarLetter(defaultLetter = "D")
             )
 
-            Spacer(modifier = Modifier.height(30.dp))
+            Spacer(modifier = Modifier.height(24.dp))
 
             DrawerItem(
                 icon = "🚘",
                 title = "Driver Dashboard",
                 subtitle = "Online status, rides and earnings",
                 selected = true,
-                colors = colors,
                 onClick = onDriverHomeClick
             )
 
@@ -669,7 +656,6 @@ private fun DriverDrawer(
                 title = "Driver Profile",
                 subtitle = "Manage your driver account",
                 selected = false,
-                colors = colors,
                 onClick = onProfileClick
             )
 
@@ -678,7 +664,6 @@ private fun DriverDrawer(
                 title = "Driver Wallet",
                 subtitle = "Earnings and demo payout",
                 selected = false,
-                colors = colors,
                 onClick = onWalletClick
             )
 
@@ -687,21 +672,20 @@ private fun DriverDrawer(
                 title = "Driver Settings",
                 subtitle = "Driver app preferences",
                 selected = false,
-                colors = colors,
                 onClick = onSettingsClick
             )
 
             Surface(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .padding(top = 8.dp),
+                    .padding(top = 6.dp),
                 shape = RoundedCornerShape(22.dp),
-                color = colors.card
+                color = Color(0xFF1D1D21)
             ) {
-                Column(modifier = Modifier.padding(15.dp)) {
+                Column(modifier = Modifier.padding(14.dp)) {
                     Text(
                         text = "Driver tools",
-                        color = colors.text,
+                        color = Color.White,
                         fontWeight = FontWeight.Black,
                         style = MaterialTheme.typography.titleSmall
                     )
@@ -710,7 +694,7 @@ private fun DriverDrawer(
 
                     Text(
                         text = "Wallet, trip history, vehicle documents, support and active trip tools remain inside Driver Dashboard too.",
-                        color = colors.subText,
+                        color = Color(0xFF9CA3AF),
                         style = MaterialTheme.typography.bodySmall,
                         fontWeight = FontWeight.Medium
                     )
@@ -719,10 +703,7 @@ private fun DriverDrawer(
 
             Spacer(modifier = Modifier.weight(1f))
 
-            LogoutButton(
-                colors = colors,
-                onLogout = onLogout
-            )
+            LogoutButton(onLogout = onLogout)
         }
     }
 }
@@ -731,20 +712,19 @@ private fun DriverDrawer(
 private fun DrawerHeader(
     title: String,
     subtitle: String,
-    avatar: String,
-    colors: DrawerThemeColors
+    avatar: String
 ) {
     Row(verticalAlignment = Alignment.CenterVertically) {
         Box(
             modifier = Modifier
                 .size(58.dp)
                 .clip(CircleShape)
-                .background(colors.avatar),
+                .background(Color(0xFF8A35F2)),
             contentAlignment = Alignment.Center
         ) {
             Text(
                 text = avatar,
-                color = colors.onPrimary,
+                color = Color.White,
                 fontWeight = FontWeight.Bold,
                 style = MaterialTheme.typography.headlineMedium
             )
@@ -752,17 +732,18 @@ private fun DrawerHeader(
 
         Spacer(modifier = Modifier.width(14.dp))
 
-        Column {
+        Column(modifier = Modifier.weight(1f)) {
             Text(
                 text = title,
-                color = colors.text,
+                color = Color.White,
                 fontWeight = FontWeight.Bold,
-                style = MaterialTheme.typography.titleLarge
+                style = MaterialTheme.typography.titleLarge,
+                maxLines = 1
             )
 
             Text(
                 text = subtitle,
-                color = colors.subText,
+                color = Color(0xFF9CA3AF),
                 style = MaterialTheme.typography.bodySmall
             )
         }
@@ -775,43 +756,42 @@ private fun DrawerItem(
     title: String,
     subtitle: String,
     selected: Boolean,
-    colors: DrawerThemeColors,
     onClick: () -> Unit
 ) {
     val backgroundColor = if (selected) {
-        colors.primary.copy(alpha = 0.20f)
+        Color(0xFF8A35F2).copy(alpha = 0.22f)
     } else {
-        colors.card
+        Color(0xFF1D1D21)
     }
 
     val iconBackgroundColor = if (selected) {
-        colors.primary
+        Color(0xFF8A35F2)
     } else {
-        colors.iconCard
+        Color(0xFF2A2138)
     }
 
     Surface(
         modifier = Modifier
             .fillMaxWidth()
-            .padding(bottom = 12.dp)
+            .padding(bottom = 10.dp)
             .clickable { onClick() },
         shape = RoundedCornerShape(20.dp),
         color = backgroundColor
     ) {
         Row(
-            modifier = Modifier.padding(14.dp),
+            modifier = Modifier.padding(13.dp),
             verticalAlignment = Alignment.CenterVertically
         ) {
             Box(
                 modifier = Modifier
-                    .size(46.dp)
+                    .size(44.dp)
                     .clip(RoundedCornerShape(16.dp))
                     .background(iconBackgroundColor),
                 contentAlignment = Alignment.Center
             ) {
                 Text(
                     text = icon,
-                    color = colors.onPrimary,
+                    color = Color.White,
                     fontWeight = FontWeight.Black
                 )
             }
@@ -821,14 +801,14 @@ private fun DrawerItem(
             Column(modifier = Modifier.weight(1f)) {
                 Text(
                     text = title,
-                    color = colors.text,
+                    color = Color.White,
                     fontWeight = FontWeight.Bold,
                     style = MaterialTheme.typography.titleMedium
                 )
 
                 Text(
                     text = subtitle,
-                    color = colors.subText,
+                    color = Color(0xFF9CA3AF),
                     style = MaterialTheme.typography.bodySmall
                 )
             }
@@ -836,7 +816,7 @@ private fun DrawerItem(
             if (selected) {
                 Text(
                     text = "✓",
-                    color = colors.success,
+                    color = Color(0xFF22C55E),
                     fontWeight = FontWeight.Black,
                     style = MaterialTheme.typography.titleMedium
                 )
@@ -847,7 +827,6 @@ private fun DrawerItem(
 
 @Composable
 private fun LogoutButton(
-    colors: DrawerThemeColors,
     onLogout: () -> Unit
 ) {
     Surface(
@@ -855,7 +834,7 @@ private fun LogoutButton(
             .fillMaxWidth()
             .clickable { onLogout() },
         shape = RoundedCornerShape(20.dp),
-        color = colors.logoutCard
+        color = Color(0xFF2A1111)
     ) {
         Row(
             modifier = Modifier.padding(16.dp),
@@ -870,85 +849,13 @@ private fun LogoutButton(
 
             Text(
                 text = "Logout",
-                color = colors.logoutText,
+                color = Color(0xFFFF6B6B),
                 fontWeight = FontWeight.Bold,
                 style = MaterialTheme.typography.titleMedium
             )
         }
     }
 }
-
-@Composable
-private fun rememberDrawerThemeColors(): DrawerThemeColors {
-    val scheme = MaterialTheme.colorScheme
-    val isLight = scheme.background.luminance() > 0.5f
-    val isRoseTheme =
-        scheme.primary == Color(0xFFFF5CA8) ||
-                scheme.primary == Color(0xFFEC4899) ||
-                scheme.primaryContainer == Color(0xFFFFD6E8)
-
-    return when {
-        isRoseTheme -> DrawerThemeColors(
-            drawerContainer = Color(0xFFFFF7FB),
-            drawerMiddle = Color(0xFFFFEAF3),
-            card = Color.White,
-            iconCard = Color(0xFFFFD6E8),
-            primary = Color(0xFFFF5CA8),
-            avatar = Color(0xFFFF5CA8),
-            text = Color(0xFF24111A),
-            subText = Color(0xFF7A445A),
-            onPrimary = Color.White,
-            success = Color(0xFF16A34A),
-            logoutCard = Color(0xFFFFE4E6),
-            logoutText = Color(0xFFE11D48)
-        )
-
-        isLight -> DrawerThemeColors(
-            drawerContainer = Color(0xFFF8FAFC),
-            drawerMiddle = Color(0xFFEDE9FE),
-            card = Color.White,
-            iconCard = Color(0xFFEBDDFF),
-            primary = scheme.primary,
-            avatar = scheme.primary,
-            text = Color(0xFF111827),
-            subText = Color(0xFF6B7280),
-            onPrimary = Color.White,
-            success = Color(0xFF16A34A),
-            logoutCard = Color(0xFFFFE4E6),
-            logoutText = Color(0xFFE11D48)
-        )
-
-        else -> DrawerThemeColors(
-            drawerContainer = Color(0xFF111113),
-            drawerMiddle = Color(0xFF1A1018),
-            card = Color(0xFF1D1D21),
-            iconCard = Color(0xFF2A2138),
-            primary = scheme.primary,
-            avatar = scheme.primary,
-            text = Color.White,
-            subText = Color(0xFF9CA3AF),
-            onPrimary = Color.White,
-            success = Color(0xFF22C55E),
-            logoutCard = Color(0xFF2A1111),
-            logoutText = Color(0xFFFF6B6B)
-        )
-    }
-}
-
-private data class DrawerThemeColors(
-    val drawerContainer: Color,
-    val drawerMiddle: Color,
-    val card: Color,
-    val iconCard: Color,
-    val primary: Color,
-    val avatar: Color,
-    val text: Color,
-    val subText: Color,
-    val onPrimary: Color,
-    val success: Color,
-    val logoutCard: Color,
-    val logoutText: Color
-)
 
 private fun String.drawerAvatarLetter(
     defaultLetter: String

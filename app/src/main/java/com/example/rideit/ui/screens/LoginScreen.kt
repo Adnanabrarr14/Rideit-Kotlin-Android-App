@@ -24,6 +24,8 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.BasicTextField
 import androidx.compose.foundation.text.KeyboardOptions
+import androidx.compose.material3.DropdownMenu
+import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
@@ -69,6 +71,13 @@ private data class LoginThemeColors(
     val success: Color
 )
 
+@Immutable
+private data class CountryCodeOption(
+    val country: String,
+    val dialCode: String,
+    val flag: String
+)
+
 private enum class LoginMethod {
     Email,
     Phone
@@ -89,12 +98,21 @@ fun LoginScreen(
     val context = LocalContext.current
     val activity = remember(context) { context.findActivity() }
 
+    val countryOptions = remember { rideitCountryCodeOptions() }
+
     var selectedMethod by remember { mutableStateOf(LoginMethod.Email) }
 
     var email by remember { mutableStateOf("") }
     var password by remember { mutableStateOf("") }
     var passwordVisible by remember { mutableStateOf(false) }
 
+    var selectedCountry by remember {
+        mutableStateOf(
+            countryOptions.firstOrNull { it.dialCode == "+92" } ?: countryOptions.first()
+        )
+    }
+
+    var countryPickerExpanded by remember { mutableStateOf(false) }
     var phoneNumber by remember { mutableStateOf("") }
     var otpCode by remember { mutableStateOf("") }
     var verificationId by remember { mutableStateOf("") }
@@ -227,7 +245,7 @@ fun LoginScreen(
                             text = if (selectedMethod == LoginMethod.Email) {
                                 "Use email and password to sign in"
                             } else {
-                                "Use phone number and OTP to sign in"
+                                "Select country code and verify with OTP"
                             },
                             color = colors.subText,
                             fontWeight = FontWeight.Medium,
@@ -328,13 +346,39 @@ fun LoginScreen(
                             )
                         } else {
                             PhoneLoginContent(
+                                selectedCountry = selectedCountry,
+                                countryOptions = countryOptions,
+                                countryPickerExpanded = countryPickerExpanded,
                                 phoneNumber = phoneNumber,
                                 otpCode = otpCode,
                                 otpSent = otpSent,
                                 isLoading = isLoading,
                                 colors = colors,
+                                onCountryPickerClick = {
+                                    if (!isLoading && !otpSent) {
+                                        countryPickerExpanded = true
+                                    }
+                                },
+                                onCountryDismiss = {
+                                    countryPickerExpanded = false
+                                },
+                                onCountrySelected = { country ->
+                                    selectedCountry = country
+                                    countryPickerExpanded = false
+                                    phoneNumber = ""
+                                    otpCode = ""
+                                    verificationId = ""
+                                    otpSent = false
+                                    errorMessage = null
+                                    successMessage = null
+                                },
                                 onPhoneChange = {
                                     phoneNumber = it
+                                        .replace(" ", "")
+                                        .replace("-", "")
+                                        .filter { char -> char.isDigit() }
+                                        .take(15)
+
                                     errorMessage = null
                                     successMessage = null
                                 },
@@ -356,6 +400,11 @@ fun LoginScreen(
                                 colors = colors,
                                 enabled = !isLoading,
                                 onClick = {
+                                    val fullPhoneNumber = buildFullPhoneNumber(
+                                        country = selectedCountry,
+                                        localNumber = phoneNumber
+                                    )
+
                                     if (activity == null) {
                                         errorMessage = "Phone login requires an Android activity."
                                         successMessage = null
@@ -363,19 +412,25 @@ fun LoginScreen(
                                     }
 
                                     if (!otpSent) {
+                                        if (phoneNumber.length < 7) {
+                                            errorMessage = "Enter a valid phone number."
+                                            successMessage = null
+                                            return@GlowButton
+                                        }
+
                                         isLoading = true
                                         errorMessage = null
                                         successMessage = null
 
                                         FirebaseManager.sendPhoneLoginOtp(
                                             activity = activity,
-                                            phoneNumber = phoneNumber,
+                                            phoneNumber = fullPhoneNumber,
                                             expectedRole = accountRole,
                                             onCodeSent = { newVerificationId ->
                                                 isLoading = false
                                                 verificationId = newVerificationId
                                                 otpSent = true
-                                                successMessage = "OTP sent. Please check your SMS."
+                                                successMessage = "OTP sent to $fullPhoneNumber."
                                             },
                                             onAutoVerified = {
                                                 isLoading = false
@@ -396,7 +451,7 @@ fun LoginScreen(
                                             verificationId = verificationId,
                                             otpCode = otpCode,
                                             expectedRole = accountRole,
-                                            phoneNumber = phoneNumber,
+                                            phoneNumber = fullPhoneNumber,
                                             onSuccess = {
                                                 isLoading = false
                                                 onLoginSuccess()
@@ -622,14 +677,100 @@ private fun EmailLoginContent(
 
 @Composable
 private fun PhoneLoginContent(
+    selectedCountry: CountryCodeOption,
+    countryOptions: List<CountryCodeOption>,
+    countryPickerExpanded: Boolean,
     phoneNumber: String,
     otpCode: String,
     otpSent: Boolean,
     isLoading: Boolean,
     colors: LoginThemeColors,
+    onCountryPickerClick: () -> Unit,
+    onCountryDismiss: () -> Unit,
+    onCountrySelected: (CountryCodeOption) -> Unit,
     onPhoneChange: (String) -> Unit,
     onOtpChange: (String) -> Unit
 ) {
+    LoginLabel(
+        text = "COUNTRY CODE",
+        colors = colors
+    )
+
+    Spacer(modifier = Modifier.height(10.dp))
+
+    Box {
+        Box(
+            modifier = Modifier
+                .fillMaxWidth()
+                .height(56.dp)
+                .clip(RoundedCornerShape(20.dp))
+                .background(colors.softField)
+                .clickable(enabled = !isLoading && !otpSent) {
+                    onCountryPickerClick()
+                }
+                .padding(horizontal = 16.dp),
+            contentAlignment = Alignment.CenterStart
+        ) {
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Text(
+                    text = selectedCountry.flag,
+                    style = MaterialTheme.typography.titleMedium
+                )
+
+                Spacer(modifier = Modifier.width(10.dp))
+
+                Text(
+                    text = "${selectedCountry.country}  ${selectedCountry.dialCode}",
+                    color = colors.text,
+                    fontWeight = FontWeight.Black,
+                    style = MaterialTheme.typography.bodyMedium,
+                    modifier = Modifier.weight(1f)
+                )
+
+                Text(
+                    text = if (otpSent) "Locked" else "Change",
+                    color = colors.subText,
+                    fontWeight = FontWeight.Bold,
+                    style = MaterialTheme.typography.bodySmall
+                )
+            }
+        }
+
+        DropdownMenu(
+            expanded = countryPickerExpanded,
+            onDismissRequest = onCountryDismiss,
+            modifier = Modifier.background(colors.card)
+        ) {
+            countryOptions.forEach { country ->
+                DropdownMenuItem(
+                    text = {
+                        Row(
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Text(text = country.flag)
+
+                            Spacer(modifier = Modifier.width(10.dp))
+
+                            Text(
+                                text = "${country.country}  ${country.dialCode}",
+                                color = colors.text,
+                                fontWeight = FontWeight.Bold
+                            )
+                        }
+                    },
+                    onClick = {
+                        onCountrySelected(country)
+                    }
+                )
+            }
+        }
+    }
+
+    Spacer(modifier = Modifier.height(18.dp))
+
     LoginLabel(
         text = "PHONE NUMBER",
         colors = colors
@@ -640,11 +781,12 @@ private fun PhoneLoginContent(
     CleanLoginInputField(
         value = phoneNumber,
         onValueChange = onPhoneChange,
-        placeholder = "+923001234567",
+        placeholder = "3001234567",
         leadingIcon = "📱",
         keyboardType = KeyboardType.Phone,
         enabled = !isLoading && !otpSent,
-        colors = colors
+        colors = colors,
+        prefixText = selectedCountry.dialCode
     )
 
     if (otpSent) {
@@ -694,6 +836,7 @@ private fun CleanLoginInputField(
     colors: LoginThemeColors,
     modifier: Modifier = Modifier,
     visualTransformation: VisualTransformation = VisualTransformation.None,
+    prefixText: String? = null,
     trailingContent: @Composable (() -> Unit)? = null
 ) {
     Box(
@@ -715,6 +858,17 @@ private fun CleanLoginInputField(
             )
 
             Spacer(modifier = Modifier.width(10.dp))
+
+            prefixText?.let {
+                Text(
+                    text = it,
+                    color = colors.text,
+                    fontWeight = FontWeight.Black,
+                    style = MaterialTheme.typography.bodyMedium
+                )
+
+                Spacer(modifier = Modifier.width(8.dp))
+            }
 
             Box(
                 modifier = Modifier.weight(1f),
@@ -898,6 +1052,50 @@ private fun rememberLoginThemeColors(
             }
         }
     }
+}
+
+private fun rideitCountryCodeOptions(): List<CountryCodeOption> {
+    return listOf(
+        CountryCodeOption("Pakistan", "+92", "🇵🇰"),
+        CountryCodeOption("United States", "+1", "🇺🇸"),
+        CountryCodeOption("Canada", "+1", "🇨🇦"),
+        CountryCodeOption("United Kingdom", "+44", "🇬🇧"),
+        CountryCodeOption("United Arab Emirates", "+971", "🇦🇪"),
+        CountryCodeOption("Saudi Arabia", "+966", "🇸🇦"),
+        CountryCodeOption("India", "+91", "🇮🇳"),
+        CountryCodeOption("Bangladesh", "+880", "🇧🇩"),
+        CountryCodeOption("Afghanistan", "+93", "🇦🇫"),
+        CountryCodeOption("Turkey", "+90", "🇹🇷"),
+        CountryCodeOption("Qatar", "+974", "🇶🇦"),
+        CountryCodeOption("Kuwait", "+965", "🇰🇼"),
+        CountryCodeOption("Oman", "+968", "🇴🇲"),
+        CountryCodeOption("Bahrain", "+973", "🇧🇭"),
+        CountryCodeOption("Australia", "+61", "🇦🇺"),
+        CountryCodeOption("Germany", "+49", "🇩🇪"),
+        CountryCodeOption("France", "+33", "🇫🇷"),
+        CountryCodeOption("Spain", "+34", "🇪🇸"),
+        CountryCodeOption("Italy", "+39", "🇮🇹"),
+        CountryCodeOption("China", "+86", "🇨🇳"),
+        CountryCodeOption("Japan", "+81", "🇯🇵"),
+        CountryCodeOption("South Korea", "+82", "🇰🇷"),
+        CountryCodeOption("Malaysia", "+60", "🇲🇾"),
+        CountryCodeOption("Indonesia", "+62", "🇮🇩"),
+        CountryCodeOption("South Africa", "+27", "🇿🇦"),
+        CountryCodeOption("Nigeria", "+234", "🇳🇬")
+    )
+}
+
+private fun buildFullPhoneNumber(
+    country: CountryCodeOption,
+    localNumber: String
+): String {
+    val digitsOnly = localNumber
+        .replace(" ", "")
+        .replace("-", "")
+        .filter { it.isDigit() }
+        .trimStart('0')
+
+    return country.dialCode + digitsOnly
 }
 
 private tailrec fun Context.findActivity(): Activity? {

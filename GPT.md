@@ -3907,3 +3907,90 @@ Completed and stable.
 
 ### Next Phase
 Phase 8.21.12.7.2 — Apply selected currency to fare display across rider/driver UI.
+
+
+
+## Phase 8.21.12.7.6 — Phone Number Login + OTP Setup
+
+### Status
+Completed for app-side setup. Firebase Phone Auth enabled, but live SMS testing requires billing/quota support.
+
+### Completed
+- Enabled Firebase Phone Authentication in Firebase Console.
+- Added Phone Login tab to Rider Login.
+- Added Phone Login tab to Driver Login.
+- Added Firebase OTP send/verify flow.
+- Phone login supports international phone format, example: `+923001234567`.
+- Phone-auth users save role correctly:
+  - Rider phone login saves `role = rider`
+  - Driver phone login saves `role = driver`
+- Phone number saves to Firestore user profile.
+- Existing Email/Password login remains working.
+- Login screen remains premium and clean.
+- MapScreen was not touched.
+
+### Notes
+- Firebase shows SMS quota/billing requirement for phone OTP.
+- For full phone login testing and launch, billing/quota must be handled in Firebase/Google Cloud.
+- Email login is still the stable default login method.
+
+### Next Phase
+Continue from Phase 8.21.12.7.6 tomorrow:
+- Decide whether to keep phone OTP as launch-ready with billing enabled or mark it as optional.
+- Then continue Phase 8.21.12.7.5 / 8.21.12.7.7 driver-side UI theme and identity polish.
+
+
+## Phase 8.21.12.7.6.1 — Phone Login Country Code Selector
+
+### Status
+Completed and stable.
+
+### Completed
+- Added country code selector to Rider/Driver Phone Login.
+- Added supported countries with flags and dial codes.
+- Phone number field now combines selected country code + local number.
+- Phone login still uses Firebase OTP flow.
+- Fixed DropdownMenu import bug by using Material3 imports.
+- Email login remains stable.
+- MapScreen was not touched.
+
+### Note
+- Firebase Phone OTP still requires billing/quota support for real SMS testing.
+
+
+## Phase 8.21.12.6.2 — Rider Map Launch Polish
+
+### Status
+Completed.
+
+### Completed
+- Removed the three right-side floating map controls for cleaner rider map UI.
+- Improved bottom panel spacing so it covers the left/right edges more professionally.
+- Added panel collapse/expand behavior for a cleaner launch-ready experience.
+- Preserved protected MapScreen design and existing Firebase ride flow.
+- Kept completed-trip rating/feedback flow before receipt.
+- Build issue fixed by correcting `onConfirmRide`.
+
+### Notes
+- MapScreen remains protected.
+- No architecture rewrite was done.
+
+## Phase 8.21.12.6.3.2 — Driver Dashboard Drawer Polish
+
+### Status
+Completed.
+
+### Completed
+- Moved Driver Dashboard drawer/menu button slightly left.
+- Moved drawer/menu button slightly upward.
+- Improved drawer sheet width and spacing.
+- Drawer now covers space more professionally.
+- Rider drawer spacing also remains clean.
+- No MapScreen changes.
+- Driver Wallet polish remains completed.
+
+### Next Phase
+Continue with Phase 8.21.12.6.3.3:
+- Driver Home earnings alignment with Driver Wallet.
+- Make Today, Week, Trips, Rating, and Completed earnings match wallet values exactly.
+- Ensure cancelled/declined trips do not count as earnings.

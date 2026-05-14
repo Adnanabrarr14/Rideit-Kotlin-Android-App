@@ -11,6 +11,7 @@ import com.google.firebase.auth.UserProfileChangeRequest
 import com.google.firebase.firestore.DocumentSnapshot
 import com.google.firebase.firestore.FirebaseFirestore
 import com.google.firebase.firestore.SetOptions
+import java.util.Locale
 import java.util.concurrent.TimeUnit
 
 object FirebaseManager {
@@ -323,11 +324,7 @@ object FirebaseManager {
                                     uid = user.uid,
                                     email = user.email.orEmpty(),
                                     fullName = user.displayName.orEmpty().ifBlank {
-                                        if (expectedRole == ROLE_DRIVER) {
-                                            "Rideit Driver"
-                                        } else {
-                                            "Rideit Rider"
-                                        }
+                                        if (expectedRole == ROLE_DRIVER) "Rideit Driver" else "Rideit Rider"
                                     },
                                     role = expectedRole,
                                     gender = null,
@@ -351,9 +348,7 @@ object FirebaseManager {
                                 firestore.collection("users")
                                     .document(user.uid)
                                     .set(phoneData, SetOptions.merge())
-                                    .addOnSuccessListener {
-                                        onSuccess()
-                                    }
+                                    .addOnSuccessListener { onSuccess() }
                                     .addOnFailureListener { exception ->
                                         onError(exception.message ?: "Failed to update phone profile.")
                                     }
@@ -445,9 +440,7 @@ object FirebaseManager {
 
                 userDocument
                     .set(userData, SetOptions.merge())
-                    .addOnSuccessListener {
-                        onSuccess()
-                    }
+                    .addOnSuccessListener { onSuccess() }
                     .addOnFailureListener { exception ->
                         onError(exception.message ?: "Failed to save user profile.")
                     }
@@ -533,9 +526,7 @@ object FirebaseManager {
                 firestore.collection("users")
                     .document(currentUser.uid)
                     .set(profileData, SetOptions.merge())
-                    .addOnSuccessListener {
-                        onSuccess()
-                    }
+                    .addOnSuccessListener { onSuccess() }
                     .addOnFailureListener { exception ->
                         onError(exception.message ?: "Failed to save profile.")
                     }
@@ -566,9 +557,7 @@ object FirebaseManager {
             .build()
 
         currentUser.updateProfile(profileUpdates)
-            .addOnCompleteListener {
-                onComplete()
-            }
+            .addOnCompleteListener { onComplete() }
     }
 
     fun loadRiderPaymentProfile(
@@ -635,9 +624,7 @@ object FirebaseManager {
         firestore.collection("users")
             .document(currentUser.uid)
             .set(paymentData, SetOptions.merge())
-            .addOnSuccessListener {
-                onSuccess()
-            }
+            .addOnSuccessListener { onSuccess() }
             .addOnFailureListener { exception ->
                 onError(exception.message ?: "Failed to save payment method.")
             }
@@ -666,9 +653,7 @@ object FirebaseManager {
         firestore.collection("users")
             .document(currentUser.uid)
             .set(paymentData, SetOptions.merge())
-            .addOnSuccessListener {
-                onSuccess()
-            }
+            .addOnSuccessListener { onSuccess() }
             .addOnFailureListener { exception ->
                 onError(exception.message ?: "Failed to remove saved card.")
             }
@@ -737,6 +722,7 @@ object FirebaseManager {
         val cleanDropoff = dropoffAddress.trim().ifBlank { "Selected dropoff location" }
         val cleanRideType = rideType.trim().ifBlank { "Rideit" }
         val cleanFareEstimate = fareEstimate.trim().ifBlank { "Fare pending" }
+        val safeFareAmount = extractRideitFareAmount(cleanFareEstimate)
 
         val safePaymentMethod = when (paymentProfile.selectedPaymentMethod.lowercase()) {
             PAYMENT_CARD -> PAYMENT_CARD
@@ -769,6 +755,9 @@ object FirebaseManager {
             "rideType" to cleanRideType,
             "fareEstimate" to cleanFareEstimate,
             "fare" to cleanFareEstimate,
+            "fareAmount" to safeFareAmount,
+            "currencyCode" to "PKR",
+            "currencySymbol" to "Rs",
             "paymentMethodId" to safePaymentMethod,
             "paymentMethodTitle" to paymentTitle,
             "paymentStatus" to paymentStatus,
@@ -776,6 +765,10 @@ object FirebaseManager {
             "paymentGateway" to "none",
             "paymentCaptured" to false,
             "paymentAddedAtBooking" to true,
+            "driverEarningAmount" to 0,
+            "driverEarningText" to "Rs 0",
+            "driverWalletStatus" to "not_completed",
+            "feedbackSubmitted" to false,
             "status" to "pending",
             "createdAt" to Timestamp.now(),
             "updatedAt" to Timestamp.now()
@@ -791,9 +784,7 @@ object FirebaseManager {
 
         requestRef
             .set(requestData)
-            .addOnSuccessListener {
-                onSuccess(requestRef.id)
-            }
+            .addOnSuccessListener { onSuccess(requestRef.id) }
             .addOnFailureListener { exception ->
                 onError(exception.message ?: "Failed to save ride request.")
             }
@@ -857,23 +848,22 @@ object FirebaseManager {
             .limit(25)
             .get()
             .addOnSuccessListener { snapshots ->
-                val restorableStatuses = setOf(
-                    "pending",
-                    "requested",
+                val activeOnlyStatuses = setOf(
                     "accepted",
-                    "completed"
+                    "driver_arriving",
+                    "ride_started"
                 )
 
                 val document = snapshots.documents
                     .filter { doc ->
-                        val status = doc.getString("status").orEmpty().lowercase()
-                        val feedbackSubmitted = doc.getBoolean("feedbackSubmitted") ?: false
-
-                        status in restorableStatuses &&
-                                !(status == "completed" && feedbackSubmitted)
+                        val status = doc.getString("status").orEmpty().trim().lowercase()
+                        status in activeOnlyStatuses
                     }
                     .maxByOrNull { doc ->
-                        doc.getTimestamp("createdAt")?.seconds ?: 0L
+                        doc.getTimestamp("updatedAt")?.seconds
+                            ?: doc.getTimestamp("acceptedAt")?.seconds
+                            ?: doc.getTimestamp("createdAt")?.seconds
+                            ?: 0L
                     }
 
                 if (document == null) {
@@ -920,12 +910,11 @@ object FirebaseManager {
                     "cancelledByUserId" to currentUser.uid,
                     "cancelledByUserEmail" to (currentUser.email ?: ""),
                     "cancelledAt" to Timestamp.now(),
+                    "driverWalletStatus" to "cancelled",
                     "updatedAt" to Timestamp.now()
                 )
             )
-            .addOnSuccessListener {
-                onSuccess()
-            }
+            .addOnSuccessListener { onSuccess() }
             .addOnFailureListener { exception ->
                 onError(exception.message ?: "Failed to cancel ride request.")
             }
@@ -948,23 +937,79 @@ object FirebaseManager {
             return
         }
 
-        firestore.collection("ride_requests")
+        val rideDocumentRef = firestore.collection("ride_requests")
             .document(requestId)
-            .update(
-                mapOf(
-                    "status" to "completed",
-                    "completedBy" to "driver",
-                    "completedByDriverId" to currentUser.uid,
-                    "completedByDriverEmail" to (currentUser.email ?: ""),
-                    "completedAt" to Timestamp.now(),
-                    "updatedAt" to Timestamp.now()
-                )
-            )
-            .addOnSuccessListener {
-                onSuccess()
+
+        rideDocumentRef
+            .get()
+            .addOnSuccessListener { snapshot ->
+                if (!snapshot.exists()) {
+                    onError("Ride request not found.")
+                    return@addOnSuccessListener
+                }
+
+                val fareSource = snapshot.getString("fareEstimate")
+                    ?: snapshot.getString("fare")
+                    ?: snapshot.getString("estimatedFare")
+                    ?: snapshot.getString("driverEarningText")
+                    ?: ""
+
+                val savedFareAmount = snapshot.getLong("fareAmount")?.toInt()
+                    ?: snapshot.getDouble("fareAmount")?.toInt()
+                    ?: 0
+
+                val safeEarningAmount = when {
+                    snapshot.getLong("driverEarningAmount") != null &&
+                            (snapshot.getLong("driverEarningAmount") ?: 0L) > 0L ->
+                        snapshot.getLong("driverEarningAmount")!!.toInt()
+
+                    snapshot.getDouble("driverEarningAmount") != null &&
+                            (snapshot.getDouble("driverEarningAmount") ?: 0.0) > 0.0 ->
+                        snapshot.getDouble("driverEarningAmount")!!.toInt()
+
+                    savedFareAmount > 0 ->
+                        savedFareAmount
+
+                    else ->
+                        extractRideitFareAmount(fareSource)
+                }.coerceAtLeast(0)
+
+                val safeEarningText = formatRideitRupees(safeEarningAmount)
+                val completedNow = Timestamp.now()
+
+                rideDocumentRef
+                    .set(
+                        mapOf(
+                            "status" to "completed",
+                            "completedBy" to "driver",
+                            "completedByDriverId" to currentUser.uid,
+                            "completedByDriverEmail" to (currentUser.email ?: ""),
+                            "driverId" to currentUser.uid,
+                            "driverEmail" to (currentUser.email ?: ""),
+                            "driverName" to currentUserDisplayName("Rideit Driver"),
+                            "fareAmount" to safeEarningAmount,
+                            "fare" to safeEarningText,
+                            "fareEstimate" to safeEarningText,
+                            "driverEarningAmount" to safeEarningAmount,
+                            "driverEarningText" to safeEarningText,
+                            "driverWalletStatus" to "earned",
+                            "driverPayoutStatus" to "pending_demo_payout",
+                            "driverEarningCurrencyCode" to "PKR",
+                            "driverEarningCurrencySymbol" to "Rs",
+                            "driverEarningRecordedAt" to completedNow,
+                            "feedbackSubmitted" to false,
+                            "completedAt" to completedNow,
+                            "updatedAt" to completedNow
+                        ),
+                        SetOptions.merge()
+                    )
+                    .addOnSuccessListener { onSuccess() }
+                    .addOnFailureListener { exception ->
+                        onError(exception.message ?: "Failed to complete trip.")
+                    }
             }
             .addOnFailureListener { exception ->
-                onError(exception.message ?: "Failed to complete trip.")
+                onError(exception.message ?: "Failed to load trip fare before completion.")
             }
     }
 
@@ -994,12 +1039,11 @@ object FirebaseManager {
                     "cancelledByDriverId" to currentUser.uid,
                     "cancelledByDriverEmail" to (currentUser.email ?: ""),
                     "cancelledAt" to Timestamp.now(),
+                    "driverWalletStatus" to "cancelled",
                     "updatedAt" to Timestamp.now()
                 )
             )
-            .addOnSuccessListener {
-                onSuccess()
-            }
+            .addOnSuccessListener { onSuccess() }
             .addOnFailureListener { exception ->
                 onError(exception.message ?: "Failed to cancel trip.")
             }
@@ -1050,9 +1094,7 @@ object FirebaseManager {
                 ),
                 SetOptions.merge()
             )
-            .addOnSuccessListener {
-                onSuccess()
-            }
+            .addOnSuccessListener { onSuccess() }
             .addOnFailureListener { exception ->
                 onError(exception.message ?: "Failed to save feedback.")
             }
@@ -1071,9 +1113,7 @@ object FirebaseManager {
         }
 
         auth.sendPasswordResetEmail(cleanEmail)
-            .addOnSuccessListener {
-                onSuccess()
-            }
+            .addOnSuccessListener { onSuccess() }
             .addOnFailureListener {
                 onError("Could not send reset email. Make sure this account exists.")
             }
@@ -1118,11 +1158,7 @@ object FirebaseManager {
                 .filter { it.isNotBlank() }
                 .joinToString(" ") { word ->
                     word.replaceFirstChar { char ->
-                        if (char.isLowerCase()) {
-                            char.titlecase()
-                        } else {
-                            char.toString()
-                        }
+                        if (char.isLowerCase()) char.titlecase() else char.toString()
                     }
                 }
                 .ifBlank { fallback }
@@ -1228,5 +1264,35 @@ object FirebaseManager {
             THEME_ROSE -> THEME_ROSE
             else -> THEME_SYSTEM
         }
+    }
+
+    private fun extractRideitFareAmount(
+        fareText: String?
+    ): Int {
+        val cleanText = fareText
+            ?.trim()
+            .orEmpty()
+
+        if (cleanText.isBlank()) {
+            return 0
+        }
+
+        val digitsOnly = cleanText.filter { it.isDigit() }
+
+        if (digitsOnly.isBlank()) {
+            return 0
+        }
+
+        return digitsOnly.toIntOrNull() ?: 0
+    }
+
+    private fun formatRideitRupees(
+        amount: Int
+    ): String {
+        if (amount <= 0) {
+            return "Rs 0"
+        }
+
+        return "Rs ${String.format(Locale.US, "%,d", amount)}"
     }
 }

@@ -87,6 +87,7 @@ import com.google.android.gms.maps.model.CameraPosition
 import com.google.android.gms.maps.model.LatLng
 import com.google.android.gms.maps.model.LatLngBounds
 import com.google.android.gms.tasks.CancellationTokenSource
+import com.google.firebase.firestore.DocumentSnapshot
 import com.google.firebase.firestore.FirebaseFirestore
 import com.google.firebase.firestore.ListenerRegistration
 import com.google.maps.android.compose.GoogleMap
@@ -132,6 +133,7 @@ fun MapScreen(
 
     var pendingDetectAfterGpsDialog by remember { mutableStateOf(false) }
     var showLocationCard by remember { mutableStateOf(true) }
+    var isBottomPanelExpanded by remember { mutableStateOf(true) }
 
     val firestore = remember { FirebaseFirestore.getInstance() }
     val scope = rememberCoroutineScope()
@@ -431,19 +433,18 @@ fun MapScreen(
                         mapViewModel.onConfirmRideClicked()
                     }
 
-                    "completed" -> {
+                    "completed", "trip_completed", "completed_by_driver", "ride_completed" -> {
                         activeRideRequestId = null
                         completedRideRequestId = requestId
                         firebaseTripCompleted = true
                         firebaseTripCancelledByDriver = false
                         firebaseLiveTripStatus = "completed"
-                        firebaseRideMessage = "Trip completed. Receipt is ready."
+                        firebaseRideMessage = "Trip completed. Please rate your driver before viewing receipt."
                         firebaseRideError = null
                         submittedRating = null
                         showPanel = false
-                        showRideCompletionSheet = false
-                        showReceiptPreviewSheet = true
-                        mapViewModel.onCancelRideClicked()
+                        showRideCompletionSheet = true
+                        showReceiptPreviewSheet = false
                     }
                 }
             },
@@ -509,20 +510,19 @@ fun MapScreen(
                             showPanel = false
                         }
 
-                        "completed" -> {
+                        "completed", "trip_completed", "completed_by_driver", "ride_completed" -> {
                             completedRideRequestId = requestId
                             firebaseTripCompleted = true
                             firebaseTripCancelledByDriver = false
                             firebaseDriverName = driverName ?: firebaseDriverName ?: "Your driver"
                             firebaseDriverEmail = driverEmail ?: firebaseDriverEmail
-                            firebaseRideMessage = "Trip completed successfully. Receipt is ready."
+                            firebaseRideMessage = "Trip completed successfully. Please rate your driver before viewing receipt."
                             firebaseRideError = null
                             activeRideRequestId = null
                             submittedRating = null
-                            mapViewModel.onCancelRideClicked()
                             showPanel = false
-                            showRideCompletionSheet = false
-                            showReceiptPreviewSheet = true
+                            showRideCompletionSheet = true
+                            showReceiptPreviewSheet = false
                         }
 
                         "cancelled_by_driver" -> {
@@ -592,6 +592,123 @@ fun MapScreen(
         }
     }
 
+    LaunchedEffect(
+        firebaseTripCompleted,
+        completedRideRequestId,
+        submittedRating,
+        showRideCompletionSheet,
+        showReceiptPreviewSheet
+    ) {
+        if (
+            firebaseTripCompleted &&
+            !completedRideRequestId.isNullOrBlank() &&
+            submittedRating == null &&
+            !showRideCompletionSheet
+        ) {
+            showPanel = false
+            showRideCompletionSheet = true
+            showReceiptPreviewSheet = false
+            firebaseRideMessage = "Trip completed successfully. Please rate your driver before viewing receipt."
+        }
+    }
+
+    DisposableEffect(Unit) {
+        var riderIdCompletionListener: ListenerRegistration? = null
+        var riderEmailCompletionListener: ListenerRegistration? = null
+        var userEmailCompletionListener: ListenerRegistration? = null
+
+        val riderId = FirebaseManager.currentUserId().orEmpty()
+        val riderEmail = FirebaseManager.currentUserEmail().orEmpty()
+
+        fun handleCompletedRideDocuments(documents: List<DocumentSnapshot>) {
+            val latestCompletedDocument = documents
+                .filter { document ->
+                    val status = document.getString("status").orEmpty().trim().lowercase()
+                    val feedbackSubmitted = document.getBoolean("feedbackSubmitted") ?: false
+
+                    (status == "completed" ||
+                            status == "trip_completed" ||
+                            status == "completed_by_driver" ||
+                            status == "ride_completed") && !feedbackSubmitted
+                }
+                .maxByOrNull { document ->
+                    document.getTimestamp("completedAt")?.seconds
+                        ?: document.getTimestamp("updatedAt")?.seconds
+                        ?: document.getTimestamp("createdAt")?.seconds
+                        ?: 0L
+                }
+
+            if (latestCompletedDocument != null) {
+                val completedId = latestCompletedDocument.id
+
+                completedRideRequestId = completedId
+                activeRideRequestId = null
+                firebaseTripCompleted = true
+                firebaseTripCancelledByDriver = false
+                firebaseLiveTripStatus = "completed"
+
+                firebaseDriverName = latestCompletedDocument.getString("driverName")
+                    ?: firebaseDriverName
+                            ?: "Your driver"
+
+                firebaseDriverEmail = latestCompletedDocument.getString("driverEmail")
+                    ?: firebaseDriverEmail
+
+                firebaseRideMessage = "Trip completed successfully. Please rate your driver before viewing receipt."
+                firebaseRideError = null
+
+                submittedRating = null
+                showPanel = false
+                showRideCompletionSheet = true
+                showReceiptPreviewSheet = false
+            }
+        }
+
+        if (riderId.isNotBlank()) {
+            riderIdCompletionListener = firestore.collection("ride_requests")
+                .whereEqualTo("riderId", riderId)
+                .limit(25)
+                .addSnapshotListener { snapshots, error ->
+                    if (error != null) {
+                        firebaseRideError = error.message ?: "Unable to listen for completed trip."
+                        return@addSnapshotListener
+                    }
+
+                    handleCompletedRideDocuments(snapshots?.documents.orEmpty())
+                }
+        }
+
+        if (riderEmail.isNotBlank()) {
+            riderEmailCompletionListener = firestore.collection("ride_requests")
+                .whereEqualTo("riderEmail", riderEmail)
+                .limit(25)
+                .addSnapshotListener { snapshots, error ->
+                    if (error != null) {
+                        return@addSnapshotListener
+                    }
+
+                    handleCompletedRideDocuments(snapshots?.documents.orEmpty())
+                }
+
+            userEmailCompletionListener = firestore.collection("ride_requests")
+                .whereEqualTo("userEmail", riderEmail)
+                .limit(25)
+                .addSnapshotListener { snapshots, error ->
+                    if (error != null) {
+                        return@addSnapshotListener
+                    }
+
+                    handleCompletedRideDocuments(snapshots?.documents.orEmpty())
+                }
+        }
+
+        onDispose {
+            riderIdCompletionListener?.remove()
+            riderEmailCompletionListener?.remove()
+            userEmailCompletionListener?.remove()
+        }
+    }
+
     val localTripStatus = when (uiState.rideRequestStatus) {
         RideRequestStatus.SEARCHING_DRIVER -> RideitTripStatus.SearchingDriver
         RideRequestStatus.DRIVER_FOUND -> RideitTripStatus.DriverFound
@@ -641,10 +758,9 @@ fun MapScreen(
         !overlayVisible &&
                 !firebaseTripCompleted &&
                 !firebaseTripCancelledByDriver &&
+                currentTripStatus == RideitTripStatus.Idle &&
                 (
-                        hasActiveRoute ||
-                                hasActiveRideFlow ||
-                                uiState.showRideOptions ||
+                        uiState.showRideOptions ||
                                 uiState.selectedRideOption != null
                         )
 
@@ -938,7 +1054,7 @@ fun MapScreen(
         )
 
         MapFloatingControls(
-            visible = shouldShowRiderTopHeader,
+            visible = false,
             onMyLocation = {
                 requestLocationPermissionAndGps()
             },
@@ -1027,6 +1143,10 @@ fun MapScreen(
                 firebaseTripCompleted = firebaseTripCompleted,
                 firebaseTripCancelledByDriver = firebaseTripCancelledByDriver,
                 firebaseLiveTripStatus = firebaseLiveTripStatus,
+                isPanelExpanded = isBottomPanelExpanded,
+                onTogglePanelExpanded = {
+                    isBottomPanelExpanded = !isBottomPanelExpanded
+                },
                 onConfirmRideWithFirebase = {
                     if (isSavingRideRequest) return@RideitBottomPanel
 
@@ -1572,20 +1692,66 @@ private fun CompactRouteChip(
     etaText: String?,
     modifier: Modifier = Modifier
 ) {
-    /*
-        Safe UI fix:
-        Hide this compact route chip so it does not block the
-        "Finding your driver" card on the rider MapScreen.
+    AnimatedVisibility(
+        visible = visible,
+        enter = fadeIn(),
+        exit = fadeOut(),
+        modifier = modifier
+    ) {
+        Surface(
+            shape = RoundedCornerShape(22.dp),
+            color = Color.White.copy(alpha = 0.96f),
+            shadowElevation = 12.dp,
+            tonalElevation = 6.dp
+        ) {
+            Row(
+                modifier = Modifier.padding(horizontal = 13.dp, vertical = 11.dp),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Box(
+                    modifier = Modifier
+                        .size(36.dp)
+                        .clip(CircleShape)
+                        .background(Color(0xFF8A35F2).copy(alpha = 0.12f)),
+                    contentAlignment = Alignment.Center
+                ) {
+                    Text(
+                        text = "↗",
+                        color = Color(0xFF8A35F2),
+                        fontWeight = FontWeight.Black
+                    )
+                }
 
-        This does not touch GPS, Firebase, booking, driver marker,
-        cancel ride, receipt, or route logic.
-    */
+                Spacer(modifier = Modifier.width(10.dp))
 
-    if (!visible) {
-        return
+                Column(modifier = Modifier.weight(1f)) {
+                    Text(
+                        text = "${pickupText.ifBlank { "Pickup" }} → ${dropoffText.ifBlank { "Dropoff" }}",
+                        color = Color(0xFF111827),
+                        fontWeight = FontWeight.Black,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis,
+                        style = MaterialTheme.typography.bodySmall
+                    )
+
+                    Spacer(modifier = Modifier.height(2.dp))
+
+                    Text(
+                        text = listOfNotNull(
+                            rideTitle,
+                            fareText,
+                            etaText
+                        ).joinToString(" • ").ifBlank { "Route ready" },
+                        color = Color(0xFF6B7280),
+                        fontWeight = FontWeight.Medium,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis,
+                        style = MaterialTheme.typography.labelSmall
+                    )
+                }
+            }
+        }
     }
-
-    return
 }
 
 @Composable
@@ -1601,19 +1767,20 @@ private fun RideitBottomPanel(
     firebaseTripCompleted: Boolean,
     firebaseTripCancelledByDriver: Boolean,
     firebaseLiveTripStatus: String?,
+    isPanelExpanded: Boolean,
+    onTogglePanelExpanded: () -> Unit,
     onConfirmRideWithFirebase: () -> Unit,
     onCancelRideWithFirebase: () -> Unit,
     onCompleteRideClicked: () -> Unit
 ) {
     Surface(
         modifier = Modifier
-            .fillMaxWidth()
-            .padding(horizontal = 14.dp, vertical = 14.dp),
+            .fillMaxWidth(),
         shape = RoundedCornerShape(
-            topStart = 36.dp,
-            topEnd = 36.dp,
-            bottomStart = 28.dp,
-            bottomEnd = 28.dp
+            topStart = 34.dp,
+            topEnd = 34.dp,
+            bottomStart = 0.dp,
+            bottomEnd = 0.dp
         ),
         color = Color.White,
         shadowElevation = 18.dp,
@@ -1622,19 +1789,29 @@ private fun RideitBottomPanel(
         Column(
             modifier = Modifier
                 .fillMaxWidth()
-                .heightIn(max = 560.dp)
-                .padding(18.dp)
+                .heightIn(max = if (isPanelExpanded) 620.dp else 96.dp)
+                .padding(start = 18.dp, end = 18.dp, top = 12.dp, bottom = 18.dp)
         ) {
             Box(
                 modifier = Modifier
-                    .width(48.dp)
-                    .height(5.dp)
+                    .width(58.dp)
+                    .height(6.dp)
                     .clip(RoundedCornerShape(50))
-                    .background(Color(0xFFD1D5DB))
+                    .background(Color(0xFFC9CBD3))
                     .align(Alignment.CenterHorizontally)
+                    .clickable { onTogglePanelExpanded() }
             )
 
-            Spacer(modifier = Modifier.height(16.dp))
+            Spacer(modifier = Modifier.height(12.dp))
+
+            if (!isPanelExpanded) {
+                CollapsedRideSearchPanel(
+                    pickupText = uiState.pickupText.ifBlank { "Current location" },
+                    dropoffText = uiState.dropoffText.ifBlank { "Where to?" },
+                    onExpandClick = onTogglePanelExpanded
+                )
+                return@Column
+            }
 
             when {
                 uiState.rideRequestStatus == RideRequestStatus.SEARCHING_DRIVER ||
@@ -1679,6 +1856,65 @@ private fun RideitBottomPanel(
                     )
                 }
             }
+        }
+    }
+}
+
+@Composable
+private fun CollapsedRideSearchPanel(
+    pickupText: String,
+    dropoffText: String,
+    onExpandClick: () -> Unit
+) {
+    Surface(
+        modifier = Modifier
+            .fillMaxWidth()
+            .height(58.dp)
+            .clickable { onExpandClick() },
+        shape = RoundedCornerShape(22.dp),
+        color = Color(0xFFF8FAFC)
+    ) {
+        Row(
+            modifier = Modifier.padding(horizontal = 16.dp),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Box(
+                modifier = Modifier
+                    .size(10.dp)
+                    .clip(CircleShape)
+                    .background(Color(0xFF22C55E))
+            )
+
+            Spacer(modifier = Modifier.width(10.dp))
+
+            Column(modifier = Modifier.weight(1f)) {
+                Text(
+                    text = pickupText,
+                    color = Color(0xFF111827),
+                    fontWeight = FontWeight.Bold,
+                    style = MaterialTheme.typography.bodySmall,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis
+                )
+
+                Text(
+                    text = dropoffText,
+                    color = Color(0xFF6B7280),
+                    fontWeight = FontWeight.Medium,
+                    style = MaterialTheme.typography.labelSmall,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis
+                )
+            }
+
+            Spacer(modifier = Modifier.width(10.dp))
+
+            Text(
+                text = "Expand",
+                color = Color(0xFF8A35F2),
+                fontWeight = FontWeight.Black,
+                style = MaterialTheme.typography.labelMedium
+            )
         }
     }
 }
