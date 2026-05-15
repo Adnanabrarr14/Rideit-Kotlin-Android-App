@@ -17,6 +17,7 @@ import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.gestures.detectVerticalDragGestures
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -63,6 +64,7 @@ import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontStyle
 import androidx.compose.ui.text.font.FontWeight
@@ -741,6 +743,24 @@ fun MapScreen(
 
     val selectedRide = uiState.selectedRideOption ?: uiState.rideOptions.firstOrNull()
 
+    LaunchedEffect(
+        uiState.showRideOptions,
+        uiState.rideRequestStatus,
+        firebaseLiveTripStatus
+    ) {
+        val shouldAutoExpandPanel =
+            uiState.showRideOptions ||
+                    uiState.rideRequestStatus == RideRequestStatus.SEARCHING_DRIVER ||
+                    firebaseLiveTripStatus == "pending" ||
+                    firebaseLiveTripStatus == "requested" ||
+                    firebaseLiveTripStatus == "searching" ||
+                    firebaseLiveTripStatus == "searching_driver"
+
+        if (shouldAutoExpandPanel) {
+            isBottomPanelExpanded = true
+        }
+    }
+
     val overlayVisible = showRideCompletionSheet || showReceiptPreviewSheet
     val hasActiveRoute = uiState.routePoints.size >= 2
 
@@ -1050,7 +1070,7 @@ fun MapScreen(
                 .align(Alignment.TopCenter)
                 .fillMaxWidth()
                 .statusBarsPadding()
-                .padding(start = 12.dp, end = 12.dp, top = 8.dp)
+                .padding(start = 8.dp, end = 8.dp, top = 8.dp)
         )
 
         MapFloatingControls(
@@ -1322,7 +1342,8 @@ private fun RiderMapTopChrome(
             Row(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .padding(start = 150.dp, end = 0.dp),
+                    .padding(start = 0.dp, end = 0.dp),
+                horizontalArrangement = Arrangement.SpaceBetween,
                 verticalAlignment = Alignment.CenterVertically
             ) {
                 Surface(
@@ -1335,10 +1356,10 @@ private fun RiderMapTopChrome(
                         color = Color(0xFF8A35F2),
                         fontWeight = FontWeight.Black,
                         fontStyle = FontStyle.Italic,
-                        style = MaterialTheme.typography.titleMedium,
+                        style = MaterialTheme.typography.titleLarge,
                         maxLines = 1,
                         overflow = TextOverflow.Ellipsis,
-                        modifier = Modifier.padding(horizontal = 14.dp, vertical = 9.dp)
+                        modifier = Modifier.padding(horizontal = 15.dp, vertical = 9.dp)
                     )
                 }
 
@@ -1350,7 +1371,7 @@ private fun RiderMapTopChrome(
                     shadowElevation = 10.dp
                 ) {
                     Row(
-                        modifier = Modifier.padding(horizontal = 11.dp, vertical = 9.dp),
+                        modifier = Modifier.padding(horizontal = 13.dp, vertical = 9.dp),
                         verticalAlignment = Alignment.CenterVertically
                     ) {
                         Box(
@@ -1372,7 +1393,7 @@ private fun RiderMapTopChrome(
                             text = locationLabel,
                             color = Color(0xFF111827),
                             fontWeight = FontWeight.Black,
-                            style = MaterialTheme.typography.labelSmall,
+                            style = MaterialTheme.typography.labelMedium,
                             maxLines = 1,
                             overflow = TextOverflow.Ellipsis
                         )
@@ -1775,7 +1796,28 @@ private fun RideitBottomPanel(
 ) {
     Surface(
         modifier = Modifier
-            .fillMaxWidth(),
+            .fillMaxWidth()
+            .pointerInput(isPanelExpanded) {
+                var totalDrag = 0f
+
+                detectVerticalDragGestures(
+                    onDragStart = {
+                        totalDrag = 0f
+                    },
+                    onVerticalDrag = { _, dragAmount ->
+                        totalDrag += dragAmount
+                    },
+                    onDragEnd = {
+                        if (totalDrag < -42f && !isPanelExpanded) {
+                            onTogglePanelExpanded()
+                        }
+
+                        if (totalDrag > 42f && isPanelExpanded) {
+                            onTogglePanelExpanded()
+                        }
+                    }
+                )
+            },
         shape = RoundedCornerShape(
             topStart = 34.dp,
             topEnd = 34.dp,
@@ -1789,20 +1831,20 @@ private fun RideitBottomPanel(
         Column(
             modifier = Modifier
                 .fillMaxWidth()
-                .heightIn(max = if (isPanelExpanded) 620.dp else 96.dp)
-                .padding(start = 18.dp, end = 18.dp, top = 12.dp, bottom = 18.dp)
+                .heightIn(max = if (isPanelExpanded) 540.dp else 124.dp)
+                .padding(start = 18.dp, end = 18.dp, top = 10.dp, bottom = 14.dp)
         ) {
             Box(
                 modifier = Modifier
-                    .width(58.dp)
-                    .height(6.dp)
+                    .width(54.dp)
+                    .height(5.dp)
                     .clip(RoundedCornerShape(50))
                     .background(Color(0xFFC9CBD3))
                     .align(Alignment.CenterHorizontally)
                     .clickable { onTogglePanelExpanded() }
             )
 
-            Spacer(modifier = Modifier.height(12.dp))
+            Spacer(modifier = Modifier.height(8.dp))
 
             if (!isPanelExpanded) {
                 CollapsedRideSearchPanel(
@@ -1869,9 +1911,9 @@ private fun CollapsedRideSearchPanel(
     Surface(
         modifier = Modifier
             .fillMaxWidth()
-            .height(58.dp)
+            .height(72.dp)
             .clickable { onExpandClick() },
-        shape = RoundedCornerShape(22.dp),
+        shape = RoundedCornerShape(24.dp),
         color = Color(0xFFF8FAFC)
     ) {
         Row(
@@ -1880,25 +1922,35 @@ private fun CollapsedRideSearchPanel(
         ) {
             Box(
                 modifier = Modifier
-                    .size(10.dp)
+                    .size(42.dp)
                     .clip(CircleShape)
-                    .background(Color(0xFF22C55E))
-            )
+                    .background(Color(0xFF8A35F2).copy(alpha = 0.10f)),
+                contentAlignment = Alignment.Center
+            ) {
+                Text(
+                    text = "⌃",
+                    color = Color(0xFF8A35F2),
+                    fontWeight = FontWeight.Black,
+                    style = MaterialTheme.typography.titleMedium
+                )
+            }
 
-            Spacer(modifier = Modifier.width(10.dp))
+            Spacer(modifier = Modifier.width(12.dp))
 
             Column(modifier = Modifier.weight(1f)) {
                 Text(
-                    text = pickupText,
+                    text = dropoffText,
                     color = Color(0xFF111827),
-                    fontWeight = FontWeight.Bold,
-                    style = MaterialTheme.typography.bodySmall,
+                    fontWeight = FontWeight.Black,
+                    style = MaterialTheme.typography.bodyMedium,
                     maxLines = 1,
                     overflow = TextOverflow.Ellipsis
                 )
 
+                Spacer(modifier = Modifier.height(2.dp))
+
                 Text(
-                    text = dropoffText,
+                    text = pickupText,
                     color = Color(0xFF6B7280),
                     fontWeight = FontWeight.Medium,
                     style = MaterialTheme.typography.labelSmall,
@@ -1910,10 +1962,10 @@ private fun CollapsedRideSearchPanel(
             Spacer(modifier = Modifier.width(10.dp))
 
             Text(
-                text = "Expand",
+                text = "⌃",
                 color = Color(0xFF8A35F2),
                 fontWeight = FontWeight.Black,
-                style = MaterialTheme.typography.labelMedium
+                style = MaterialTheme.typography.titleLarge
             )
         }
     }
@@ -1932,10 +1984,10 @@ private fun SearchContent(
         text = "Where are you going?",
         fontWeight = FontWeight.Black,
         color = Color(0xFF111827),
-        style = MaterialTheme.typography.headlineSmall
+        style = MaterialTheme.typography.titleLarge
     )
 
-    Spacer(modifier = Modifier.height(18.dp))
+    Spacer(modifier = Modifier.height(12.dp))
 
     ModernLocationField(
         value = uiState.pickupText.ifBlank { "Current location" },
@@ -1945,7 +1997,7 @@ private fun SearchContent(
         onClick = { onPickupChanged(uiState.pickupText) }
     )
 
-    Spacer(modifier = Modifier.height(8.dp))
+    Spacer(modifier = Modifier.height(6.dp))
 
     Text(
         text = "⋮",
@@ -1954,7 +2006,7 @@ private fun SearchContent(
         modifier = Modifier.padding(start = 22.dp)
     )
 
-    Spacer(modifier = Modifier.height(8.dp))
+    Spacer(modifier = Modifier.height(6.dp))
 
     ModernEditableLocationField(
         value = uiState.dropoffText,
@@ -1995,7 +2047,7 @@ private fun SearchContent(
         }
     }
 
-    Spacer(modifier = Modifier.height(14.dp))
+    Spacer(modifier = Modifier.height(12.dp))
 
     Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
         Row(
@@ -2062,12 +2114,12 @@ private fun SearchContent(
         )
     }
 
-    Spacer(modifier = Modifier.height(16.dp))
+    Spacer(modifier = Modifier.height(12.dp))
 
     Surface(
         modifier = Modifier
             .fillMaxWidth()
-            .height(58.dp)
+            .height(54.dp)
             .clickable { onSearchClick() },
         shape = RoundedCornerShape(22.dp),
         color = Color.Transparent,
@@ -2107,7 +2159,7 @@ private fun ModernLocationField(
     Surface(
         modifier = Modifier
             .fillMaxWidth()
-            .height(54.dp)
+            .height(50.dp)
             .clickable { onClick() },
         shape = RoundedCornerShape(18.dp),
         color = Color.White,
@@ -2160,7 +2212,7 @@ private fun ModernEditableLocationField(
         onValueChange = onValueChange,
         modifier = Modifier
             .fillMaxWidth()
-            .height(58.dp),
+            .height(54.dp),
         placeholder = {
             Text(
                 text = "Where to?",
@@ -2204,7 +2256,7 @@ private fun QuickPlaceChip(
 ) {
     Surface(
         modifier = modifier
-            .height(38.dp)
+            .height(36.dp)
             .clickable { onClick() },
         shape = RoundedCornerShape(50),
         color = Color.White,
@@ -2540,57 +2592,96 @@ private fun CompactRideOptionCard(
     Surface(
         modifier = Modifier
             .fillMaxWidth()
-            .height(94.dp)
+            .height(98.dp)
             .clickable { onClick() }
             .border(
                 width = if (selected) 2.5.dp else 1.dp,
                 color = if (selected) mainColor else Color(0xFFE7E7E7),
-                shape = RoundedCornerShape(22.dp)
+                shape = RoundedCornerShape(24.dp)
             ),
-        shape = RoundedCornerShape(22.dp),
-        color = if (selected) lightColor else Color.White
+        shape = RoundedCornerShape(24.dp),
+        color = if (selected) lightColor else Color.White,
+        shadowElevation = if (selected) 8.dp else 0.dp,
+        tonalElevation = if (selected) 3.dp else 0.dp
     ) {
         Row(
-            modifier = Modifier.padding(12.dp),
+            modifier = Modifier.padding(horizontal = 12.dp, vertical = 11.dp),
             verticalAlignment = Alignment.CenterVertically
         ) {
-            VehicleDrawing(
-                color = if (selected) mainColor else Color(0xFFB8B8B8),
+            Surface(
                 modifier = Modifier
-                    .width(92.dp)
-                    .height(56.dp)
-            )
+                    .width(102.dp)
+                    .height(64.dp),
+                shape = RoundedCornerShape(22.dp),
+                color = if (selected) {
+                    Color.White.copy(alpha = 0.82f)
+                } else {
+                    Color(0xFFF8FAFC)
+                }
+            ) {
+                Box(
+                    modifier = Modifier.fillMaxSize(),
+                    contentAlignment = Alignment.Center
+                ) {
+                    ProfessionalVehicleIcon(
+                        rideTitle = option.title,
+                        accentColor = if (selected) mainColor else Color(0xFF6B7280),
+                        selected = selected,
+                        modifier = Modifier
+                            .width(88.dp)
+                            .height(46.dp)
+                    )
+                }
+            }
 
-            Spacer(modifier = Modifier.width(12.dp))
+            Spacer(modifier = Modifier.width(13.dp))
 
             Column(modifier = Modifier.weight(1f)) {
                 Text(
                     text = option.title,
-                    fontWeight = FontWeight.Bold,
-                    color = if (selected) mainColor else Color.Black
+                    fontWeight = FontWeight.Black,
+                    color = if (selected) mainColor else Color(0xFF111827),
+                    style = MaterialTheme.typography.titleSmall,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis
                 )
+
+                Spacer(modifier = Modifier.height(2.dp))
 
                 Text(
                     text = option.subtitle,
-                    color = Color.Gray,
-                    maxLines = 1
+                    color = Color(0xFF6B7280),
+                    fontWeight = FontWeight.Medium,
+                    style = MaterialTheme.typography.bodySmall,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis
                 )
+
+                Spacer(modifier = Modifier.height(4.dp))
 
                 Text(
                     text = "⏱ ${option.estimatedTime} • 👤 ${seatsForRide(option.title)} seats",
-                    color = Color.Gray
+                    color = Color(0xFF6B7280),
+                    fontWeight = FontWeight.Medium,
+                    style = MaterialTheme.typography.labelMedium,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis
                 )
             }
+
+            Spacer(modifier = Modifier.width(8.dp))
 
             Column(horizontalAlignment = Alignment.End) {
                 Text(
                     text = option.estimatedFare,
-                    fontWeight = FontWeight.Bold,
-                    color = if (selected) mainColor else Color.Black
+                    fontWeight = FontWeight.Black,
+                    color = if (selected) mainColor else Color(0xFF111827),
+                    style = MaterialTheme.typography.titleSmall,
+                    maxLines = 1
                 )
 
                 if (selected) {
-                    Spacer(modifier = Modifier.height(6.dp))
+                    Spacer(modifier = Modifier.height(8.dp))
 
                     Box(
                         modifier = Modifier
@@ -2599,7 +2690,12 @@ private fun CompactRideOptionCard(
                             .background(mainColor),
                         contentAlignment = Alignment.Center
                     ) {
-                        Text("✓", color = Color.White)
+                        Text(
+                            text = "✓",
+                            color = Color.White,
+                            fontWeight = FontWeight.Black,
+                            style = MaterialTheme.typography.labelMedium
+                        )
                     }
                 }
             }
@@ -2608,38 +2704,172 @@ private fun CompactRideOptionCard(
 }
 
 @Composable
-private fun VehicleDrawing(
-    color: Color,
+private fun ProfessionalVehicleIcon(
+    rideTitle: String,
+    accentColor: Color,
+    selected: Boolean,
     modifier: Modifier
 ) {
     Canvas(modifier = modifier) {
         val w = size.width
         val h = size.height
 
-        drawRoundRect(
-            color = color,
-            topLeft = Offset(w * 0.12f, h * 0.40f),
-            size = Size(w * 0.74f, h * 0.25f),
-            cornerRadius = CornerRadius(12f, 12f)
-        )
+        val bodyColor = if (selected) accentColor else Color(0xFF9CA3AF)
+        val roofColor = if (selected) accentColor.copy(alpha = 0.92f) else Color(0xFF6B7280)
+        val glassColor = Color(0xFFEFF6FF)
+        val wheelColor = Color(0xFF111827)
+        val wheelInnerColor = if (selected) accentColor.copy(alpha = 0.88f) else Color(0xFFD1D5DB)
+        val highlightColor = Color.White.copy(alpha = if (selected) 0.72f else 0.55f)
 
         drawRoundRect(
-            color = color,
-            topLeft = Offset(w * 0.30f, h * 0.24f),
-            size = Size(w * 0.36f, h * 0.25f),
-            cornerRadius = CornerRadius(14f, 14f)
+            color = Color.Black.copy(alpha = 0.08f),
+            topLeft = Offset(w * 0.10f, h * 0.73f),
+            size = Size(w * 0.78f, h * 0.10f),
+            cornerRadius = CornerRadius(h * 0.06f, h * 0.06f)
         )
+
+        when (rideTitle.lowercase()) {
+            "business" -> {
+                drawRoundRect(
+                    color = bodyColor,
+                    topLeft = Offset(w * 0.08f, h * 0.42f),
+                    size = Size(w * 0.84f, h * 0.25f),
+                    cornerRadius = CornerRadius(h * 0.07f, h * 0.07f)
+                )
+
+                drawRoundRect(
+                    color = roofColor,
+                    topLeft = Offset(w * 0.24f, h * 0.25f),
+                    size = Size(w * 0.43f, h * 0.24f),
+                    cornerRadius = CornerRadius(h * 0.08f, h * 0.08f)
+                )
+
+                drawRoundRect(
+                    color = glassColor,
+                    topLeft = Offset(w * 0.31f, h * 0.30f),
+                    size = Size(w * 0.13f, h * 0.12f),
+                    cornerRadius = CornerRadius(h * 0.03f, h * 0.03f)
+                )
+
+                drawRoundRect(
+                    color = glassColor,
+                    topLeft = Offset(w * 0.47f, h * 0.30f),
+                    size = Size(w * 0.15f, h * 0.12f),
+                    cornerRadius = CornerRadius(h * 0.03f, h * 0.03f)
+                )
+
+                drawRoundRect(
+                    color = highlightColor,
+                    topLeft = Offset(w * 0.15f, h * 0.46f),
+                    size = Size(w * 0.52f, h * 0.035f),
+                    cornerRadius = CornerRadius(h * 0.02f, h * 0.02f)
+                )
+            }
+
+            "comfort" -> {
+                drawRoundRect(
+                    color = bodyColor,
+                    topLeft = Offset(w * 0.09f, h * 0.44f),
+                    size = Size(w * 0.82f, h * 0.24f),
+                    cornerRadius = CornerRadius(h * 0.10f, h * 0.10f)
+                )
+
+                drawRoundRect(
+                    color = roofColor,
+                    topLeft = Offset(w * 0.27f, h * 0.25f),
+                    size = Size(w * 0.40f, h * 0.26f),
+                    cornerRadius = CornerRadius(h * 0.10f, h * 0.10f)
+                )
+
+                drawRoundRect(
+                    color = glassColor,
+                    topLeft = Offset(w * 0.34f, h * 0.31f),
+                    size = Size(w * 0.11f, h * 0.12f),
+                    cornerRadius = CornerRadius(h * 0.03f, h * 0.03f)
+                )
+
+                drawRoundRect(
+                    color = glassColor,
+                    topLeft = Offset(w * 0.48f, h * 0.31f),
+                    size = Size(w * 0.13f, h * 0.12f),
+                    cornerRadius = CornerRadius(h * 0.03f, h * 0.03f)
+                )
+
+                drawRoundRect(
+                    color = highlightColor,
+                    topLeft = Offset(w * 0.17f, h * 0.49f),
+                    size = Size(w * 0.44f, h * 0.035f),
+                    cornerRadius = CornerRadius(h * 0.02f, h * 0.02f)
+                )
+            }
+
+            else -> {
+                drawRoundRect(
+                    color = bodyColor,
+                    topLeft = Offset(w * 0.12f, h * 0.46f),
+                    size = Size(w * 0.76f, h * 0.23f),
+                    cornerRadius = CornerRadius(h * 0.11f, h * 0.11f)
+                )
+
+                drawRoundRect(
+                    color = roofColor,
+                    topLeft = Offset(w * 0.31f, h * 0.28f),
+                    size = Size(w * 0.32f, h * 0.24f),
+                    cornerRadius = CornerRadius(h * 0.10f, h * 0.10f)
+                )
+
+                drawRoundRect(
+                    color = glassColor,
+                    topLeft = Offset(w * 0.37f, h * 0.33f),
+                    size = Size(w * 0.20f, h * 0.12f),
+                    cornerRadius = CornerRadius(h * 0.03f, h * 0.03f)
+                )
+
+                drawRoundRect(
+                    color = highlightColor,
+                    topLeft = Offset(w * 0.20f, h * 0.51f),
+                    size = Size(w * 0.35f, h * 0.035f),
+                    cornerRadius = CornerRadius(h * 0.02f, h * 0.02f)
+                )
+            }
+        }
 
         drawCircle(
-            color = Color(0xFF29245C),
+            color = wheelColor,
             radius = h * 0.13f,
             center = Offset(w * 0.28f, h * 0.69f)
         )
 
         drawCircle(
-            color = Color(0xFF29245C),
+            color = wheelColor,
             radius = h * 0.13f,
-            center = Offset(w * 0.70f, h * 0.69f)
+            center = Offset(w * 0.72f, h * 0.69f)
+        )
+
+        drawCircle(
+            color = wheelInnerColor,
+            radius = h * 0.065f,
+            center = Offset(w * 0.28f, h * 0.69f)
+        )
+
+        drawCircle(
+            color = wheelInnerColor,
+            radius = h * 0.065f,
+            center = Offset(w * 0.72f, h * 0.69f)
+        )
+
+        drawRoundRect(
+            color = Color.White.copy(alpha = 0.55f),
+            topLeft = Offset(w * 0.80f, h * 0.49f),
+            size = Size(w * 0.06f, h * 0.035f),
+            cornerRadius = CornerRadius(h * 0.02f, h * 0.02f)
+        )
+
+        drawRoundRect(
+            color = Color(0xFFFFF7CC),
+            topLeft = Offset(w * 0.12f, h * 0.51f),
+            size = Size(w * 0.045f, h * 0.032f),
+            cornerRadius = CornerRadius(h * 0.02f, h * 0.02f)
         )
     }
 }

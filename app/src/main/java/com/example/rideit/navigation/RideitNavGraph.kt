@@ -406,12 +406,13 @@ private fun RiderMapWithDrawer(
             MapScreen()
 
             DrawerMenuButton(
+                compact = true,
                 onClick = {
                     scope.launch { drawerState.open() }
                 },
                 modifier = Modifier
                     .align(Alignment.TopStart)
-                    .padding(top = 8.dp, start = 8.dp)
+                    .padding(top = 76.dp, start = 12.dp)
             )
         }
     }
@@ -465,6 +466,7 @@ private fun DriverHomeWithDrawer(
             DriverHomeScreen()
 
             DrawerMenuButton(
+                compact = false,
                 onClick = {
                     scope.launch { drawerState.open() }
                 },
@@ -479,16 +481,17 @@ private fun DriverHomeWithDrawer(
 @Composable
 private fun DrawerMenuButton(
     onClick: () -> Unit,
-    modifier: Modifier = Modifier
+    modifier: Modifier = Modifier,
+    compact: Boolean = false
 ) {
     Surface(
         modifier = modifier
-            .size(50.dp)
+            .size(if (compact) 46.dp else 50.dp)
             .clickable { onClick() },
-        shape = RoundedCornerShape(18.dp),
-        color = Color(0xFF111827),
-        shadowElevation = 12.dp,
-        tonalElevation = 6.dp
+        shape = RoundedCornerShape(if (compact) 16.dp else 18.dp),
+        color = Color(0xFF111827).copy(alpha = if (compact) 0.96f else 1f),
+        shadowElevation = if (compact) 10.dp else 12.dp,
+        tonalElevation = if (compact) 5.dp else 6.dp
     ) {
         Box(
             contentAlignment = Alignment.Center
@@ -497,7 +500,11 @@ private fun DrawerMenuButton(
                 text = "☰",
                 color = Color.White,
                 fontWeight = FontWeight.Black,
-                style = MaterialTheme.typography.titleLarge
+                style = if (compact) {
+                    MaterialTheme.typography.titleMedium
+                } else {
+                    MaterialTheme.typography.titleLarge
+                }
             )
         }
     }

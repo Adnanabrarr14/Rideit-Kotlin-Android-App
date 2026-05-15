@@ -3994,3 +3994,14 @@ Continue with Phase 8.21.12.6.3.3:
 - Driver Home earnings alignment with Driver Wallet.
 - Make Today, Week, Trips, Rating, and Completed earnings match wallet values exactly.
 - Ensure cancelled/declined trips do not count as earnings.
+
+### Phase 8.21.12.6.3.6 — Rider Map Top Header/Menu Polish
+- Rider Map top header polished safely.
+- RideIt logo repositioned professionally.
+- Current area pill adjusted to the right side.
+- Rider drawer/menu button returned to the left side.
+- Rider drawer/menu spacing adjusted under the RideIt logo.
+- Bottom swipe panel preserved and still working.
+- Firebase booking, driver accept/start/complete, rider rating/feedback, receipt, and wallet/history logic were not changed.
+- Fixed accidental file paste issue where RideitNavGraph code was pasted into MapScreen; restored both files correctly.
+- Current app remains stable and working.
