@@ -68,6 +68,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import com.example.rideit.FirebaseManager
+import com.example.rideit.RideitNotificationCenter
 import com.google.firebase.Timestamp
 import com.google.firebase.firestore.DocumentSnapshot
 import com.google.firebase.firestore.FirebaseFirestore
@@ -138,6 +139,18 @@ fun DriverHomeScreen(
     val scope = rememberCoroutineScope()
     val firestore = remember { FirebaseFirestore.getInstance() }
     val driverId = remember { FirebaseManager.currentUserId().orEmpty() }
+    var rideAlertsEnabled by remember { mutableStateOf(true) }
+    var lastRideAlertSnackbarKey by remember { mutableStateOf<String?>(null) }
+
+    fun showRideAlertSnackbar(key: String, message: String) {
+        if (!rideAlertsEnabled || lastRideAlertSnackbarKey == key) return
+
+        lastRideAlertSnackbarKey = key
+
+        scope.launch {
+            snackbarHostState.showSnackbar(message)
+        }
+    }
 
     fun resetRideRequestUi() {
         pendingRideRequest = null
@@ -294,9 +307,19 @@ fun DriverHomeScreen(
                                 "No new ride request found. Ask rider to book a ride, then tap Check."
                             }
                     } else {
-                        pendingRideRequest = requestDocument.toPendingRideRequestSafely()
+                        val request = requestDocument.toPendingRideRequestSafely()
+                        pendingRideRequest = request
                         showRideRequest = true
                         firebaseStatusText = "New ride request found. Accept or decline this new request."
+
+                        RideitNotificationCenter.notifyNewDriverRequest(
+                            driverId = driverId,
+                            rideRequestId = request.requestId
+                        )
+                        showRideAlertSnackbar(
+                            key = "${request.requestId}:driver_new_request",
+                            message = "New ride request found."
+                        )
                     }
                 } catch (exception: Exception) {
                     pendingRideRequest = null
@@ -325,6 +348,21 @@ fun DriverHomeScreen(
 
     LaunchedEffect(driverId) {
         loadActiveDriverTrip()
+    }
+
+    DisposableEffect(driverId) {
+        val settingsRegistration = RideitNotificationCenter.listenToCurrentUserRideAlertsEnabled(
+            onChange = { enabled ->
+                rideAlertsEnabled = enabled
+            },
+            onError = {
+                rideAlertsEnabled = true
+            }
+        )
+
+        onDispose {
+            settingsRegistration?.remove()
+        }
     }
 
     DisposableEffect(driverId) {
@@ -629,6 +667,11 @@ fun DriverHomeScreen(
                                     activeTripPickup = request.pickup
                                     activeTripDropoff = request.dropoff
                                     firebaseStatusText = "Ride accepted. Opening active trip..."
+                                    RideitNotificationCenter.notifyDriverAccepted(request.requestId)
+                                    showRideAlertSnackbar(
+                                        key = "${request.requestId}:driver_accepted_confirmation",
+                                        message = "Ride accepted."
+                                    )
                                     activeDestination = DriverHomeDestination.ActiveTrip
                                 }
                                 .addOnFailureListener { exception ->
@@ -664,10 +707,12 @@ fun DriverHomeScreen(
                                     showRideRequest = false
                                     pendingRideRequest = null
                                     firebaseStatusText = "Ride declined. Tap Check for another request."
+                                    RideitNotificationCenter.notifyRideDeclined(request.requestId)
 
-                                    scope.launch {
-                                        snackbarHostState.showSnackbar("Ride request declined.")
-                                    }
+                                    showRideAlertSnackbar(
+                                        key = "${request.requestId}:driver_declined",
+                                        message = "Ride request declined."
+                                    )
                                 }
                                 .addOnFailureListener { exception ->
                                     isRideActionLoading = false

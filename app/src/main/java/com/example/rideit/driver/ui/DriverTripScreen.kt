@@ -33,6 +33,7 @@ import androidx.compose.material3.SnackbarHostState
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
@@ -49,6 +50,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import com.example.rideit.FirebaseManager
+import com.example.rideit.RideitNotificationCenter
 import com.google.android.gms.maps.CameraUpdateFactory
 import com.google.android.gms.maps.model.BitmapDescriptorFactory
 import com.google.android.gms.maps.model.CameraPosition
@@ -96,6 +98,33 @@ fun DriverTripScreen(
     val snackbarHostState = remember { SnackbarHostState() }
     val scope = rememberCoroutineScope()
     val firestore = remember { FirebaseFirestore.getInstance() }
+    var rideAlertsEnabled by remember { mutableStateOf(true) }
+    var lastRideAlertSnackbarKey by remember { mutableStateOf<String?>(null) }
+
+    fun showRideAlertSnackbar(key: String, message: String) {
+        if (!rideAlertsEnabled || lastRideAlertSnackbarKey == key) return
+
+        lastRideAlertSnackbarKey = key
+
+        scope.launch {
+            snackbarHostState.showSnackbar(message)
+        }
+    }
+
+    DisposableEffect(Unit) {
+        val settingsRegistration = RideitNotificationCenter.listenToCurrentUserRideAlertsEnabled(
+            onChange = { enabled ->
+                rideAlertsEnabled = enabled
+            },
+            onError = {
+                rideAlertsEnabled = true
+            }
+        )
+
+        onDispose {
+            settingsRegistration?.remove()
+        }
+    }
 
     LaunchedEffect(rideRequestId) {
         val requestId = rideRequestId
@@ -223,9 +252,15 @@ fun DriverTripScreen(
                 firebaseTripMessage = successMessage
                 firebaseTripError = null
 
-                scope.launch {
-                    snackbarHostState.showSnackbar(snackbarMessage)
+                when (status) {
+                    "driver_arriving" -> RideitNotificationCenter.notifyDriverArrived(requestId)
+                    "ride_started" -> RideitNotificationCenter.notifyRideStarted(requestId)
                 }
+
+                showRideAlertSnackbar(
+                    key = "$requestId:$status",
+                    message = snackbarMessage
+                )
             }
             .addOnFailureListener { exception ->
                 isFirebaseActionLoading = false
@@ -384,9 +419,10 @@ fun DriverTripScreen(
                                     firebaseTripMessage = "Trip completed successfully in Firebase."
                                     firebaseTripError = null
 
-                                    scope.launch {
-                                        snackbarHostState.showSnackbar("Trip completed in Firebase.")
-                                    }
+                                    showRideAlertSnackbar(
+                                        key = "$requestId:completed",
+                                        message = "Trip completed in Firebase."
+                                    )
                                 },
                                 onError = { error ->
                                     isFirebaseActionLoading = false
@@ -429,6 +465,10 @@ fun DriverTripScreen(
                             tripCancelledSafely = true
                             firebaseTripMessage = "Trip cancelled safely. Tap Back to Driver Home."
                             firebaseTripError = null
+                            showRideAlertSnackbar(
+                                key = "$requestId:cancelled_by_driver",
+                                message = "Trip cancelled safely."
+                            )
                         },
                         onError = { error ->
                             isFirebaseActionLoading = false

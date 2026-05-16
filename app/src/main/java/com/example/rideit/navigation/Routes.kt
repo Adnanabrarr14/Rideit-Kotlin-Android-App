@@ -21,5 +21,6 @@ object Routes {
 
     const val DRIVER_PROFILE = "driver_profile"
     const val DRIVER_WALLET = "driver_wallet"
+    const val DRIVER_NOTIFICATIONS = "driver_notifications"
     const val DRIVER_SETTINGS = "driver_settings"
 }

@@ -73,6 +73,7 @@ import androidx.compose.ui.unit.dp
 import androidx.core.content.ContextCompat
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.example.rideit.FirebaseManager
+import com.example.rideit.RideitNotificationCenter
 import com.example.rideit.map.model.LocationSuggestion
 import com.example.rideit.map.model.MapUiState
 import com.example.rideit.map.model.RideOption
@@ -140,6 +141,8 @@ fun MapScreen(
     val firestore = remember { FirebaseFirestore.getInstance() }
     val scope = rememberCoroutineScope()
     val snackbarHostState = remember { SnackbarHostState() }
+    var rideAlertsEnabled by remember { mutableStateOf(true) }
+    var lastRideAlertSnackbarKey by remember { mutableStateOf<String?>(null) }
     val context = LocalContext.current
     val fusedLocationClient = remember { LocationServices.getFusedLocationProviderClient(context) }
     val settingsClient = remember { LocationServices.getSettingsClient(context) }
@@ -148,6 +151,31 @@ fun MapScreen(
 
     val cameraPositionState = rememberCameraPositionState {
         position = CameraPosition.fromLatLngZoom(defaultLocation, 14f)
+    }
+
+    fun showRideAlertSnackbar(key: String, message: String) {
+        if (!rideAlertsEnabled || lastRideAlertSnackbarKey == key) return
+
+        lastRideAlertSnackbarKey = key
+
+        scope.launch {
+            snackbarHostState.showSnackbar(message)
+        }
+    }
+
+    DisposableEffect(Unit) {
+        val settingsRegistration = RideitNotificationCenter.listenToCurrentUserRideAlertsEnabled(
+            onChange = { enabled ->
+                rideAlertsEnabled = enabled
+            },
+            onError = {
+                rideAlertsEnabled = true
+            }
+        )
+
+        onDispose {
+            settingsRegistration?.remove()
+        }
     }
 
     fun moveToDetectedLocation(location: LatLng, message: String) {
@@ -490,6 +518,10 @@ fun MapScreen(
                             firebaseRideMessage = "${driverName ?: "Your driver"} accepted your ride."
                             firebaseRideError = null
                             showPanel = false
+                            showRideAlertSnackbar(
+                                key = "$requestId:accepted",
+                                message = "Driver accepted your ride."
+                            )
                         }
 
                         "driver_arriving" -> {
@@ -500,6 +532,10 @@ fun MapScreen(
                             firebaseRideMessage = "${driverName ?: firebaseDriverName ?: "Your driver"} arrived at pickup."
                             firebaseRideError = null
                             showPanel = false
+                            showRideAlertSnackbar(
+                                key = "$requestId:driver_arriving",
+                                message = "Driver arrived at pickup."
+                            )
                         }
 
                         "ride_started" -> {
@@ -510,6 +546,10 @@ fun MapScreen(
                             firebaseRideMessage = "Trip in progress. Enjoy your Rideit ride."
                             firebaseRideError = null
                             showPanel = false
+                            showRideAlertSnackbar(
+                                key = "$requestId:ride_started",
+                                message = "Trip started."
+                            )
                         }
 
                         "completed", "trip_completed", "completed_by_driver", "ride_completed" -> {
@@ -525,6 +565,10 @@ fun MapScreen(
                             showPanel = false
                             showRideCompletionSheet = true
                             showReceiptPreviewSheet = false
+                            showRideAlertSnackbar(
+                                key = "$requestId:completed",
+                                message = "Trip completed. Please rate your driver."
+                            )
                         }
 
                         "cancelled_by_driver" -> {
@@ -541,6 +585,10 @@ fun MapScreen(
                             showPanel = true
                             showRideCompletionSheet = false
                             showReceiptPreviewSheet = false
+                            showRideAlertSnackbar(
+                                key = "$requestId:cancelled_by_driver",
+                                message = "Driver cancelled the trip."
+                            )
                         }
 
                         "declined" -> {
@@ -555,6 +603,10 @@ fun MapScreen(
                             firebaseLiveTripStatus = "declined"
                             mapViewModel.onCancelRideClicked()
                             showPanel = true
+                            showRideAlertSnackbar(
+                                key = "$requestId:declined",
+                                message = "Ride request declined."
+                            )
                         }
 
                         "cancelled_by_rider" -> {
@@ -569,6 +621,10 @@ fun MapScreen(
                             firebaseLiveTripStatus = "cancelled_by_rider"
                             mapViewModel.onCancelRideClicked()
                             showPanel = true
+                            showRideAlertSnackbar(
+                                key = "$requestId:cancelled_by_rider",
+                                message = "Ride cancelled successfully."
+                            )
                         }
 
                         "pending", "requested", "searching", "searching_driver", "waiting", "waiting_for_driver" -> {
@@ -578,6 +634,10 @@ fun MapScreen(
                             firebaseDriverEmail = null
                             firebaseRideMessage = "Ride request saved. Waiting for a driver to accept."
                             firebaseRideError = null
+                            showRideAlertSnackbar(
+                                key = "$requestId:pending",
+                                message = "Ride request saved. Finding your driver."
+                            )
                         }
 
                         else -> {
@@ -909,9 +969,10 @@ fun MapScreen(
                 mapViewModel.onCancelRideClicked()
                 showPanel = true
 
-                scope.launch {
-                    snackbarHostState.showSnackbar("Ride cancelled successfully.")
-                }
+                showRideAlertSnackbar(
+                    key = "$requestId:cancelled_by_rider",
+                    message = "Ride cancelled successfully."
+                )
             },
             onError = { error ->
                 isCancellingRideRequest = false
@@ -1198,6 +1259,10 @@ fun MapScreen(
                             firebaseLiveTripStatus = "pending"
                             firebaseRideMessage = "Ride request saved. Waiting for a driver to accept."
                             mapViewModel.onConfirmRideClicked()
+                            showRideAlertSnackbar(
+                                key = "$requestId:pending",
+                                message = "Ride request saved. Finding your driver."
+                            )
                         },
                         onError = { error ->
                             isSavingRideRequest = false

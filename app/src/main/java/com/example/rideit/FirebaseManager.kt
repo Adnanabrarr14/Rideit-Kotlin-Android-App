@@ -784,7 +784,16 @@ object FirebaseManager {
 
         requestRef
             .set(requestData)
-            .addOnSuccessListener { onSuccess(requestRef.id) }
+            .addOnSuccessListener {
+                RideitNotificationCenter.notifyRideRequestCreated(
+                    rideRequestId = requestRef.id,
+                    riderId = currentUserUid,
+                    pickupAddress = cleanPickup,
+                    dropoffAddress = cleanDropoff,
+                    rideType = cleanRideType
+                )
+                onSuccess(requestRef.id)
+            }
             .addOnFailureListener { exception ->
                 onError(exception.message ?: "Failed to save ride request.")
             }
@@ -914,7 +923,10 @@ object FirebaseManager {
                     "updatedAt" to Timestamp.now()
                 )
             )
-            .addOnSuccessListener { onSuccess() }
+            .addOnSuccessListener {
+                RideitNotificationCenter.notifyRideCancelledByRider(requestId)
+                onSuccess()
+            }
             .addOnFailureListener { exception ->
                 onError(exception.message ?: "Failed to cancel ride request.")
             }
@@ -1003,7 +1015,10 @@ object FirebaseManager {
                         ),
                         SetOptions.merge()
                     )
-                    .addOnSuccessListener { onSuccess() }
+                    .addOnSuccessListener {
+                        RideitNotificationCenter.notifyRideCompleted(requestId)
+                        onSuccess()
+                    }
                     .addOnFailureListener { exception ->
                         onError(exception.message ?: "Failed to complete trip.")
                     }
@@ -1043,7 +1058,10 @@ object FirebaseManager {
                     "updatedAt" to Timestamp.now()
                 )
             )
-            .addOnSuccessListener { onSuccess() }
+            .addOnSuccessListener {
+                RideitNotificationCenter.notifyRideCancelledByDriver(requestId)
+                onSuccess()
+            }
             .addOnFailureListener { exception ->
                 onError(exception.message ?: "Failed to cancel trip.")
             }

@@ -25,6 +25,7 @@ import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.rememberDrawerState
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -44,6 +45,7 @@ import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
 import androidx.navigation.compose.rememberNavController
 import com.example.rideit.FirebaseManager
+import com.example.rideit.RideitNotificationCenter
 import com.example.rideit.driver.ui.DriverHomeScreen
 import com.example.rideit.driver.ui.DriverWalletScreen
 import com.example.rideit.map.ui.MapScreen
@@ -336,6 +338,18 @@ fun RideitNavGraph(
             )
         }
 
+        composable(Routes.DRIVER_NOTIFICATIONS) {
+            BackHandler {
+                returnFromDriverDrawerRoute(Routes.DRIVER_NOTIFICATIONS)
+            }
+
+            NotificationsScreen(
+                onBackClick = {
+                    returnFromDriverDrawerRoute(Routes.DRIVER_NOTIFICATIONS)
+                }
+            )
+        }
+
         composable(Routes.DRIVER_SETTINGS) {
             BackHandler {
                 returnFromDriverDrawerRoute(Routes.DRIVER_SETTINGS)
@@ -393,6 +407,7 @@ private fun RiderMapWithDrawer(
     val drawerState = rememberDrawerState(initialValue = DrawerValue.Closed)
     val scope = rememberCoroutineScope()
     val riderName = FirebaseManager.currentRiderDisplayName()
+    val notificationBadgeCount = rememberVisibleNotificationBadgeCount()
 
     LaunchedEffect(openDrawerAfterReturn) {
         if (openDrawerAfterReturn) {
@@ -414,6 +429,7 @@ private fun RiderMapWithDrawer(
         drawerContent = {
             RiderDrawer(
                 riderName = riderName,
+                notificationBadgeCount = notificationBadgeCount,
                 onRiderHomeClick = {
                     scope.launch { drawerState.close() }
                     navController.navigate(Routes.MAP) {
@@ -471,6 +487,7 @@ private fun DriverHomeWithDrawer(
     val drawerState = rememberDrawerState(initialValue = DrawerValue.Closed)
     val scope = rememberCoroutineScope()
     val driverName = FirebaseManager.currentDriverDisplayName()
+    val notificationBadgeCount = rememberVisibleNotificationBadgeCount()
 
     LaunchedEffect(openDrawerAfterReturn) {
         if (openDrawerAfterReturn) {
@@ -492,6 +509,7 @@ private fun DriverHomeWithDrawer(
         drawerContent = {
             DriverDrawer(
                 driverName = driverName,
+                notificationBadgeCount = notificationBadgeCount,
                 onDriverHomeClick = {
                     scope.launch { drawerState.close() }
                     navController.navigate(Routes.DRIVER_HOME) {
@@ -503,6 +521,9 @@ private fun DriverHomeWithDrawer(
                 },
                 onWalletClick = {
                     navigateToDrawerDestination(Routes.DRIVER_WALLET)
+                },
+                onNotificationsClick = {
+                    navigateToDrawerDestination(Routes.DRIVER_NOTIFICATIONS)
                 },
                 onSettingsClick = {
                     navigateToDrawerDestination(Routes.DRIVER_SETTINGS)
@@ -528,6 +549,39 @@ private fun DriverHomeWithDrawer(
             )
         }
     }
+}
+
+@Composable
+private fun rememberVisibleNotificationBadgeCount(): Int {
+    var unreadCount by remember { mutableStateOf(0) }
+    var rideAlertsEnabled by remember { mutableStateOf(true) }
+
+    DisposableEffect(Unit) {
+        val countRegistration = RideitNotificationCenter.listenToCurrentUserUnreadCount(
+            onChange = { count ->
+                unreadCount = count
+            },
+            onError = {
+                unreadCount = 0
+            }
+        )
+
+        val settingsRegistration = RideitNotificationCenter.listenToCurrentUserRideAlertsEnabled(
+            onChange = { enabled ->
+                rideAlertsEnabled = enabled
+            },
+            onError = {
+                rideAlertsEnabled = true
+            }
+        )
+
+        onDispose {
+            countRegistration?.remove()
+            settingsRegistration?.remove()
+        }
+    }
+
+    return if (rideAlertsEnabled) unreadCount else 0
 }
 
 @Composable
@@ -565,6 +619,7 @@ private fun DrawerMenuButton(
 @Composable
 private fun RiderDrawer(
     riderName: String,
+    notificationBadgeCount: Int,
     onRiderHomeClick: () -> Unit,
     onProfileClick: () -> Unit,
     onTripHistoryClick: () -> Unit,
@@ -645,8 +700,9 @@ private fun RiderDrawer(
             DrawerItem(
                 icon = "🔔",
                 title = "Notifications",
-                subtitle = "Alerts, offers and promos",
+                subtitle = "Ride and trip alerts",
                 selected = false,
+                badgeCount = notificationBadgeCount,
                 onClick = onNotificationsClick
             )
 
@@ -668,9 +724,11 @@ private fun RiderDrawer(
 @Composable
 private fun DriverDrawer(
     driverName: String,
+    notificationBadgeCount: Int,
     onDriverHomeClick: () -> Unit,
     onProfileClick: () -> Unit,
     onWalletClick: () -> Unit,
+    onNotificationsClick: () -> Unit,
     onSettingsClick: () -> Unit,
     onLogout: () -> Unit
 ) {
@@ -724,6 +782,15 @@ private fun DriverDrawer(
                 subtitle = "Earnings and demo payout",
                 selected = false,
                 onClick = onWalletClick
+            )
+
+            DrawerItem(
+                icon = "N",
+                title = "Notifications",
+                subtitle = "Ride and trip alerts",
+                selected = false,
+                badgeCount = notificationBadgeCount,
+                onClick = onNotificationsClick
             )
 
             DrawerItem(
@@ -815,6 +882,7 @@ private fun DrawerItem(
     title: String,
     subtitle: String,
     selected: Boolean,
+    badgeCount: Int = 0,
     onClick: () -> Unit
 ) {
     val backgroundColor = if (selected) {
@@ -872,7 +940,20 @@ private fun DrawerItem(
                 )
             }
 
-            if (selected) {
+            if (badgeCount > 0) {
+                Surface(
+                    shape = RoundedCornerShape(50),
+                    color = Color(0xFF8A35F2)
+                ) {
+                    Text(
+                        text = if (badgeCount > 99) "99+" else badgeCount.toString(),
+                        modifier = Modifier.padding(horizontal = 9.dp, vertical = 5.dp),
+                        color = Color.White,
+                        fontWeight = FontWeight.Black,
+                        style = MaterialTheme.typography.labelSmall
+                    )
+                }
+            } else if (selected) {
                 Text(
                     text = "✓",
                     color = Color(0xFF22C55E),
