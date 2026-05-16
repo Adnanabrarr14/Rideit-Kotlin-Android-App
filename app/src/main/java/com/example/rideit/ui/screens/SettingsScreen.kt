@@ -74,7 +74,6 @@ fun SettingsScreen(
 
     var isLoading by rememberSaveable { mutableStateOf(true) }
     var isSaving by rememberSaveable { mutableStateOf(false) }
-    var statusMessage by rememberSaveable { mutableStateOf("Loading settings...") }
 
     var activePicker by rememberSaveable { mutableStateOf<String?>(null) }
 
@@ -138,19 +137,16 @@ fun SettingsScreen(
         themeMode: String = selectedThemeMode,
         rideAlerts: Boolean = rideAlertsEnabled,
         promoAlerts: Boolean = promoAlertsEnabled,
-        locationAccess: Boolean = locationEnabled,
-        successMessage: String = "Settings saved"
+        locationAccess: Boolean = locationEnabled
     ) {
         val currentUser = auth.currentUser
 
         if (currentUser == null) {
             isSaving = false
-            statusMessage = "Please login again to save settings."
             return
         }
 
         isSaving = true
-        statusMessage = "Saving settings..."
 
         val safeThemeMode = when (themeMode.trim().lowercase()) {
             FirebaseManager.THEME_LIGHT -> FirebaseManager.THEME_LIGHT
@@ -181,11 +177,9 @@ fun SettingsScreen(
                 promoAlertsEnabled = promoAlerts
                 locationEnabled = locationAccess
                 isSaving = false
-                statusMessage = successMessage
             }
-            .addOnFailureListener { exception ->
+            .addOnFailureListener {
                 isSaving = false
-                statusMessage = exception.message ?: "Failed to save settings."
             }
     }
 
@@ -194,7 +188,6 @@ fun SettingsScreen(
 
         if (currentUser == null) {
             isLoading = false
-            statusMessage = "Please login again to load settings."
             return@LaunchedEffect
         }
 
@@ -221,11 +214,9 @@ fun SettingsScreen(
                 locationEnabled = snapshot.getBoolean("locationPreferenceEnabled") ?: true
 
                 isLoading = false
-                statusMessage = "Settings loaded"
             }
-            .addOnFailureListener { exception ->
+            .addOnFailureListener {
                 isLoading = false
-                statusMessage = exception.message ?: "Failed to load settings."
             }
     }
 
@@ -304,14 +295,6 @@ fun SettingsScreen(
                 titleColor = textColor,
                 subtitleColor = subTextColor,
                 onBackClick = onBackClick
-            )
-
-            Spacer(modifier = Modifier.height(18.dp))
-
-            SettingsStatusPill(
-                text = if (isLoading) "Loading settings..." else statusMessage,
-                lightMode = isLightLikeMode,
-                roseMode = selectedThemeMode == FirebaseManager.THEME_ROSE
             )
 
             Spacer(modifier = Modifier.height(18.dp))
@@ -416,12 +399,7 @@ fun SettingsScreen(
                         enabled = !isLoading && !isSaving,
                         onCheckedChange = { checked ->
                             saveSettings(
-                                rideAlerts = checked,
-                                successMessage = if (checked) {
-                                    "Ride alerts enabled"
-                                } else {
-                                    "Ride alerts disabled"
-                                }
+                                rideAlerts = checked
                             )
                         }
                     )
@@ -438,12 +416,7 @@ fun SettingsScreen(
                         enabled = !isLoading && !isSaving,
                         onCheckedChange = { checked ->
                             saveSettings(
-                                promoAlerts = checked,
-                                successMessage = if (checked) {
-                                    "Promotions enabled"
-                                } else {
-                                    "Promotions disabled"
-                                }
+                                promoAlerts = checked
                             )
                         }
                     )
@@ -460,12 +433,7 @@ fun SettingsScreen(
                         enabled = !isLoading && !isSaving,
                         onCheckedChange = { checked ->
                             saveSettings(
-                                locationAccess = checked,
-                                successMessage = if (checked) {
-                                    "Location preference enabled"
-                                } else {
-                                    "Location preference disabled"
-                                }
+                                locationAccess = checked
                             )
                         }
                     )
@@ -571,22 +539,19 @@ fun SettingsScreen(
                     when (pickerType) {
                         "language" -> {
                             saveSettings(
-                                languageCode = option.code,
-                                successMessage = "Language saved: ${option.title}"
+                                languageCode = option.code
                             )
                         }
 
                         "currency" -> {
                             saveSettings(
-                                currencyCode = option.code,
-                                successMessage = "Currency saved: ${option.code}"
+                                currencyCode = option.code
                             )
                         }
 
                         "theme" -> {
                             saveSettings(
-                                themeMode = option.code,
-                                successMessage = "Theme mode saved: ${option.title}"
+                                themeMode = option.code
                             )
                         }
                     }
@@ -633,39 +598,6 @@ private fun SettingsTopBar(
                 fontWeight = FontWeight.Medium
             )
         }
-    }
-}
-
-@Composable
-private fun SettingsStatusPill(
-    text: String,
-    lightMode: Boolean,
-    roseMode: Boolean
-) {
-    val backgroundColor = when {
-        roseMode -> Color.White
-        lightMode -> Color.White
-        else -> Color.White.copy(alpha = 0.08f)
-    }
-
-    val textColor = when {
-        roseMode -> Color(0xFF9D174D)
-        lightMode -> Color(0xFF111827)
-        else -> Color(0xFFE5E7EB)
-    }
-
-    Surface(
-        shape = RoundedCornerShape(999.dp),
-        color = backgroundColor,
-        shadowElevation = if (lightMode) 8.dp else 0.dp
-    ) {
-        Text(
-            text = text,
-            color = textColor,
-            fontWeight = FontWeight.Bold,
-            style = MaterialTheme.typography.labelMedium,
-            modifier = Modifier.padding(horizontal = 12.dp, vertical = 8.dp)
-        )
     }
 }
 

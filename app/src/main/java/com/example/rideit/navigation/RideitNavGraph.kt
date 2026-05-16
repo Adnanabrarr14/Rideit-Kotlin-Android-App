@@ -25,7 +25,13 @@ import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.rememberDrawerState
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.runtime.saveable.rememberSaveable
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -57,6 +63,26 @@ fun RideitNavGraph(
     modifier: Modifier = Modifier
 ) {
     val navController = rememberNavController()
+    var openRiderDrawerAfterReturn by rememberSaveable { mutableStateOf(false) }
+    var openDriverDrawerAfterReturn by rememberSaveable { mutableStateOf(false) }
+    val riderDrawerReturnRoutes = remember { mutableSetOf<String>() }
+    val driverDrawerReturnRoutes = remember { mutableSetOf<String>() }
+
+    fun returnFromRiderDrawerRoute(route: String) {
+        if (riderDrawerReturnRoutes.remove(route)) {
+            openRiderDrawerAfterReturn = true
+        }
+
+        returnToRiderHome(navController)
+    }
+
+    fun returnFromDriverDrawerRoute(route: String) {
+        if (driverDrawerReturnRoutes.remove(route)) {
+            openDriverDrawerAfterReturn = true
+        }
+
+        returnToDriverHome(navController)
+    }
 
     NavHost(
         navController = navController,
@@ -176,26 +202,41 @@ fun RideitNavGraph(
 
         composable(Routes.MAP) {
             RiderMapWithDrawer(
-                navController = navController
+                navController = navController,
+                openDrawerAfterReturn = openRiderDrawerAfterReturn,
+                onDrawerOpenedAfterReturn = {
+                    openRiderDrawerAfterReturn = false
+                },
+                onDrawerDestinationSelected = { route ->
+                    riderDrawerReturnRoutes.add(route)
+                }
             )
         }
 
         composable(Routes.DRIVER_HOME) {
             DriverHomeWithDrawer(
-                navController = navController
+                navController = navController,
+                openDrawerAfterReturn = openDriverDrawerAfterReturn,
+                onDrawerOpenedAfterReturn = {
+                    openDriverDrawerAfterReturn = false
+                },
+                onDrawerDestinationSelected = { route ->
+                    driverDrawerReturnRoutes.add(route)
+                }
             )
         }
 
         composable(Routes.RIDER_PROFILE) {
             BackHandler {
-                returnToRiderHome(navController)
+                returnFromRiderDrawerRoute(Routes.RIDER_PROFILE)
             }
 
             ProfileScreen(
                 onBackClick = {
-                    returnToRiderHome(navController)
+                    returnFromRiderDrawerRoute(Routes.RIDER_PROFILE)
                 },
                 onLogoutClick = {
+                    riderDrawerReturnRoutes.remove(Routes.RIDER_PROFILE)
                     logoutAndReturnToAccountType(navController)
                 }
             )
@@ -203,38 +244,39 @@ fun RideitNavGraph(
 
         composable(Routes.RIDER_TRIP_HISTORY) {
             BackHandler {
-                returnToRiderHome(navController)
+                returnFromRiderDrawerRoute(Routes.RIDER_TRIP_HISTORY)
             }
 
             TripHistoryScreen(
                 onBackClick = {
-                    returnToRiderHome(navController)
+                    returnFromRiderDrawerRoute(Routes.RIDER_TRIP_HISTORY)
                 }
             )
         }
 
         composable(Routes.RIDER_PAYMENT) {
             BackHandler {
-                returnToRiderHome(navController)
+                returnFromRiderDrawerRoute(Routes.RIDER_PAYMENT)
             }
 
             PaymentScreen(
                 onBackClick = {
-                    returnToRiderHome(navController)
+                    returnFromRiderDrawerRoute(Routes.RIDER_PAYMENT)
                 }
             )
         }
 
         composable(Routes.RIDER_WALLET) {
             BackHandler {
-                returnToRiderHome(navController)
+                returnFromRiderDrawerRoute(Routes.RIDER_WALLET)
             }
 
             RiderWalletScreen(
                 onBackClick = {
-                    returnToRiderHome(navController)
+                    returnFromRiderDrawerRoute(Routes.RIDER_WALLET)
                 },
                 onPaymentMethodsClick = {
+                    riderDrawerReturnRoutes.remove(Routes.RIDER_WALLET)
                     navController.navigate(Routes.RIDER_PAYMENT) {
                         launchSingleTop = true
                     }
@@ -244,38 +286,39 @@ fun RideitNavGraph(
 
         composable(Routes.RIDER_NOTIFICATIONS) {
             BackHandler {
-                returnToRiderHome(navController)
+                returnFromRiderDrawerRoute(Routes.RIDER_NOTIFICATIONS)
             }
 
             NotificationsScreen(
                 onBackClick = {
-                    returnToRiderHome(navController)
+                    returnFromRiderDrawerRoute(Routes.RIDER_NOTIFICATIONS)
                 }
             )
         }
 
         composable(Routes.RIDER_SETTINGS) {
             BackHandler {
-                returnToRiderHome(navController)
+                returnFromRiderDrawerRoute(Routes.RIDER_SETTINGS)
             }
 
             SettingsScreen(
                 onBackClick = {
-                    returnToRiderHome(navController)
+                    returnFromRiderDrawerRoute(Routes.RIDER_SETTINGS)
                 }
             )
         }
 
         composable(Routes.DRIVER_PROFILE) {
             BackHandler {
-                returnToDriverHome(navController)
+                returnFromDriverDrawerRoute(Routes.DRIVER_PROFILE)
             }
 
             ProfileScreen(
                 onBackClick = {
-                    returnToDriverHome(navController)
+                    returnFromDriverDrawerRoute(Routes.DRIVER_PROFILE)
                 },
                 onLogoutClick = {
+                    driverDrawerReturnRoutes.remove(Routes.DRIVER_PROFILE)
                     logoutAndReturnToAccountType(navController)
                 }
             )
@@ -283,24 +326,24 @@ fun RideitNavGraph(
 
         composable(Routes.DRIVER_WALLET) {
             BackHandler {
-                returnToDriverHome(navController)
+                returnFromDriverDrawerRoute(Routes.DRIVER_WALLET)
             }
 
             DriverWalletScreen(
                 onBackClick = {
-                    returnToDriverHome(navController)
+                    returnFromDriverDrawerRoute(Routes.DRIVER_WALLET)
                 }
             )
         }
 
         composable(Routes.DRIVER_SETTINGS) {
             BackHandler {
-                returnToDriverHome(navController)
+                returnFromDriverDrawerRoute(Routes.DRIVER_SETTINGS)
             }
 
             SettingsScreen(
                 onBackClick = {
-                    returnToDriverHome(navController)
+                    returnFromDriverDrawerRoute(Routes.DRIVER_SETTINGS)
                 }
             )
         }
@@ -342,11 +385,29 @@ private fun logoutAndReturnToAccountType(
 
 @Composable
 private fun RiderMapWithDrawer(
-    navController: NavHostController
+    navController: NavHostController,
+    openDrawerAfterReturn: Boolean,
+    onDrawerOpenedAfterReturn: () -> Unit,
+    onDrawerDestinationSelected: (String) -> Unit
 ) {
     val drawerState = rememberDrawerState(initialValue = DrawerValue.Closed)
     val scope = rememberCoroutineScope()
     val riderName = FirebaseManager.currentRiderDisplayName()
+
+    LaunchedEffect(openDrawerAfterReturn) {
+        if (openDrawerAfterReturn) {
+            drawerState.open()
+            onDrawerOpenedAfterReturn()
+        }
+    }
+
+    fun navigateToDrawerDestination(route: String) {
+        onDrawerDestinationSelected(route)
+        scope.launch { drawerState.close() }
+        navController.navigate(route) {
+            launchSingleTop = true
+        }
+    }
 
     ModalNavigationDrawer(
         drawerState = drawerState,
@@ -360,40 +421,22 @@ private fun RiderMapWithDrawer(
                     }
                 },
                 onProfileClick = {
-                    scope.launch { drawerState.close() }
-                    navController.navigate(Routes.RIDER_PROFILE) {
-                        launchSingleTop = true
-                    }
+                    navigateToDrawerDestination(Routes.RIDER_PROFILE)
                 },
                 onTripHistoryClick = {
-                    scope.launch { drawerState.close() }
-                    navController.navigate(Routes.RIDER_TRIP_HISTORY) {
-                        launchSingleTop = true
-                    }
+                    navigateToDrawerDestination(Routes.RIDER_TRIP_HISTORY)
                 },
                 onPaymentClick = {
-                    scope.launch { drawerState.close() }
-                    navController.navigate(Routes.RIDER_PAYMENT) {
-                        launchSingleTop = true
-                    }
+                    navigateToDrawerDestination(Routes.RIDER_PAYMENT)
                 },
                 onWalletClick = {
-                    scope.launch { drawerState.close() }
-                    navController.navigate(Routes.RIDER_WALLET) {
-                        launchSingleTop = true
-                    }
+                    navigateToDrawerDestination(Routes.RIDER_WALLET)
                 },
                 onNotificationsClick = {
-                    scope.launch { drawerState.close() }
-                    navController.navigate(Routes.RIDER_NOTIFICATIONS) {
-                        launchSingleTop = true
-                    }
+                    navigateToDrawerDestination(Routes.RIDER_NOTIFICATIONS)
                 },
                 onSettingsClick = {
-                    scope.launch { drawerState.close() }
-                    navController.navigate(Routes.RIDER_SETTINGS) {
-                        launchSingleTop = true
-                    }
+                    navigateToDrawerDestination(Routes.RIDER_SETTINGS)
                 },
                 onLogout = {
                     scope.launch { drawerState.close() }
@@ -420,11 +463,29 @@ private fun RiderMapWithDrawer(
 
 @Composable
 private fun DriverHomeWithDrawer(
-    navController: NavHostController
+    navController: NavHostController,
+    openDrawerAfterReturn: Boolean,
+    onDrawerOpenedAfterReturn: () -> Unit,
+    onDrawerDestinationSelected: (String) -> Unit
 ) {
     val drawerState = rememberDrawerState(initialValue = DrawerValue.Closed)
     val scope = rememberCoroutineScope()
     val driverName = FirebaseManager.currentDriverDisplayName()
+
+    LaunchedEffect(openDrawerAfterReturn) {
+        if (openDrawerAfterReturn) {
+            drawerState.open()
+            onDrawerOpenedAfterReturn()
+        }
+    }
+
+    fun navigateToDrawerDestination(route: String) {
+        onDrawerDestinationSelected(route)
+        scope.launch { drawerState.close() }
+        navController.navigate(route) {
+            launchSingleTop = true
+        }
+    }
 
     ModalNavigationDrawer(
         drawerState = drawerState,
@@ -438,22 +499,13 @@ private fun DriverHomeWithDrawer(
                     }
                 },
                 onProfileClick = {
-                    scope.launch { drawerState.close() }
-                    navController.navigate(Routes.DRIVER_PROFILE) {
-                        launchSingleTop = true
-                    }
+                    navigateToDrawerDestination(Routes.DRIVER_PROFILE)
                 },
                 onWalletClick = {
-                    scope.launch { drawerState.close() }
-                    navController.navigate(Routes.DRIVER_WALLET) {
-                        launchSingleTop = true
-                    }
+                    navigateToDrawerDestination(Routes.DRIVER_WALLET)
                 },
                 onSettingsClick = {
-                    scope.launch { drawerState.close() }
-                    navController.navigate(Routes.DRIVER_SETTINGS) {
-                        launchSingleTop = true
-                    }
+                    navigateToDrawerDestination(Routes.DRIVER_SETTINGS)
                 },
                 onLogout = {
                     scope.launch { drawerState.close() }
