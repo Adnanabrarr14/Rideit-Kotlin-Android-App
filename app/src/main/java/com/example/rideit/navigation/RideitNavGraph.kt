@@ -292,6 +292,7 @@ fun RideitNavGraph(
             }
 
             NotificationsScreen(
+                accountRole = FirebaseManager.ROLE_RIDER,
                 onBackClick = {
                     returnFromRiderDrawerRoute(Routes.RIDER_NOTIFICATIONS)
                 }
@@ -344,6 +345,7 @@ fun RideitNavGraph(
             }
 
             NotificationsScreen(
+                accountRole = FirebaseManager.ROLE_DRIVER,
                 onBackClick = {
                     returnFromDriverDrawerRoute(Routes.DRIVER_NOTIFICATIONS)
                 }

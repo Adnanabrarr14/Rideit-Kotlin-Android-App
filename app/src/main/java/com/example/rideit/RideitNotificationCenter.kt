@@ -56,7 +56,7 @@ object RideitNotificationCenter {
             .limit(limit)
             .addSnapshotListener { snapshots, error ->
                 if (error != null) {
-                    onError(error.message ?: "Unable to load notifications.")
+                    onError("Unable to load notifications. Please try again.")
                     return@addSnapshotListener
                 }
 
@@ -82,7 +82,7 @@ object RideitNotificationCenter {
             .limit(100)
             .addSnapshotListener { snapshots, error ->
                 if (error != null) {
-                    onError(error.message ?: "Unable to load unread notifications.")
+                    onError("Unable to load notifications. Please try again.")
                     return@addSnapshotListener
                 }
 
@@ -100,7 +100,7 @@ object RideitNotificationCenter {
             .document(currentUser.uid)
             .addSnapshotListener { snapshot, error ->
                 if (error != null) {
-                    onError(error.message ?: "Unable to load ride alert setting.")
+                    onError("Unable to load notification settings. Please try again.")
                     return@addSnapshotListener
                 }
 
@@ -115,7 +115,7 @@ object RideitNotificationCenter {
         val currentUser = auth.currentUser
 
         if (currentUser == null) {
-            onError("Please login again to update notifications.")
+            onError("Unable to update notifications. Please try again.")
             return
         }
 
@@ -148,12 +148,12 @@ object RideitNotificationCenter {
 
                 batch.commit()
                     .addOnSuccessListener { onComplete() }
-                    .addOnFailureListener { exception ->
-                        onError(exception.message ?: "Unable to mark notifications read.")
+                    .addOnFailureListener {
+                        onError("Unable to update notifications. Please try again.")
                     }
             }
-            .addOnFailureListener { exception ->
-                onError(exception.message ?: "Unable to mark notifications read.")
+            .addOnFailureListener {
+                onError("Unable to update notifications. Please try again.")
             }
     }
 

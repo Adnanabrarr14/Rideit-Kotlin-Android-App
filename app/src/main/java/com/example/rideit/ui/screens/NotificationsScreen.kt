@@ -40,8 +40,12 @@ import androidx.compose.ui.graphics.luminance
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
+import com.example.rideit.FirebaseManager
 import com.example.rideit.RideitNotificationCenter
 import com.example.rideit.RideitUserNotification
+import com.google.firebase.Timestamp
+import java.util.Date
+import java.util.concurrent.TimeUnit
 
 @Immutable
 private data class NotificationsThemeColors(
@@ -63,32 +67,59 @@ private data class NotificationsThemeColors(
 
 @Composable
 fun NotificationsScreen(
+    accountRole: String = FirebaseManager.ROLE_RIDER,
     onBackClick: () -> Unit
 ) {
     val colors = rememberNotificationsThemeColors()
+    val isDriver = accountRole == FirebaseManager.ROLE_DRIVER
+    val demoNotifications = remember(accountRole) {
+        demoNotificationsForRole(accountRole)
+    }
     var notifications by remember { mutableStateOf<List<RideitUserNotification>>(emptyList()) }
     var isLoading by remember { mutableStateOf(true) }
     var errorMessage by remember { mutableStateOf<String?>(null) }
     var isMarkingRead by remember { mutableStateOf(false) }
+    var usingDemoNotifications by remember { mutableStateOf(false) }
 
     val unreadCount = notifications.count { it.unread }
+    val subtitle = if (isDriver) {
+        "Ride requests, earnings and account updates"
+    } else {
+        "Ride alerts, promos and updates"
+    }
+    val sectionTitle = if (isDriver) "Driver Updates" else "Ride Updates"
 
-    DisposableEffect(Unit) {
+    fun showDemoNotifications() {
+        notifications = demoNotifications
+        usingDemoNotifications = true
+        isLoading = false
+        errorMessage = null
+    }
+
+    DisposableEffect(accountRole) {
+        notifications = emptyList()
+        isLoading = true
+        errorMessage = null
+        usingDemoNotifications = false
+
         val registration = RideitNotificationCenter.listenToCurrentUserNotifications(
             onChange = { loadedNotifications ->
-                notifications = loadedNotifications
-                isLoading = false
-                errorMessage = null
+                if (loadedNotifications.isEmpty()) {
+                    showDemoNotifications()
+                } else {
+                    notifications = loadedNotifications
+                    usingDemoNotifications = false
+                    isLoading = false
+                    errorMessage = null
+                }
             },
-            onError = { error ->
-                isLoading = false
-                errorMessage = error
+            onError = {
+                showDemoNotifications()
             }
         )
 
         if (registration == null) {
-            isLoading = false
-            errorMessage = "Please login again to load notifications."
+            showDemoNotifications()
         }
 
         onDispose {
@@ -100,13 +131,26 @@ fun NotificationsScreen(
         if (isMarkingRead || unreadCount == 0) return
 
         isMarkingRead = true
+
+        if (usingDemoNotifications) {
+            notifications = notifications.map { notification ->
+                notification.copy(isRead = true)
+            }
+            isMarkingRead = false
+            errorMessage = null
+            return
+        }
+
         RideitNotificationCenter.markCurrentUserNotificationsRead(
             onComplete = {
                 isMarkingRead = false
             },
-            onError = { error ->
+            onError = {
+                notifications = notifications.map { notification ->
+                    notification.copy(isRead = true)
+                }
                 isMarkingRead = false
-                errorMessage = error
+                errorMessage = null
             }
         )
     }
@@ -134,6 +178,7 @@ fun NotificationsScreen(
         ) {
             NotificationsTopBar(
                 colors = colors,
+                subtitle = subtitle,
                 unreadCount = unreadCount,
                 isMarkingRead = isMarkingRead,
                 onBackClick = onBackClick,
@@ -146,7 +191,7 @@ fun NotificationsScreen(
                 verticalAlignment = Alignment.CenterVertically
             ) {
                 Text(
-                    text = "Ride Updates",
+                    text = sectionTitle,
                     color = colors.text,
                     fontWeight = FontWeight.Black,
                     style = MaterialTheme.typography.titleLarge
@@ -183,16 +228,16 @@ fun NotificationsScreen(
 
                 errorMessage != null -> {
                     NotificationStateCard(
-                        title = "Unable to load notifications",
-                        message = errorMessage.orEmpty(),
+                        title = "Unable to load notifications.",
+                        message = "Please try again.",
                         colors = colors
                     )
                 }
 
                 notifications.isEmpty() -> {
                     NotificationStateCard(
-                        title = "No ride notifications yet",
-                        message = "Ride updates will appear here when you book, accept, start, complete, or cancel trips.",
+                        title = "No notifications yet.",
+                        message = "You're all caught up.",
                         colors = colors
                     )
                 }
@@ -225,6 +270,7 @@ fun NotificationsScreen(
 @Composable
 private fun NotificationsTopBar(
     colors: NotificationsThemeColors,
+    subtitle: String,
     unreadCount: Int,
     isMarkingRead: Boolean,
     onBackClick: () -> Unit,
@@ -261,7 +307,7 @@ private fun NotificationsTopBar(
             )
 
             Text(
-                text = "Ride alerts and trip updates",
+                text = subtitle,
                 color = colors.subText,
                 style = MaterialTheme.typography.bodySmall,
                 fontWeight = FontWeight.Medium
@@ -285,6 +331,136 @@ private fun NotificationsTopBar(
             }
         }
     }
+}
+
+private fun demoNotificationsForRole(
+    accountRole: String
+): List<RideitUserNotification> {
+    return if (accountRole == FirebaseManager.ROLE_DRIVER) {
+        listOf(
+            RideitUserNotification(
+                id = "driver_demo_new_request",
+                icon = "N",
+                title = "New ride request",
+                message = "A nearby rider is ready for pickup. Review the route and fare before accepting.",
+                type = RideitNotificationCenter.TYPE_DRIVER,
+                eventKey = "demo_driver_new_request",
+                createdAt = demoNotificationTime(minutesAgo = 4),
+                isRead = false
+            ),
+            RideitUserNotification(
+                id = "driver_demo_trip_completed",
+                icon = "T",
+                title = "Trip completed",
+                message = "Your latest trip was completed and added to your driver history.",
+                type = RideitNotificationCenter.TYPE_TRIP,
+                eventKey = "demo_driver_trip_completed",
+                createdAt = demoNotificationTime(minutesAgo = 18),
+                isRead = false
+            ),
+            RideitUserNotification(
+                id = "driver_demo_earnings_updated",
+                icon = "Rs",
+                title = "Earnings updated",
+                message = "Today's completed trips are reflected in your wallet summary.",
+                type = "Earnings",
+                eventKey = "demo_driver_earnings_updated",
+                createdAt = demoNotificationTime(minutesAgo = 46),
+                isRead = true
+            ),
+            RideitUserNotification(
+                id = "driver_demo_document_verified",
+                icon = "V",
+                title = "Document verified",
+                message = "Your vehicle document has been reviewed and marked verified.",
+                type = "Documents",
+                eventKey = "demo_driver_document_verified",
+                createdAt = demoNotificationTime(hoursAgo = 3),
+                isRead = true
+            ),
+            RideitUserNotification(
+                id = "driver_demo_payout_ready",
+                icon = "P",
+                title = "Payout demo ready",
+                message = "Demo withdrawal tools are available from your driver wallet.",
+                type = "Payout",
+                eventKey = "demo_driver_payout_ready",
+                createdAt = demoNotificationTime(hoursAgo = 6),
+                isRead = true
+            ),
+            RideitUserNotification(
+                id = "driver_demo_safety_reminder",
+                icon = "S",
+                title = "Safety reminder",
+                message = "Confirm pickup details in the app before starting every trip.",
+                type = "Safety",
+                eventKey = "demo_driver_safety_reminder",
+                createdAt = demoNotificationTime(hoursAgo = 10),
+                isRead = true
+            )
+        )
+    } else {
+        listOf(
+            RideitUserNotification(
+                id = "rider_demo_driver_arriving",
+                icon = "D",
+                title = "Driver arriving soon",
+                message = "Your driver is close to the pickup point. Please be ready outside.",
+                type = RideitNotificationCenter.TYPE_DRIVER,
+                eventKey = "demo_rider_driver_arriving",
+                createdAt = demoNotificationTime(minutesAgo = 3),
+                isRead = false
+            ),
+            RideitUserNotification(
+                id = "rider_demo_ride_completed",
+                icon = "T",
+                title = "Ride completed",
+                message = "Your Rideit trip summary and receipt are ready to review.",
+                type = RideitNotificationCenter.TYPE_TRIP,
+                eventKey = "demo_rider_ride_completed",
+                createdAt = demoNotificationTime(minutesAgo = 21),
+                isRead = false
+            ),
+            RideitUserNotification(
+                id = "rider_demo_payment_ready",
+                icon = "P",
+                title = "Payment method ready",
+                message = "Cash and demo card options are ready for your next booking.",
+                type = "Payment",
+                eventKey = "demo_rider_payment_ready",
+                createdAt = demoNotificationTime(minutesAgo = 54),
+                isRead = true
+            ),
+            RideitUserNotification(
+                id = "rider_demo_promo_unlocked",
+                icon = "%",
+                title = "Promo unlocked",
+                message = "A portfolio promo has been added for your next Rideit trip.",
+                type = "Promo",
+                eventKey = "demo_rider_promo_unlocked",
+                createdAt = demoNotificationTime(hoursAgo = 4),
+                isRead = true
+            ),
+            RideitUserNotification(
+                id = "rider_demo_wallet_updated",
+                icon = "W",
+                title = "Wallet balance updated",
+                message = "Your demo wallet balance is refreshed and ready for upcoming rides.",
+                type = "Wallet",
+                eventKey = "demo_rider_wallet_updated",
+                createdAt = demoNotificationTime(hoursAgo = 8),
+                isRead = true
+            )
+        )
+    }
+}
+
+private fun demoNotificationTime(
+    minutesAgo: Long = 0,
+    hoursAgo: Long = 0
+): Timestamp {
+    val offsetMillis = TimeUnit.MINUTES.toMillis(minutesAgo) + TimeUnit.HOURS.toMillis(hoursAgo)
+    return Timestamp(Date(System.currentTimeMillis() - offsetMillis))
 }
 
 @Composable
