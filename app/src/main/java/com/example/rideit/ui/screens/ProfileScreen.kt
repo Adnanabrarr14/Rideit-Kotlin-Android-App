@@ -120,7 +120,7 @@ fun ProfileScreen(
                     "Rider"
                 }
                 isLoading = false
-                statusMessage = "Profile loaded"
+                statusMessage = ""
             },
             onError = { error ->
                 isLoading = false
@@ -185,12 +185,14 @@ fun ProfileScreen(
 
             Spacer(modifier = Modifier.height(14.dp))
 
-            ProfileStatusPill(
-                text = if (isLoading) "Loading profile..." else statusMessage,
-                colors = colors
-            )
+            if (isLoading || statusMessage.isNotBlank()) {
+                ProfileStatusPill(
+                    text = if (isLoading) "Loading profile..." else statusMessage,
+                    colors = colors
+                )
 
-            Spacer(modifier = Modifier.height(18.dp))
+                Spacer(modifier = Modifier.height(18.dp))
+            }
 
             Surface(
                 modifier = Modifier.fillMaxWidth(),
@@ -229,7 +231,7 @@ fun ProfileScreen(
                     Spacer(modifier = Modifier.height(6.dp))
 
                     Text(
-                        text = email,
+                        text = cleanProfileEmail(email),
                         color = colors.subText,
                         style = MaterialTheme.typography.bodyMedium,
                         fontWeight = FontWeight.Medium
@@ -447,6 +449,13 @@ private fun ProfileInfoRow(
             )
         }
     }
+}
+
+private fun cleanProfileEmail(value: String): String {
+    return value
+        .replace(Regex("\\s+([@.])\\s*"), "$1")
+        .replace(Regex("\\s+"), " ")
+        .trim()
 }
 
 @Composable

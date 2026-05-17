@@ -192,7 +192,7 @@ fun DriverDocumentsScreen(
                     onUploadClick = {
                         scope.launch {
                             snackbarHostState.showSnackbar(
-                                message = "${document.title} upload UI is ready. Firebase Storage can be connected in a later phase."
+                                message = "${document.title} upload UI is ready for a later phase."
                             )
                         }
                     }

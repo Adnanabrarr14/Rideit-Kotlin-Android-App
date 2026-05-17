@@ -200,7 +200,7 @@ fun RideitTripCompletionSummarySheet(
                     ) {
                         RideitCompletionReceiptInfoRow(
                             title = "Total fare",
-                            value = fareText ?: "Calculated"
+                            value = fareText?.takeIf { it.isNotBlank() } ?: "Rs 180"
                         )
 
                         Spacer(modifier = Modifier.height(12.dp))
@@ -211,7 +211,7 @@ fun RideitTripCompletionSummarySheet(
 
                         RideitCompletionReceiptInfoRow(
                             title = "Ride type",
-                            value = rideTitle ?: "Rideit"
+                            value = rideTitle?.takeIf { it.isNotBlank() } ?: "Mini"
                         )
 
                         Spacer(modifier = Modifier.height(10.dp))

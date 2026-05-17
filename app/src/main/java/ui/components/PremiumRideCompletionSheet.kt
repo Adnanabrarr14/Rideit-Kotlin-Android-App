@@ -68,7 +68,7 @@ fun PremiumRideCompletionSheet(
         ) {
             ElevatedCard(
                 modifier = Modifier.fillMaxWidth(),
-                shape = RoundedCornerShape(34.dp),
+                shape = RoundedCornerShape(30.dp),
                 colors = CardDefaults.elevatedCardColors(
                     containerColor = Color.White
                 ),
@@ -92,12 +92,12 @@ fun PremiumRideCompletionSheet(
                 Column(
                     modifier = Modifier
                         .fillMaxWidth()
-                        .padding(22.dp),
+                        .padding(18.dp),
                     horizontalAlignment = Alignment.CenterHorizontally
                 ) {
                     Box(
                         modifier = Modifier
-                            .size(72.dp)
+                            .size(60.dp)
                             .clip(CircleShape)
                             .background(Color(0xFF8A35F2).copy(alpha = 0.12f)),
                         contentAlignment = Alignment.Center
@@ -110,7 +110,7 @@ fun PremiumRideCompletionSheet(
                         )
                     }
 
-                    Spacer(modifier = Modifier.height(14.dp))
+                    Spacer(modifier = Modifier.height(10.dp))
 
                     Text(
                         text = "Trip completed",
@@ -134,7 +134,7 @@ fun PremiumRideCompletionSheet(
                         textAlign = TextAlign.Center
                     )
 
-                    Spacer(modifier = Modifier.height(18.dp))
+                    Spacer(modifier = Modifier.height(14.dp))
 
                     Text(
                         text = "Rate your ride",
@@ -170,7 +170,7 @@ fun PremiumRideCompletionSheet(
                         }
                     }
 
-                    Spacer(modifier = Modifier.height(16.dp))
+                    Spacer(modifier = Modifier.height(12.dp))
 
                     Text(
                         text = "What went well?",
@@ -220,14 +220,14 @@ fun PremiumRideCompletionSheet(
                         }
                     }
 
-                    Spacer(modifier = Modifier.height(16.dp))
+                    Spacer(modifier = Modifier.height(12.dp))
 
                     OutlinedTextField(
                         value = feedback,
                         onValueChange = { feedback = it },
                         modifier = Modifier
                             .fillMaxWidth()
-                            .height(118.dp),
+                            .height(104.dp),
                         label = {
                             Text("Write feedback")
                         },
@@ -243,7 +243,7 @@ fun PremiumRideCompletionSheet(
                         )
                     )
 
-                    Spacer(modifier = Modifier.height(18.dp))
+                    Spacer(modifier = Modifier.height(14.dp))
 
                     Button(
                         onClick = {
@@ -255,7 +255,7 @@ fun PremiumRideCompletionSheet(
                         },
                         modifier = Modifier
                             .fillMaxWidth()
-                            .height(56.dp),
+                            .height(52.dp),
                         shape = RoundedCornerShape(22.dp),
                         colors = ButtonDefaults.buttonColors(
                             containerColor = Color(0xFF8A35F2),
@@ -263,7 +263,7 @@ fun PremiumRideCompletionSheet(
                         )
                     ) {
                         Text(
-                            text = "Submit feedback",
+                            text = "Submit Feedback",
                             fontWeight = FontWeight.Black
                         )
                     }
@@ -274,11 +274,11 @@ fun PremiumRideCompletionSheet(
                         onClick = onDismiss,
                         modifier = Modifier
                             .fillMaxWidth()
-                            .height(52.dp),
+                            .height(48.dp),
                         shape = RoundedCornerShape(20.dp)
                     ) {
                         Text(
-                            text = "Not now",
+                            text = "Not Now",
                             fontWeight = FontWeight.Bold
                         )
                     }

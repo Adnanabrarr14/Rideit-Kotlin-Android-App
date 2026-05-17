@@ -123,7 +123,7 @@ fun RiderWalletScreen(
                 savedCardLastFour = profile.cardLastFour
                 savedCardName = profile.cardHolderName
                 isLoading = false
-                statusMessage = "Wallet loaded from Firebase"
+                statusMessage = ""
             },
             onError = { error ->
                 isLoading = false
@@ -436,7 +436,7 @@ private fun WalletHeroCard(
                     text = if (selectedPaymentMethod == FirebaseManager.PAYMENT_WALLET) {
                         "Wallet is selected for your next ride"
                     } else {
-                        "Select wallet to use this balance for bookings"
+                        "Use your wallet balance for upcoming rides."
                     },
                     color = Color.White.copy(alpha = 0.88f),
                     style = MaterialTheme.typography.bodyMedium,
@@ -609,7 +609,7 @@ private fun WalletTopUpCard(
                 color = colors.primary
             ) {
                 Text(
-                    text = "Top up",
+                    text = "Top Up",
                     color = colors.onPrimary,
                     fontWeight = FontWeight.Bold,
                     style = MaterialTheme.typography.labelMedium,
@@ -740,7 +740,7 @@ private fun WalletSafetyCard(
                 Spacer(modifier = Modifier.height(6.dp))
 
                 Text(
-                    text = "This wallet is connected to Firebase for portfolio testing. No real money is charged or transferred yet.",
+                    text = "This wallet is connected for portfolio testing. No real money is charged or transferred yet.",
                     color = colors.subText,
                     style = MaterialTheme.typography.bodySmall,
                     fontWeight = FontWeight.Medium

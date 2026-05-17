@@ -488,6 +488,7 @@ private fun DriverHomeWithDrawer(
     val scope = rememberCoroutineScope()
     val driverName = FirebaseManager.currentDriverDisplayName()
     val notificationBadgeCount = rememberVisibleNotificationBadgeCount()
+    var isDriverInnerPage by remember { mutableStateOf(false) }
 
     LaunchedEffect(openDrawerAfterReturn) {
         if (openDrawerAfterReturn) {
@@ -536,17 +537,23 @@ private fun DriverHomeWithDrawer(
         }
     ) {
         Box(modifier = Modifier.fillMaxSize()) {
-            DriverHomeScreen()
-
-            DrawerMenuButton(
-                compact = false,
-                onClick = {
-                    scope.launch { drawerState.open() }
-                },
-                modifier = Modifier
-                    .align(Alignment.TopStart)
-                    .padding(top = 6.dp, start = 4.dp)
+            DriverHomeScreen(
+                onInnerPageChanged = { isInnerPage ->
+                    isDriverInnerPage = isInnerPage
+                }
             )
+
+            if (!isDriverInnerPage) {
+                DrawerMenuButton(
+                    compact = false,
+                    onClick = {
+                        scope.launch { drawerState.open() }
+                    },
+                    modifier = Modifier
+                        .align(Alignment.TopStart)
+                        .padding(top = 6.dp, start = 4.dp)
+                )
+            }
         }
     }
 }
@@ -632,7 +639,7 @@ private fun RiderDrawer(
     ModalDrawerSheet(
         modifier = Modifier
             .fillMaxHeight()
-            .widthIn(max = 330.dp),
+            .widthIn(max = 304.dp),
         drawerContainerColor = Color(0xFF111113)
     ) {
         Column(
@@ -714,7 +721,7 @@ private fun RiderDrawer(
                 onClick = onSettingsClick
             )
 
-            Spacer(modifier = Modifier.weight(1f))
+            Spacer(modifier = Modifier.height(10.dp))
 
             LogoutButton(onLogout = onLogout)
         }
@@ -735,7 +742,7 @@ private fun DriverDrawer(
     ModalDrawerSheet(
         modifier = Modifier
             .fillMaxHeight()
-            .widthIn(max = 330.dp),
+            .widthIn(max = 304.dp),
         drawerContainerColor = Color(0xFF111113)
     ) {
         Column(
@@ -819,7 +826,7 @@ private fun DriverDrawer(
                     Spacer(modifier = Modifier.height(6.dp))
 
                     Text(
-                        text = "Wallet, trip history, vehicle documents, support and active trip tools remain inside Driver Dashboard too.",
+                        text = "Wallet, trip history, vehicle documents, support, and active trip tools are available from the dashboard.",
                         color = Color(0xFF9CA3AF),
                         style = MaterialTheme.typography.bodySmall,
                         fontWeight = FontWeight.Medium
@@ -827,7 +834,7 @@ private fun DriverDrawer(
                 }
             }
 
-            Spacer(modifier = Modifier.weight(1f))
+            Spacer(modifier = Modifier.height(10.dp))
 
             LogoutButton(onLogout = onLogout)
         }

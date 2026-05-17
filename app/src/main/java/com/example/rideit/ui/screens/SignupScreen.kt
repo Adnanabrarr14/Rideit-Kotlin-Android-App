@@ -124,7 +124,7 @@ fun SignupScreen(
     }
 
     val signupAccentColor = when (selectedThemeMode) {
-        FirebaseManager.THEME_ROSE -> Color(0xFFFF5CA8)
+        FirebaseManager.THEME_ROSE -> Color(0xFFE45A8A)
         FirebaseManager.THEME_DARK -> Color(0xFFB98CFF)
         FirebaseManager.THEME_LIGHT -> Color(0xFF8A35F2)
         else -> accentColor
@@ -137,10 +137,10 @@ fun SignupScreen(
                 Brush.verticalGradient(
                     colors = if (selectedThemeMode == FirebaseManager.THEME_ROSE) {
                         listOf(
-                            Color(0xFF1A0610),
-                            Color(0xFF3B1023),
-                            Color(0xFFFF5CA8),
-                            Color(0xFF0B0507)
+                            Color(0xFF140B10),
+                            Color(0xFF2A101A),
+                            Color(0xFF6D2E49),
+                            Color(0xFF090607)
                         )
                     } else {
                         listOf(
@@ -259,7 +259,7 @@ fun SignupScreen(
                     SignupTextField(
                         value = email,
                         onValueChange = {
-                            email = it
+                            email = it.replace(" ", "")
                             errorMessage = null
                         },
                         enabled = !isLoading,
@@ -354,7 +354,7 @@ fun SignupScreen(
                                 choice = choice,
                                 selected = selectedThemeMode == choice.code,
                                 selectedColor = if (choice.code == FirebaseManager.THEME_ROSE) {
-                                    Color(0xFFFF5CA8)
+                                    Color(0xFFE45A8A)
                                 } else {
                                     signupAccentColor
                                 },
@@ -432,7 +432,7 @@ fun SignupScreen(
 
                             FirebaseManager.signup(
                                 fullName = cleanName,
-                                email = email,
+                                email = email.trim(),
                                 password = password,
                                 role = accountRole,
                                 gender = selectedGender,

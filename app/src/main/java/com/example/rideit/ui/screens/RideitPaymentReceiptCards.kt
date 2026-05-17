@@ -171,7 +171,7 @@ fun RideitPaymentReceiptPreviewSheet(
                         Spacer(modifier = Modifier.height(3.dp))
 
                         Text(
-                            text = "Your Rideit trip summary is ready",
+                            text = "Your Rideit trip summary is ready.",
                             style = MaterialTheme.typography.bodyMedium,
                             fontWeight = FontWeight.Medium,
                             color = MaterialTheme.colorScheme.onSurfaceVariant
@@ -204,7 +204,7 @@ fun RideitPaymentReceiptPreviewSheet(
                     ) {
                         ReceiptInfoRow(
                             title = "Total fare",
-                            value = fareText ?: "Calculated"
+                            value = fareText?.takeIf { it.isNotBlank() } ?: "Rs 180"
                         )
 
                         Spacer(modifier = Modifier.height(12.dp))
@@ -215,7 +215,7 @@ fun RideitPaymentReceiptPreviewSheet(
 
                         ReceiptInfoRow(
                             title = "Ride type",
-                            value = rideTitle ?: "Rideit"
+                            value = rideTitle?.takeIf { it.isNotBlank() } ?: "Mini"
                         )
 
                         Spacer(modifier = Modifier.height(10.dp))

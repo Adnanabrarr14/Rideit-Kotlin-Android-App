@@ -228,7 +228,7 @@ fun AccountTypeScreen(
                     Spacer(modifier = Modifier.height(28.dp))
 
                     Text(
-                        text = "Powered by Firebase Auth • Secure & Safe",
+                        text = "Secure Rideit access",
                         color = colors.mutedText,
                         textAlign = TextAlign.Center,
                         style = MaterialTheme.typography.bodySmall,

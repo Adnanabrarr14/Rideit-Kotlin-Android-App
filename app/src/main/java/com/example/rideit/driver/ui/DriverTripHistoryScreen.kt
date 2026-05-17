@@ -191,10 +191,10 @@ fun DriverTripHistoryScreen(
 
                             DriverTripHistoryItem(
                                 requestId = document.id,
-                                riderName = riderName,
-                                riderEmail = riderEmail,
-                                pickup = pickup,
-                                dropoff = dropoff,
+                                riderName = cleanDriverHistoryText(riderName),
+                                riderEmail = cleanDriverHistoryText(riderEmail),
+                                pickup = cleanDriverHistoryText(pickup),
+                                dropoff = cleanDriverHistoryText(dropoff),
                                 fare = normalizeFareText(fare),
                                 time = estimateTripTimeText(createdAt, finalTimestamp),
                                 date = formatTripDate(finalTimestamp),
@@ -202,7 +202,7 @@ fun DriverTripHistoryScreen(
                                     ?: document.getString("distanceText")
                                     ?: "—",
                                 rating = ratingValue,
-                                feedback = feedback,
+                                feedback = cleanDriverHistoryText(feedback),
                                 feedbackTags = feedbackTags,
                                 status = statusText,
                                 statusColor = statusColor,
@@ -277,7 +277,7 @@ fun DriverTripHistoryScreen(
             Spacer(modifier = Modifier.height(16.dp))
 
             Text(
-                text = "Firebase driver trips",
+                text = "Driver trips",
                 style = MaterialTheme.typography.titleLarge,
                 fontWeight = FontWeight.Black,
                 color = Color(0xFF111827)
@@ -302,7 +302,7 @@ fun DriverTripHistoryScreen(
 
             if (!isLoading && firebaseError == null && trips.isEmpty()) {
                 DriverTripHistoryMessageCard(
-                    title = "No Firebase trips yet",
+                    title = "No trips yet",
                     message = "Complete or cancel a real ride request, then it will appear here automatically.",
                     success = true
                 )
@@ -445,7 +445,7 @@ private fun DriverTripHistoryHeader(
             Spacer(modifier = Modifier.height(20.dp))
 
             Text(
-                text = "See real Firebase trips, earnings, rider rating and rider feedback.",
+                text = "See completed trips, earnings, rider ratings and feedback.",
                 style = MaterialTheme.typography.bodyMedium,
                 color = Color.White.copy(alpha = 0.78f),
                 fontWeight = FontWeight.Medium
@@ -486,7 +486,7 @@ private fun DriverTripHistorySummaryCard(
                 HistoryMetricBox(
                     title = "Earned",
                     value = formatRupees(totalEarnings),
-                    subtitle = "Firebase",
+                    subtitle = "Total",
                     modifier = Modifier.weight(1f)
                 )
             }
@@ -593,7 +593,7 @@ private fun DriverTripHistoryPerformanceCard(
             ) {
                 Column(modifier = Modifier.weight(1f)) {
                     Text(
-                        text = "Firebase completion",
+                        text = "Trip completion",
                         style = MaterialTheme.typography.titleMedium,
                         fontWeight = FontWeight.Black,
                         color = Color(0xFF111827)
@@ -651,7 +651,7 @@ private fun DriverTripHistoryLoadingCard() {
             modifier = Modifier.padding(18.dp)
         ) {
             Text(
-                text = "Loading Firebase trips...",
+                text = "Loading trips...",
                 style = MaterialTheme.typography.titleMedium,
                 fontWeight = FontWeight.Black,
                 color = Color(0xFF111827)
@@ -1045,6 +1045,16 @@ private fun normalizeFareText(fare: String): String {
     }
 
     return "Rs $cleanFare"
+}
+
+private fun cleanDriverHistoryText(value: String): String {
+    return value
+        .replace("Adna n Khan", "Adnan Khan")
+        .replace("Toyota C orolla", "Toyota Corolla")
+        .replace("No written f edback submitted.", "No written feedback submitted.")
+        .replace(Regex("\\s+([@.])\\s*"), "$1")
+        .replace(Regex("\\s+"), " ")
+        .trim()
 }
 
 private fun extractFareAmount(fare: String): Int {

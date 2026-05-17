@@ -139,7 +139,7 @@ fun PaymentScreen(
                 statusMessage = if (profile.selectedPaymentMethod == FirebaseManager.PAYMENT_WALLET) {
                     "Wallet is managed from Rideit Wallet"
                 } else {
-                    "Payment method loaded"
+                    ""
                 }
             },
             onError = { error ->
@@ -166,7 +166,7 @@ fun PaymentScreen(
             subtitle = if (hasSavedCard) {
                 "Card ending •••• $savedCardLastFour"
             } else {
-                "Add a simulated card for portfolio checkout flow"
+                "Add a demo card for portfolio checkout."
             },
             badge = if (hasSavedCard) "Saved" else "Add"
         )
@@ -620,7 +620,11 @@ private fun RiderPaymentMethodCard(
             )
             .clickable(enabled = enabled) { onClick() },
         shape = RoundedCornerShape(24.dp),
-        color = if (selected) colors.primary.copy(alpha = 0.12f) else colors.card,
+        color = if (selected && method.type != RiderPaymentType.CASH) {
+            colors.primary.copy(alpha = 0.12f)
+        } else {
+            colors.card
+        },
         shadowElevation = if (selected) 10.dp else 4.dp
     ) {
         Column(
@@ -634,8 +638,11 @@ private fun RiderPaymentMethodCard(
                         .size(54.dp)
                         .clip(RoundedCornerShape(18.dp))
                         .background(
-                            if (selected) colors.primary.copy(alpha = 0.20f)
-                            else colors.iconCard
+                            if (selected && method.type != RiderPaymentType.CASH) {
+                                colors.primary.copy(alpha = 0.20f)
+                            } else {
+                                colors.iconCard
+                            }
                         ),
                     contentAlignment = Alignment.Center
                 ) {
@@ -715,7 +722,7 @@ private fun RiderPaymentMethodCard(
                 ) {
                     Text(
                         text = if (hasSavedCard) {
-                            "Manage your saved simulated card"
+                            "Manage your saved demo card"
                         } else {
                             "Add a demo card to unlock card selection"
                         },
@@ -841,7 +848,7 @@ private fun PaymentInfoCard(
             Spacer(modifier = Modifier.height(8.dp))
 
             Text(
-                text = "Your selected cash or card method is saved in Firebase and attached automatically when you book a ride. Card payment remains safe demo mode.",
+                text = "Your selected cash or card method is attached automatically when you book a ride. Card payment remains safe demo mode.",
                 color = colors.subText,
                 style = MaterialTheme.typography.bodySmall,
                 fontWeight = FontWeight.Medium
@@ -881,7 +888,7 @@ private fun SecurityCard(
 
             Column(modifier = Modifier.weight(1f)) {
                 Text(
-                    text = "Safe Firebase storage",
+                    text = "Safe demo storage",
                     color = colors.text,
                     fontWeight = FontWeight.Black,
                     style = MaterialTheme.typography.titleMedium

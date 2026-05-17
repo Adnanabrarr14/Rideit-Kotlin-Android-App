@@ -112,7 +112,7 @@ fun DriverWalletScreen(
             statusMessage = "Driver account not found. Please login again."
         } else {
             isLoading = true
-            statusMessage = "Listening for completed Firebase trips..."
+            statusMessage = "Loading completed trips..."
 
             listenerRegistration = firestore.collection("ride_requests")
                 .whereEqualTo("driverId", driverId)
@@ -411,7 +411,7 @@ private fun DriverWalletHeroCard(
                 Spacer(modifier = Modifier.height(8.dp))
 
                 Text(
-                    text = "${stats.completedTrips} completed trips • Firebase synced",
+                    text = "${stats.completedTrips} completed trips • Synced",
                     color = Color(0xFFE5E7EB),
                     style = MaterialTheme.typography.bodyMedium,
                     fontWeight = FontWeight.Medium
@@ -645,7 +645,7 @@ private fun DriverPayoutCard(
 
                     Column(modifier = Modifier.weight(1f)) {
                         Text(
-                            text = "Request Demo Withdrawal",
+                            text = "Demo Withdrawal",
                             color = Color.White,
                             fontWeight = FontWeight.Black,
                             style = MaterialTheme.typography.titleMedium,
@@ -704,7 +704,7 @@ private fun DriverRecentEarningsCard(
                     DriverEarningEmptyRow(
                         icon = "…",
                         title = "Loading recent earnings",
-                        subtitle = "Checking completed trips from Firebase"
+                        subtitle = "Checking completed trips"
                     )
                 }
 
@@ -908,7 +908,7 @@ private fun DriverWalletSafetyCard() {
                 Spacer(modifier = Modifier.height(6.dp))
 
                 Text(
-                    text = "Earnings are calculated only from completed Firebase ride requests. Cancelled and declined trips do not increase wallet balance. Real payout is not connected yet.",
+                    text = "Earnings are calculated only from completed ride requests. Cancelled and declined trips do not increase wallet balance. Real payout is not connected yet.",
                     color = Color(0xFF9CA3AF),
                     style = MaterialTheme.typography.bodySmall,
                     fontWeight = FontWeight.Medium

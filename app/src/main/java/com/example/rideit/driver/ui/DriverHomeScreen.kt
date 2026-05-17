@@ -112,7 +112,8 @@ private data class DriverDashboardStats(
 
 @Composable
 fun DriverHomeScreen(
-    driverName: String = FirebaseManager.currentDriverDisplayName()
+    driverName: String = FirebaseManager.currentDriverDisplayName(),
+    onInnerPageChanged: (Boolean) -> Unit = {}
 ) {
     var isOnline by remember { mutableStateOf(false) }
     var showRideRequest by remember { mutableStateOf(false) }
@@ -223,7 +224,7 @@ fun DriverHomeScreen(
                     setActiveTripFromDocument(activeDocument)
                 } else if (activeRideRequestId.isNullOrBlank()) {
                     firebaseStatusText = if (isOnline) {
-                        "You are Live. Tap Check to find ride requests."
+                        "You are live. Tap Check to find ride requests."
                     } else {
                         "Driver is offline. Turn on Live to receive rides."
                     }
@@ -344,6 +345,10 @@ fun DriverHomeScreen(
         resetRideRequestUi()
         isOnline = false
         loadActiveDriverTrip()
+    }
+
+    LaunchedEffect(activeDestination) {
+        onInnerPageChanged(activeDestination != DriverHomeDestination.Home)
     }
 
     LaunchedEffect(driverId) {
@@ -584,9 +589,9 @@ fun DriverHomeScreen(
 
                     firebaseStatusText = if (newValue) {
                         if (!activeRideRequestId.isNullOrBlank()) {
-                            "You are Live. Tap Check for new requests, or continue active trip below."
+                            "You are live. Tap Check for new requests, or continue active trip below."
                         } else {
-                            "You are Live. Tap Check to find ride requests."
+                            "You are live. Tap Check to find ride requests."
                         }
                     } else {
                         if (!activeRideRequestId.isNullOrBlank()) {
@@ -599,7 +604,7 @@ fun DriverHomeScreen(
                     scope.launch {
                         snackbarHostState.showSnackbar(
                             message = if (newValue) {
-                                "You are live. Tap Check for new ride requests."
+                                "You are live."
                             } else {
                                 "You are offline."
                             }
@@ -1626,7 +1631,7 @@ private fun DriverEarningsOverviewCard(
             Spacer(modifier = Modifier.height(5.dp))
 
             Text(
-                text = "Aligned with Driver Wallet completed Firebase trips.",
+                text = "Aligned with completed driver trips.",
                 style = MaterialTheme.typography.bodySmall,
                 fontWeight = FontWeight.Medium,
                 color = Color.White.copy(alpha = 0.72f)

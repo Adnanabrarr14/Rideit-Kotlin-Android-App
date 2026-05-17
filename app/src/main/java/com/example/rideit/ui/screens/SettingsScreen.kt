@@ -260,13 +260,13 @@ fun SettingsScreen(
 
     val iconBackgroundColor = when (selectedThemeMode) {
         FirebaseManager.THEME_LIGHT -> Color(0xFFEBDDFF)
-        FirebaseManager.THEME_ROSE -> Color(0xFFFFD6E8)
+        FirebaseManager.THEME_ROSE -> Color(0xFFFFDCE9)
         else -> Color(0xFF2A2138)
     }
 
     val iconTextColor = when (selectedThemeMode) {
         FirebaseManager.THEME_LIGHT -> Color(0xFF8A35F2)
-        FirebaseManager.THEME_ROSE -> Color(0xFFFF5CA8)
+        FirebaseManager.THEME_ROSE -> Color(0xFFE45A8A)
         else -> Color.White
     }
 

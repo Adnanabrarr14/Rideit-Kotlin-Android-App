@@ -1322,20 +1322,8 @@ fun MapScreen(
                         showReceiptPreviewSheet = true
 
                         scope.launch {
-                            val tagText = if (tags.isNotEmpty()) {
-                                " Tags: ${tags.joinToString(", ")}."
-                            } else {
-                                ""
-                            }
-
-                            val feedbackText = if (feedback.isNotBlank()) {
-                                " Feedback saved."
-                            } else {
-                                ""
-                            }
-
                             snackbarHostState.showSnackbar(
-                                message = "Thanks! $rating-star rating saved to Firebase.$tagText$feedbackText"
+                                message = "Thanks! Your feedback has been submitted."
                             )
                         }
                     },
@@ -1417,7 +1405,7 @@ private fun RiderMapTopChrome(
                     shadowElevation = 10.dp
                 ) {
                     Text(
-                        text = "RideIt",
+                        text = "Rideit",
                         color = Color(0xFF8A35F2),
                         fontWeight = FontWeight.Black,
                         fontStyle = FontStyle.Italic,
@@ -1629,19 +1617,19 @@ private fun RiderActiveTripCompactCard(
     ) {
         Surface(
             modifier = Modifier.fillMaxWidth(),
-            shape = RoundedCornerShape(28.dp),
+            shape = RoundedCornerShape(24.dp),
             color = Color.White.copy(alpha = 0.98f),
-            shadowElevation = 18.dp,
-            tonalElevation = 8.dp
+            shadowElevation = 14.dp,
+            tonalElevation = 6.dp
         ) {
-            Column(modifier = Modifier.padding(16.dp)) {
+            Column(modifier = Modifier.padding(14.dp)) {
                 Row(
                     modifier = Modifier.fillMaxWidth(),
                     verticalAlignment = Alignment.CenterVertically
                 ) {
                     Box(
                         modifier = Modifier
-                            .size(54.dp)
+                            .size(48.dp)
                             .clip(CircleShape)
                             .background(Color(0xFF2563EB).copy(alpha = 0.12f)),
                         contentAlignment = Alignment.Center
@@ -1649,7 +1637,7 @@ private fun RiderActiveTripCompactCard(
                         Text(text = "🚗", style = MaterialTheme.typography.titleLarge)
                     }
 
-                    Spacer(modifier = Modifier.width(12.dp))
+                    Spacer(modifier = Modifier.width(10.dp))
 
                     Column(modifier = Modifier.weight(1f)) {
                         Text(
@@ -1687,44 +1675,44 @@ private fun RiderActiveTripCompactCard(
                     }
                 }
 
-                Spacer(modifier = Modifier.height(12.dp))
+                Spacer(modifier = Modifier.height(10.dp))
 
                 LinearProgressIndicator(
                     progress = { progress.coerceIn(0f, 1f) },
                     modifier = Modifier
                         .fillMaxWidth()
-                        .height(7.dp)
+                        .height(6.dp)
                         .clip(RoundedCornerShape(50)),
                     color = Color(0xFF2563EB),
                     trackColor = Color(0xFFE5E7EB)
                 )
 
-                Spacer(modifier = Modifier.height(12.dp))
+                Spacer(modifier = Modifier.height(10.dp))
 
                 Surface(
                     modifier = Modifier.fillMaxWidth(),
                     shape = RoundedCornerShape(20.dp),
                     color = Color(0xFFF8FAFC)
                 ) {
-                    Column(modifier = Modifier.padding(13.dp)) {
+                    Column(modifier = Modifier.padding(11.dp)) {
                         InfoLine(label = "Phone", value = phoneNumber)
-                        Spacer(modifier = Modifier.height(6.dp))
+                        Spacer(modifier = Modifier.height(5.dp))
                         InfoLine(label = "Car", value = vehicleModel)
-                        Spacer(modifier = Modifier.height(6.dp))
+                        Spacer(modifier = Modifier.height(5.dp))
                         InfoLine(label = "Vehicle No.", value = vehicleNumber)
-                        Spacer(modifier = Modifier.height(6.dp))
+                        Spacer(modifier = Modifier.height(5.dp))
                         InfoLine(label = "ETA", value = arrivalTime)
                     }
                 }
 
-                Spacer(modifier = Modifier.height(12.dp))
+                Spacer(modifier = Modifier.height(10.dp))
 
                 OutlinedButton(
                     enabled = !isCancelling,
                     onClick = onCancelRide,
                     modifier = Modifier
                         .fillMaxWidth()
-                        .height(52.dp),
+                        .height(46.dp),
                     shape = RoundedCornerShape(20.dp),
                     colors = ButtonDefaults.outlinedButtonColors(
                         contentColor = Color(0xFFEF4444)
@@ -1815,7 +1803,7 @@ private fun CompactRouteChip(
                         text = "${pickupText.ifBlank { "Pickup" }} → ${dropoffText.ifBlank { "Dropoff" }}",
                         color = Color(0xFF111827),
                         fontWeight = FontWeight.Black,
-                        maxLines = 1,
+                        maxLines = 2,
                         overflow = TextOverflow.Ellipsis,
                         style = MaterialTheme.typography.bodySmall
                     )
@@ -1896,8 +1884,8 @@ private fun RideitBottomPanel(
         Column(
             modifier = Modifier
                 .fillMaxWidth()
-                .heightIn(max = if (isPanelExpanded) 540.dp else 124.dp)
-                .padding(start = 18.dp, end = 18.dp, top = 10.dp, bottom = 14.dp)
+                .heightIn(max = if (isPanelExpanded) 500.dp else 116.dp)
+                .padding(start = 16.dp, end = 16.dp, top = 9.dp, bottom = 12.dp)
         ) {
             Box(
                 modifier = Modifier
@@ -2052,7 +2040,7 @@ private fun SearchContent(
         style = MaterialTheme.typography.titleLarge
     )
 
-    Spacer(modifier = Modifier.height(12.dp))
+    Spacer(modifier = Modifier.height(10.dp))
 
     ModernLocationField(
         value = uiState.pickupText.ifBlank { "Current location" },
@@ -2062,7 +2050,7 @@ private fun SearchContent(
         onClick = { onPickupChanged(uiState.pickupText) }
     )
 
-    Spacer(modifier = Modifier.height(6.dp))
+    Spacer(modifier = Modifier.height(5.dp))
 
     Text(
         text = "⋮",
@@ -2071,7 +2059,7 @@ private fun SearchContent(
         modifier = Modifier.padding(start = 22.dp)
     )
 
-    Spacer(modifier = Modifier.height(6.dp))
+    Spacer(modifier = Modifier.height(5.dp))
 
     ModernEditableLocationField(
         value = uiState.dropoffText,
@@ -2112,12 +2100,12 @@ private fun SearchContent(
         }
     }
 
-    Spacer(modifier = Modifier.height(12.dp))
+    Spacer(modifier = Modifier.height(10.dp))
 
-    Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+    Column(verticalArrangement = Arrangement.spacedBy(7.dp)) {
         Row(
             modifier = Modifier.fillMaxWidth(),
-            horizontalArrangement = Arrangement.spacedBy(8.dp)
+            horizontalArrangement = Arrangement.spacedBy(7.dp)
         ) {
             QuickPlaceChip(
                 icon = "🏠",
@@ -2143,7 +2131,7 @@ private fun SearchContent(
 
         Row(
             modifier = Modifier.fillMaxWidth(),
-            horizontalArrangement = Arrangement.spacedBy(8.dp)
+            horizontalArrangement = Arrangement.spacedBy(7.dp)
         ) {
             QuickPlaceChip(
                 icon = "✈️",
@@ -2179,12 +2167,12 @@ private fun SearchContent(
         )
     }
 
-    Spacer(modifier = Modifier.height(12.dp))
+    Spacer(modifier = Modifier.height(10.dp))
 
     Surface(
         modifier = Modifier
             .fillMaxWidth()
-            .height(54.dp)
+            .height(52.dp)
             .clickable { onSearchClick() },
         shape = RoundedCornerShape(22.dp),
         color = Color.Transparent,
@@ -2224,7 +2212,7 @@ private fun ModernLocationField(
     Surface(
         modifier = Modifier
             .fillMaxWidth()
-            .height(50.dp)
+            .height(48.dp)
             .clickable { onClick() },
         shape = RoundedCornerShape(18.dp),
         color = Color.White,
@@ -2277,7 +2265,7 @@ private fun ModernEditableLocationField(
         onValueChange = onValueChange,
         modifier = Modifier
             .fillMaxWidth()
-            .height(54.dp),
+            .height(52.dp),
         placeholder = {
             Text(
                 text = "Where to?",
@@ -2321,7 +2309,7 @@ private fun QuickPlaceChip(
 ) {
     Surface(
         modifier = modifier
-            .height(36.dp)
+            .height(34.dp)
             .clickable { onClick() },
         shape = RoundedCornerShape(50),
         color = Color.White,
@@ -2334,7 +2322,7 @@ private fun QuickPlaceChip(
                     color = Color(0xFFE5E7EB),
                     shape = RoundedCornerShape(50)
                 )
-                .padding(horizontal = 8.dp),
+                .padding(horizontal = 9.dp),
             verticalAlignment = Alignment.CenterVertically,
             horizontalArrangement = Arrangement.Center
         ) {

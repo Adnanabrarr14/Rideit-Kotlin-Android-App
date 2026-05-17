@@ -64,12 +64,12 @@ private val RideitDarkColorScheme = darkColorScheme(
 )
 
 private val RideitRoseColorScheme = lightColorScheme(
-    primary = Color(0xFFFF5CA8),
+    primary = Color(0xFFE45A8A),
     onPrimary = Color.White,
-    primaryContainer = Color(0xFFFFD6E8),
+    primaryContainer = Color(0xFFFFDCE9),
     onPrimaryContainer = Color(0xFF4A0A27),
 
-    secondary = Color(0xFFEC4899),
+    secondary = Color(0xFFBE4B78),
     onSecondary = Color.White,
     secondaryContainer = Color(0xFFFFE4F1),
     onSecondaryContainer = Color(0xFF4A0A27),
@@ -82,7 +82,7 @@ private val RideitRoseColorScheme = lightColorScheme(
     surfaceVariant = Color(0xFFFFEAF3),
     onSurfaceVariant = Color(0xFF6B3B50),
 
-    outline = Color(0xFFF9A8D4),
+    outline = Color(0xFFF3B4C9),
     error = Color(0xFFEF4444),
     onError = Color.White
 )

@@ -86,7 +86,7 @@ fun DriverTripScreen(
     var riderEmail by remember { mutableStateOf("Rider") }
     var pickupText by remember { mutableStateOf("Pickup location") }
     var dropoffText by remember { mutableStateOf("Dropoff location") }
-    var rideType by remember { mutableStateOf("Rideit") }
+    var rideType by remember { mutableStateOf("Mini") }
     var fareText by remember { mutableStateOf("Fare pending") }
 
     var pickupLatLng by remember { mutableStateOf(defaultPickupLatLng) }
@@ -130,7 +130,7 @@ fun DriverTripScreen(
         val requestId = rideRequestId
 
         if (requestId.isNullOrBlank()) {
-            firebaseTripError = "Firebase ride request ID not found."
+            firebaseTripError = "Ride request ID not found."
             return@LaunchedEffect
         }
 
@@ -142,6 +142,7 @@ fun DriverTripScreen(
                     .ifBlank { document.safeText("userEmail") }
                     .ifBlank { document.safeText("email") }
                     .ifBlank { "Rider" }
+                    .cleanDriverTripText()
 
                 pickupText = document.safeText("pickupAddress")
                     .ifBlank { document.safeText("pickupText") }
@@ -157,7 +158,8 @@ fun DriverTripScreen(
 
                 rideType = document.safeText("rideType")
                     .ifBlank { document.safeText("selectedRideType") }
-                    .ifBlank { "Rideit" }
+                    .ifBlank { "Mini" }
+                    .cleanDriverTripText()
 
                 fareText = document.safeText("fareEstimate")
                     .ifBlank { document.safeText("fare") }
@@ -196,7 +198,7 @@ fun DriverTripScreen(
                     else -> tripStep = 0
                 }
 
-                firebaseTripMessage = "Trip loaded."
+                firebaseTripMessage = null
                 firebaseTripError = null
             }
             .addOnFailureListener { exception ->
@@ -214,7 +216,7 @@ fun DriverTripScreen(
 
         if (requestId.isNullOrBlank()) {
             firebaseTripMessage = null
-            firebaseTripError = "Firebase request ID not found."
+            firebaseTripError = "Ride request ID not found."
             return
         }
 
@@ -381,7 +383,7 @@ fun DriverTripScreen(
                         tripStep == 0 -> {
                             updateFirebaseTripStatus(
                                 status = "driver_arriving",
-                                successMessage = "Driver arrived at pickup. Firebase status updated.",
+                                successMessage = "You have arrived at the pickup point.",
                                 stepAfterSuccess = 1,
                                 snackbarMessage = "Arrived at pickup."
                             )
@@ -390,7 +392,7 @@ fun DriverTripScreen(
                         tripStep == 1 -> {
                             updateFirebaseTripStatus(
                                 status = "ride_started",
-                                successMessage = "Trip started. Firebase status updated.",
+                                successMessage = "Trip started.",
                                 stepAfterSuccess = 2,
                                 snackbarMessage = "Trip started."
                             )
@@ -401,7 +403,7 @@ fun DriverTripScreen(
 
                             if (requestId.isNullOrBlank()) {
                                 firebaseTripMessage = null
-                                firebaseTripError = "Firebase request ID not found."
+                                firebaseTripError = "Ride request ID not found."
                                 return@DriverTripActionCard
                             }
 
@@ -409,19 +411,19 @@ fun DriverTripScreen(
 
                             isFirebaseActionLoading = true
                             firebaseTripError = null
-                            firebaseTripMessage = "Completing trip in Firebase..."
+                            firebaseTripMessage = "Completing trip..."
 
                             FirebaseManager.completeDriverTrip(
                                 requestId = requestId,
                                 onSuccess = {
                                     isFirebaseActionLoading = false
                                     tripStep = 3
-                                    firebaseTripMessage = "Trip completed successfully in Firebase."
+                                    firebaseTripMessage = "Trip completed successfully."
                                     firebaseTripError = null
 
                                     showRideAlertSnackbar(
                                         key = "$requestId:completed",
-                                        message = "Trip completed in Firebase."
+                                        message = "Trip completed."
                                     )
                                 },
                                 onError = { error ->
@@ -447,7 +449,7 @@ fun DriverTripScreen(
 
                     if (requestId.isNullOrBlank()) {
                         firebaseTripMessage = null
-                        firebaseTripError = "Firebase request ID not found."
+                        firebaseTripError = "Ride request ID not found."
                         return@DriverTripActionCard
                     }
 
@@ -455,7 +457,7 @@ fun DriverTripScreen(
 
                     isFirebaseActionLoading = true
                     firebaseTripError = null
-                    firebaseTripMessage = "Cancelling trip in Firebase..."
+                    firebaseTripMessage = "Cancelling trip..."
 
                     FirebaseManager.cancelDriverTrip(
                         requestId = requestId,
@@ -1012,7 +1014,7 @@ private fun DriverTripActionCard(
                 Spacer(modifier = Modifier.height(10.dp))
 
                 Text(
-                    text = "Updating Firebase trip status...",
+                    text = "Updating trip status...",
                     color = Color(0xFF6B7280),
                     fontWeight = FontWeight.Medium
                 )
@@ -1114,6 +1116,12 @@ private fun DocumentSnapshot.safeText(field: String): String {
     } catch (_: Exception) {
         ""
     }
+}
+
+private fun String.cleanDriverTripText(): String {
+    return replace(Regex("\\s+([@.])\\s*"), "$1")
+        .replace(Regex("\\s+"), " ")
+        .trim()
 }
 
 private fun DocumentSnapshot.safeNumber(field: String): Double? {

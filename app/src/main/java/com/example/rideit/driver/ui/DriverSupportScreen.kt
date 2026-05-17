@@ -142,7 +142,7 @@ fun DriverSupportScreen(
                 onLiveChatClick = {
                     scope.launch {
                         snackbarHostState.showSnackbar(
-                            message = "Live chat demo opened. Real chat will be connected later."
+                            message = "Live chat demo opened."
                         )
                     }
                 },
@@ -381,7 +381,7 @@ private fun DriverEmergencySupportCard(
                 )
             ) {
                 Text(
-                    text = "Contact Emergency Support Demo",
+                    text = "Emergency Support Demo",
                     fontWeight = FontWeight.Black
                 )
             }

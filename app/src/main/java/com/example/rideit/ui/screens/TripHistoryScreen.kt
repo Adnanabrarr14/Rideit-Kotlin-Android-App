@@ -125,7 +125,7 @@ fun TripHistoryScreen(
                                 ?: document.getString("dropoffText")
                                 ?: "Dropoff location"
 
-                            val rideType = document.getString("rideType") ?: "Rideit"
+                            val rideType = document.getString("rideType") ?: "Mini"
 
                             val fare = document.getString("fareEstimate")
                                 ?: document.getString("fare")
@@ -166,15 +166,15 @@ fun TripHistoryScreen(
                             TripHistoryItem(
                                 id = document.id,
                                 date = formatTripDate(finalTimestamp),
-                                pickup = pickup,
-                                dropoff = dropoff,
-                                rideType = rideType,
+                                pickup = cleanTripDisplayText(pickup),
+                                dropoff = cleanTripDisplayText(dropoff),
+                                rideType = cleanTripDisplayText(rideType),
                                 fare = normalizeFareText(fare),
                                 status = statusText,
-                                driverName = driverName,
+                                driverName = cleanTripDisplayText(driverName),
                                 time = formatTripTime(finalTimestamp),
                                 rating = ratingText,
-                                feedback = document.getString("riderFeedback").orEmpty(),
+                                feedback = cleanTripDisplayText(document.getString("riderFeedback").orEmpty()),
                                 feedbackTags = feedbackTags,
                                 sortTimeMillis = finalTimestamp?.toDate()?.time ?: 0L
                             )
@@ -290,7 +290,7 @@ fun TripHistoryScreen(
 
             if (!isLoading && firebaseError == null && trips.isEmpty()) {
                 TripHistoryMessageCard(
-                    title = "No Firebase trips yet",
+                    title = "No trips yet",
                     message = "Book and complete a real Rideit trip, then it will appear here automatically.",
                     success = true
                 )
@@ -500,7 +500,7 @@ private fun TripCard(
             Spacer(modifier = Modifier.height(10.dp))
 
             TripLocationRow(
-                dotColor = accentColor,
+                dotColor = Color(0xFF8A35F2),
                 title = trip.dropoff,
                 subtitle = "Dropoff"
             )
@@ -680,7 +680,7 @@ private fun TripHistoryLoadingCard() {
             modifier = Modifier.padding(18.dp)
         ) {
             Text(
-                text = "Loading Firebase trips...",
+                text = "Loading trips...",
                 color = Color.White,
                 fontWeight = FontWeight.Bold,
                 style = MaterialTheme.typography.titleMedium
@@ -750,6 +750,16 @@ private fun normalizeFareText(fare: String): String {
     }
 
     return "Rs $cleanFare"
+}
+
+private fun cleanTripDisplayText(value: String): String {
+    return value
+        .replace("Adna n Khan", "Adnan Khan")
+        .replace("Toyota C orolla", "Toyota Corolla")
+        .replace("No written f edback submitted.", "No written feedback submitted.")
+        .replace(Regex("\\s+([@.])\\s*"), "$1")
+        .replace(Regex("\\s+"), " ")
+        .trim()
 }
 
 private fun extractFareAmount(fare: String): Int {

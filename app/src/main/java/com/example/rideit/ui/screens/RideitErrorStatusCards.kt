@@ -273,7 +273,7 @@ fun RideitNetworkErrorCard(
 fun RideitFirebaseErrorCard(
     modifier: Modifier = Modifier,
     compact: Boolean = true,
-    message: String = "Firebase request failed. Please retry.",
+    message: String = "Request failed. Please retry.",
     onRetryClick: () -> Unit = {},
     onSupportClick: (() -> Unit)? = null
 ) {
@@ -282,7 +282,7 @@ fun RideitFirebaseErrorCard(
         compact = compact,
         status = RideitStatusCardUiModel(
             type = RideitStatusCardType.FIREBASE,
-            title = "Rideit sync failed",
+            title = "Rideit sync issue",
             message = message,
             primaryActionText = "Retry sync",
             secondaryActionText = if (onSupportClick != null) "Contact support" else null,
@@ -315,7 +315,7 @@ fun RideitPermissionStatusCard(
             title = title,
             message = message,
             primaryActionText = primaryActionText,
-            secondaryActionText = if (onSecondaryClick != null) "Not now" else null,
+            secondaryActionText = if (onSecondaryClick != null) "Not Now" else null,
             showPrimaryAction = true,
             showSecondaryAction = onSecondaryClick != null,
             style = RideitStatusCardStyle.PRIMARY

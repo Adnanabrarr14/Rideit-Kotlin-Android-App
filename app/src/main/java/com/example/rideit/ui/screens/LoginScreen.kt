@@ -6,6 +6,7 @@ import android.content.ContextWrapper
 import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -24,6 +25,7 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.BasicTextField
 import androidx.compose.foundation.text.KeyboardOptions
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.MaterialTheme
@@ -197,13 +199,14 @@ fun LoginScreen(
             Column(
                 modifier = Modifier
                     .fillMaxSize()
+                    .verticalScroll(rememberScrollState())
                     .padding(horizontal = 24.dp, vertical = 26.dp),
                 horizontalAlignment = Alignment.CenterHorizontally
             ) {
                 Spacer(modifier = Modifier.height(64.dp))
 
                 Text(
-                    text = "R I D E I T",
+                    text = "Rideit",
                     color = colors.text.copy(alpha = 0.58f),
                     fontWeight = FontWeight.Black,
                     style = MaterialTheme.typography.titleMedium
@@ -280,7 +283,7 @@ fun LoginScreen(
                                 isLoading = isLoading,
                                 colors = colors,
                                 onEmailChange = {
-                                    email = it
+                                    email = it.replace(" ", "")
                                     errorMessage = null
                                     successMessage = null
                                 },
@@ -977,7 +980,8 @@ private fun rememberLoginThemeColors(
     val scheme = MaterialTheme.colorScheme
 
     val isRoseTheme =
-        scheme.primary == Color(0xFFFF5CA8) ||
+                scheme.primary == Color(0xFFE45A8A) ||
+                scheme.primary == Color(0xFFFF5CA8) ||
                 scheme.primary == Color(0xFFEC4899) ||
                 scheme.primaryContainer == Color(0xFFFFD6E8)
 
@@ -986,7 +990,7 @@ private fun rememberLoginThemeColors(
     return remember(scheme.primary, scheme.background, isDriver, fallbackAccent) {
         when {
             isRoseTheme -> {
-                val accent = if (isDriver) Color(0xFFEC4899) else Color(0xFFFF5CA8)
+                val accent = if (isDriver) Color(0xFFBE4B78) else Color(0xFFE45A8A)
 
                 LoginThemeColors(
                     backgroundTop = Color(0xFFFFF7FB),
@@ -997,7 +1001,7 @@ private fun rememberLoginThemeColors(
                     selectedTab = accent,
                     unselectedTab = Color.Transparent,
                     accent = accent,
-                    accentBottom = Color(0xFFBE185D),
+                    accentBottom = Color(0xFF9F365F),
                     text = Color(0xFF24111A),
                     subText = Color(0xFF7A445A),
                     mutedText = Color(0xFF9D5570),

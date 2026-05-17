@@ -65,7 +65,7 @@ fun RideitTripConfirmationDialog(
     title: String? = null,
     message: String? = null,
     confirmText: String? = null,
-    dismissText: String = "Not now",
+    dismissText: String = "Not Now",
     loading: Boolean = false,
     dismissOnBackPress: Boolean = true,
     dismissOnClickOutside: Boolean = true,

@@ -197,7 +197,7 @@ fun RideitLocationStatusCard(
                     shape = RoundedCornerShape(16.dp)
                 ) {
                     Text(
-                        text = status.secondaryActionText ?: "Not now",
+                        text = status.secondaryActionText ?: "Not Now",
                         color = Color(0xFF64748B),
                         fontSize = 13.sp,
                         fontWeight = FontWeight.ExtraBold
