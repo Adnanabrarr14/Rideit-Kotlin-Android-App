@@ -19,6 +19,7 @@ import kotlinx.coroutines.launch
 class MapViewModel : ViewModel() {
 
     private val repository = MapRepository()
+    private val fallbackPickupLatLng = LatLng(33.6844, 73.0479)
 
     private val _uiState = MutableStateFlow(MapUiState())
     val uiState: StateFlow<MapUiState> = _uiState
@@ -32,9 +33,15 @@ class MapViewModel : ViewModel() {
     }
 
     fun onCurrentLocationDetected(latLng: LatLng) {
-        _uiState.value = _uiState.value.copy(
+        val currentState = _uiState.value
+
+        _uiState.value = currentState.copy(
             pickupText = "Current location",
             pickupLatLng = latLng,
+            routePoints = buildRoutePreview(
+                pickup = latLng,
+                dropoff = currentState.dropoffLatLng
+            ),
             errorMessage = null
         )
     }
@@ -42,6 +49,8 @@ class MapViewModel : ViewModel() {
     fun onDropoffTextChanged(text: String) {
         _uiState.value = _uiState.value.copy(
             dropoffText = text,
+            dropoffLatLng = null,
+            routePoints = emptyList(),
             showRideOptions = false,
             selectedRideOption = null,
             errorMessage = null
@@ -95,9 +104,14 @@ class MapViewModel : ViewModel() {
                 "home" -> {
                     val home = suggestions.firstOrNull()
                     if (home != null) {
+                        val dropoff = LatLng(home.latitude, home.longitude)
                         _uiState.value = _uiState.value.copy(
                             dropoffText = home.title,
-                            dropoffLatLng = LatLng(home.latitude, home.longitude),
+                            dropoffLatLng = dropoff,
+                            routePoints = buildRoutePreview(
+                                pickup = _uiState.value.pickupLatLng,
+                                dropoff = dropoff
+                            ),
                             locationSuggestions = emptyList(),
                             errorMessage = null
                         )
@@ -167,16 +181,22 @@ class MapViewModel : ViewModel() {
     }
 
     fun onSuggestionSelected(suggestion: LocationSuggestion) {
+        val dropoff = LatLng(suggestion.latitude, suggestion.longitude)
+
         _uiState.value = _uiState.value.copy(
             dropoffText = suggestion.title,
-            dropoffLatLng = LatLng(suggestion.latitude, suggestion.longitude),
+            dropoffLatLng = dropoff,
+            routePoints = buildRoutePreview(
+                pickup = _uiState.value.pickupLatLng,
+                dropoff = dropoff
+            ),
             locationSuggestions = emptyList(),
             errorMessage = null
         )
     }
 
     fun onSearchClicked() {
-        val pickup = _uiState.value.pickupLatLng ?: LatLng(33.6844, 73.0479)
+        val pickup = _uiState.value.pickupLatLng ?: fallbackPickupLatLng
         val dropoff = _uiState.value.dropoffLatLng
 
         if (dropoff == null) {
@@ -200,7 +220,7 @@ class MapViewModel : ViewModel() {
 
         _uiState.value = _uiState.value.copy(
             pickupLatLng = pickup,
-            routePoints = repository.getRoutePoints(pickup, dropoff),
+            routePoints = buildRoutePreview(pickup, dropoff),
             showRideOptions = true,
             rideOptions = rides,
             selectedRideOption = rides.first(),
@@ -285,6 +305,10 @@ class MapViewModel : ViewModel() {
         _uiState.value = _uiState.value.copy(
             rideRequestStatus = RideRequestStatus.CANCELLED,
             showRideOptions = false,
+            dropoffText = "",
+            dropoffLatLng = null,
+            routePoints = emptyList(),
+            selectedRideOption = null,
             driver = null,
             driverLatLng = null,
             rideConfirmedMessage = "Ride cancelled"
@@ -315,5 +339,16 @@ class MapViewModel : ViewModel() {
                 estimatedTime = RideitFareConstants.BUSINESS_TIME
             )
         )
+    }
+
+    private fun buildRoutePreview(
+        pickup: LatLng?,
+        dropoff: LatLng?
+    ): List<LatLng> {
+        val destination = dropoff ?: return emptyList()
+        val origin = pickup ?: fallbackPickupLatLng
+
+        return repository.getRoutePoints(origin, destination)
+            .ifEmpty { listOf(origin, destination) }
     }
 }

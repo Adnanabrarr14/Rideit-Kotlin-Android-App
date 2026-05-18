@@ -642,6 +642,9 @@ private fun DriverGoogleRouteMapCard(
     val cameraPositionState = rememberCameraPositionState {
         position = CameraPosition.fromLatLngZoom(driverLatLng, 12f)
     }
+    val pickupDropoffRoutePoints = remember(pickupLatLng, dropoffLatLng) {
+        driverTripRoutePreviewPoints(pickupLatLng, dropoffLatLng)
+    }
 
     LaunchedEffect(pickupLatLng, dropoffLatLng, driverLatLng) {
         try {
@@ -692,13 +695,31 @@ private fun DriverGoogleRouteMapCard(
                 )
             ) {
                 Polyline(
-                    points = when {
-                        tripStep >= 2 -> listOf(driverLatLng, dropoffLatLng)
-                        else -> listOf(driverLatLng, pickupLatLng, dropoffLatLng)
-                    },
-                    color = if (cancelled) Color(0xFFEF4444) else Color(0xFF8A35F2),
-                    width = 10f
+                    points = pickupDropoffRoutePoints,
+                    color = Color.White,
+                    width = 12f,
+                    geodesic = false
                 )
+
+                Polyline(
+                    points = pickupDropoffRoutePoints,
+                    color = if (cancelled) Color(0xFFEF4444) else Color(0xFF8A35F2),
+                    width = 7f,
+                    geodesic = false
+                )
+
+                if (!cancelled) {
+                    Polyline(
+                        points = if (tripStep >= 2) {
+                            listOf(driverLatLng, dropoffLatLng)
+                        } else {
+                            listOf(driverLatLng, pickupLatLng)
+                        },
+                        color = Color(0xFF0EA5E9),
+                        width = 5f,
+                        geodesic = false
+                    )
+                }
 
                 Marker(
                     state = MarkerState(position = pickupLatLng),
@@ -1183,6 +1204,31 @@ private fun midpointLatLng(
     return LatLng(
         (first.latitude + second.latitude) / 2.0,
         (first.longitude + second.longitude) / 2.0
+    )
+}
+
+private fun driverTripRoutePreviewPoints(
+    pickupLatLng: LatLng,
+    dropoffLatLng: LatLng
+): List<LatLng> {
+    val latDiff = dropoffLatLng.latitude - pickupLatLng.latitude
+    val lngDiff = dropoffLatLng.longitude - pickupLatLng.longitude
+
+    return listOf(
+        pickupLatLng,
+        LatLng(
+            pickupLatLng.latitude + latDiff * 0.30,
+            pickupLatLng.longitude + lngDiff * 0.20
+        ),
+        LatLng(
+            pickupLatLng.latitude + latDiff * 0.58,
+            pickupLatLng.longitude + lngDiff * 0.52
+        ),
+        LatLng(
+            pickupLatLng.latitude + latDiff * 0.84,
+            pickupLatLng.longitude + lngDiff * 0.78
+        ),
+        dropoffLatLng
     )
 }
 

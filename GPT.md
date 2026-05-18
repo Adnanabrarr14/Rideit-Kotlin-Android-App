@@ -4005,3 +4005,56 @@ Continue with Phase 8.21.12.6.3.3:
 - Firebase booking, driver accept/start/complete, rider rating/feedback, receipt, and wallet/history logic were not changed.
 - Fixed accidental file paste issue where RideitNavGraph code was pasted into MapScreen; restored both files correctly.
 - Current app remains stable and working.
+
+
+# Rideit Project Status — Final Polish / Portfolio Preparation
+
+## Current Phase
+
+**Phase 8.21.12 — Final Polish + Client Presentation Preparation**
+
+## Current App Status
+
+Rideit is now working successfully after the final polish pass.
+
+Completed status:
+
+- App launches successfully.
+- Rider side opens successfully.
+- Driver side opens successfully.
+- Latest polish changes are pushed to GitHub `master`.
+- GitHub remote is restored to GitHub only.
+- Bitbucket/SourceTree workflow is not being used.
+- Repository is currently private for safety until final cleanup.
+- Notifications center issue is fixed.
+- Rider and Driver Notifications no longer show raw Firebase `PERMISSION_DENIED` error.
+- App is ready for demo video and screenshots preparation.
+
+## Git / GitHub Status
+
+Completed:
+
+- Bitbucket remote was removed.
+- GitHub remote was restored.
+- Latest changes were pushed to GitHub `master`.
+- Normal workflow restored:
+
+```text
+Android Studio → Commit → Push → GitHub
+```
+
+## Phase 8.21.12 Final Map Polish
+
+- Fixed rider map route line from current location to selected dropoff.
+- Applied same route-line fallback/fix to driver trip map.
+- Removed temporary enable-location panel after location becomes available.
+- Fixed finding-driver card overlap with menu/drawer. also menu/drawer should be upside after finding driver
+- Preserved rider and driver Firebase trip flows.
+
+## Phase 8.21.12 Final Map UI Polish
+
+- Stabilized rider bottom panel after dropoff selection.
+- Fixed menu/drawer overlap with route summary card.
+- Fixed trip completed rating/feedback overlap with menu/drawer.
+- Removed unnecessary current-location snackbar.
+- Preserved route line, map behavior and Firebase trip flows.

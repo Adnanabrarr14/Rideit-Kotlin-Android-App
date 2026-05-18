@@ -40,6 +40,7 @@ import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.zIndex
 import androidx.navigation.NavHostController
 import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
@@ -473,7 +474,8 @@ private fun RiderMapWithDrawer(
                 },
                 modifier = Modifier
                     .align(Alignment.TopStart)
-                    .padding(top = 76.dp, start = 12.dp)
+                    .padding(top = 60.dp, start = 10.dp)
+                    .zIndex(6f)
             )
         }
     }

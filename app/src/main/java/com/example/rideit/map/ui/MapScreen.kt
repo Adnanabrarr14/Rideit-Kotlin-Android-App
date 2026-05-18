@@ -135,7 +135,7 @@ fun MapScreen(
     var firebaseLiveTripStatus by remember { mutableStateOf<String?>(null) }
 
     var pendingDetectAfterGpsDialog by remember { mutableStateOf(false) }
-    var showLocationCard by remember { mutableStateOf(true) }
+    var showLocationCard by remember { mutableStateOf(false) }
     var isBottomPanelExpanded by remember { mutableStateOf(true) }
 
     val firestore = remember { FirebaseFirestore.getInstance() }
@@ -178,7 +178,7 @@ fun MapScreen(
         }
     }
 
-    fun moveToDetectedLocation(location: LatLng, message: String) {
+    fun moveToDetectedLocation(location: LatLng, message: String?) {
         mapViewModel.onCurrentLocationDetected(location)
         showLocationCard = false
 
@@ -187,7 +187,9 @@ fun MapScreen(
                 update = CameraUpdateFactory.newLatLngZoom(location, 16.5f),
                 durationMs = 900
             )
-            snackbarHostState.showSnackbar(message)
+            if (!message.isNullOrBlank()) {
+                snackbarHostState.showSnackbar(message)
+            }
         }
     }
 
@@ -217,7 +219,7 @@ fun MapScreen(
                     message = if (showSuccessSnackbar) {
                         "Current location detected."
                     } else {
-                        "Map moved to your current location."
+                        null
                     }
                 )
             } else {
@@ -229,10 +231,11 @@ fun MapScreen(
                                 message = if (showSuccessSnackbar) {
                                     "Current location detected."
                                 } else {
-                                    "Map moved to your current location."
+                                    null
                                 }
                             )
                         } else {
+                            showLocationCard = true
                             scope.launch {
                                 snackbarHostState.showSnackbar(
                                     "Unable to detect current GPS location. Please try again."
@@ -241,6 +244,7 @@ fun MapScreen(
                         }
                     }
                     .addOnFailureListener {
+                        showLocationCard = true
                         scope.launch {
                             snackbarHostState.showSnackbar(
                                 "Unable to detect current GPS location. Please try again."
@@ -249,6 +253,7 @@ fun MapScreen(
                     }
             }
         }.addOnFailureListener {
+            showLocationCard = true
             scope.launch {
                 snackbarHostState.showSnackbar(
                     "Unable to detect current GPS location. Please try again."
@@ -262,9 +267,11 @@ fun MapScreen(
     ) { result ->
         if (result.resultCode == Activity.RESULT_OK || pendingDetectAfterGpsDialog) {
             pendingDetectAfterGpsDialog = false
+            showLocationCard = false
             detectLocationWithFusedProvider(showSuccessSnackbar = true)
         } else {
             pendingDetectAfterGpsDialog = false
+            showLocationCard = true
             scope.launch {
                 snackbarHostState.showSnackbar(
                     "Device location is still off. Turn it on to detect your current location."
@@ -289,6 +296,7 @@ fun MapScreen(
 
         settingsClient.checkLocationSettings(locationSettingsRequest)
             .addOnSuccessListener {
+                showLocationCard = false
                 detectLocationWithFusedProvider(showSuccessSnackbar = showSuccessSnackbar)
             }
             .addOnFailureListener { exception ->
@@ -302,6 +310,7 @@ fun MapScreen(
 
                         gpsSettingsLauncher.launch(intentSenderRequest)
                     } catch (_: IntentSender.SendIntentException) {
+                        showLocationCard = true
                         scope.launch {
                             snackbarHostState.showSnackbar(
                                 "Unable to open location settings. Please turn on GPS manually."
@@ -309,6 +318,7 @@ fun MapScreen(
                         }
                     }
                 } else {
+                    showLocationCard = true
                     scope.launch {
                         snackbarHostState.showSnackbar(
                             "Please turn on device location services."
@@ -326,6 +336,7 @@ fun MapScreen(
                     permissions[Manifest.permission.ACCESS_COARSE_LOCATION] == true
 
         if (granted) {
+            showLocationCard = false
             checkGpsSettingsThenDetectLocation(showSuccessSnackbar = true)
         } else {
             showLocationCard = true
@@ -349,6 +360,7 @@ fun MapScreen(
         ) == PackageManager.PERMISSION_GRANTED
 
         if (fineGranted || coarseGranted) {
+            showLocationCard = false
             checkGpsSettingsThenDetectLocation(showSuccessSnackbar = true)
         } else {
             locationPermissionLauncher.launch(
@@ -372,6 +384,7 @@ fun MapScreen(
         ) == PackageManager.PERMISSION_GRANTED
 
         if (fineGranted || coarseGranted) {
+            showLocationCard = false
             delay(650)
             checkGpsSettingsThenDetectLocation(showSuccessSnackbar = false)
         } else {
@@ -822,7 +835,25 @@ fun MapScreen(
     }
 
     val overlayVisible = showRideCompletionSheet || showReceiptPreviewSheet
-    val hasActiveRoute = uiState.routePoints.size >= 2
+    val routePreviewPoints = remember(
+        uiState.pickupLatLng,
+        uiState.dropoffLatLng,
+        uiState.routePoints,
+        firebaseTripCompleted,
+        firebaseTripCancelledByDriver
+    ) {
+        if (firebaseTripCompleted || firebaseTripCancelledByDriver) {
+            emptyList()
+        } else {
+            uiState.routePoints.takeIf { it.size >= 2 }
+                ?: fallbackRoutePreviewPoints(
+                    pickupLatLng = uiState.pickupLatLng,
+                    dropoffLatLng = uiState.dropoffLatLng,
+                    fallbackLocation = defaultLocation
+                )
+        }
+    }
+    val hasActiveRoute = routePreviewPoints.size >= 2
 
     val isCompactTrackingMode =
         firebaseLiveTripStatus == "accepted" ||
@@ -849,6 +880,16 @@ fun MapScreen(
                 currentTripStatus == RideitTripStatus.Idle &&
                 !uiState.showRideOptions &&
                 uiState.selectedRideOption == null
+
+    val shouldKeepBottomPanelStable =
+        !overlayVisible &&
+                !isCompactTrackingMode &&
+                (
+                        uiState.dropoffLatLng != null ||
+                                uiState.dropoffText.isNotBlank() ||
+                                uiState.showRideOptions ||
+                                uiState.locationSuggestions.isNotEmpty()
+                        )
 
     val driverDisplayName = firebaseDriverName ?: uiState.driver?.name ?: "Driver"
     val driverPhone = "+92 300 1234567"
@@ -981,9 +1022,16 @@ fun MapScreen(
         )
     }
 
-    LaunchedEffect(cameraPositionState.isMoving, overlayVisible, isCompactTrackingMode) {
+    LaunchedEffect(
+        cameraPositionState.isMoving,
+        overlayVisible,
+        isCompactTrackingMode,
+        shouldKeepBottomPanelStable
+    ) {
         if (overlayVisible || isCompactTrackingMode) {
             showPanel = false
+        } else if (shouldKeepBottomPanelStable) {
+            showPanel = true
         } else {
             if (cameraPositionState.isMoving) {
                 showPanel = false
@@ -998,7 +1046,7 @@ fun MapScreen(
         uiState.pickupLatLng,
         uiState.dropoffLatLng,
         visibleDriverLatLng,
-        uiState.routePoints,
+        routePreviewPoints,
         uiState.rideRequestStatus,
         firebaseLiveTripStatus,
         firebaseTripCompleted,
@@ -1035,7 +1083,7 @@ fun MapScreen(
             hasPoint = true
         }
 
-        uiState.routePoints.forEach {
+        routePreviewPoints.forEach {
             builder.include(it)
             hasPoint = true
         }
@@ -1090,16 +1138,16 @@ fun MapScreen(
                     )
                 }
 
-                if (uiState.routePoints.size >= 2) {
+                if (routePreviewPoints.size >= 2) {
                     Polyline(
-                        points = uiState.routePoints,
+                        points = routePreviewPoints,
                         width = 10f,
                         color = Color.White,
                         geodesic = false
                     )
 
                     Polyline(
-                        points = uiState.routePoints,
+                        points = routePreviewPoints,
                         width = 6f,
                         color = Color(0xFF7B1DE8),
                         geodesic = false
@@ -1162,7 +1210,13 @@ fun MapScreen(
             modifier = Modifier
                 .align(Alignment.TopCenter)
                 .statusBarsPadding()
-                .padding(top = if (shouldShowRiderTopHeader && showLocationCard) 144.dp else 82.dp)
+                .padding(
+                    top = if (currentTripStatus == RideitTripStatus.Idle) {
+                        if (shouldShowRiderTopHeader && showLocationCard) 144.dp else 82.dp
+                    } else {
+                        136.dp
+                    }
+                )
         )
 
         CompactRouteChip(
@@ -1177,9 +1231,13 @@ fun MapScreen(
                 .statusBarsPadding()
                 .padding(
                     top = if (currentTripStatus == RideitTripStatus.Idle) {
-                        if (showLocationCard) 170.dp else 104.dp
+                        when {
+                            showLocationCard -> 176.dp
+                            uiState.showRideOptions || uiState.selectedRideOption != null -> 132.dp
+                            else -> 104.dp
+                        }
                     } else {
-                        116.dp
+                        132.dp
                     },
                     start = 16.dp,
                     end = 120.dp
@@ -1285,7 +1343,10 @@ fun MapScreen(
             driverName = firebaseDriverName ?: uiState.driver?.name,
             rideTitle = selectedRide?.title,
             fareText = selectedRide?.estimatedFare,
-            modifier = Modifier.align(Alignment.Center),
+            modifier = Modifier
+                .align(Alignment.TopCenter)
+                .statusBarsPadding()
+                .padding(top = 118.dp),
             onDismiss = {
                 showRideCompletionSheet = false
                 showReceiptPreviewSheet = true
@@ -2981,6 +3042,34 @@ private fun resolveVisibleDriverLatLng(
             )
         }
     }
+}
+
+private fun fallbackRoutePreviewPoints(
+    pickupLatLng: LatLng?,
+    dropoffLatLng: LatLng?,
+    fallbackLocation: LatLng
+): List<LatLng> {
+    val dropoff = dropoffLatLng ?: return emptyList()
+    val pickup = pickupLatLng ?: fallbackLocation
+    val latDiff = dropoff.latitude - pickup.latitude
+    val lngDiff = dropoff.longitude - pickup.longitude
+
+    return listOf(
+        pickup,
+        LatLng(
+            pickup.latitude + latDiff * 0.32,
+            pickup.longitude + lngDiff * 0.18
+        ),
+        LatLng(
+            pickup.latitude + latDiff * 0.58,
+            pickup.longitude + lngDiff * 0.54
+        ),
+        LatLng(
+            pickup.latitude + latDiff * 0.82,
+            pickup.longitude + lngDiff * 0.78
+        ),
+        dropoff
+    )
 }
 
 private fun rideColor(title: String): Color {
