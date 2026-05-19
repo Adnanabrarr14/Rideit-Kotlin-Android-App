@@ -238,7 +238,7 @@ private fun DriverDocumentsHeader(
                         colors = listOf(
                             Color(0xFF111827),
                             Color(0xFF1F2937),
-                            Color(0xFF8A35F2)
+                            MaterialTheme.colorScheme.primary
                         )
                     )
                 )
@@ -369,14 +369,14 @@ private fun VerificationProgressCard(
 
                 Surface(
                     shape = RoundedCornerShape(50),
-                    color = Color(0xFF8A35F2).copy(alpha = 0.10f)
+                    color = MaterialTheme.colorScheme.primary.copy(alpha = 0.10f)
                 ) {
                     Text(
                         text = "$progressPercent%",
                         modifier = Modifier.padding(horizontal = 12.dp, vertical = 7.dp),
                         style = MaterialTheme.typography.labelLarge,
                         fontWeight = FontWeight.Black,
-                        color = Color(0xFF8A35F2)
+                        color = MaterialTheme.colorScheme.primary
                     )
                 }
             }
@@ -389,7 +389,7 @@ private fun VerificationProgressCard(
                     .fillMaxWidth()
                     .height(8.dp)
                     .clip(RoundedCornerShape(50)),
-                color = Color(0xFF8A35F2),
+                color = MaterialTheme.colorScheme.primary,
                 trackColor = Color(0xFFE5E7EB)
             )
 
@@ -434,7 +434,7 @@ private fun VehicleProfileCard() {
                     modifier = Modifier
                         .size(58.dp)
                         .clip(CircleShape)
-                        .background(Color(0xFF8A35F2).copy(alpha = 0.12f)),
+                        .background(MaterialTheme.colorScheme.primary.copy(alpha = 0.12f)),
                     contentAlignment = Alignment.Center
                 ) {
                     Text(
@@ -580,7 +580,7 @@ private fun DocumentStatusSummaryCard(
                 StatusMiniBox(
                     title = "Expiring",
                     value = expiringCount.toString(),
-                    color = Color(0xFF8A35F2),
+                    color = MaterialTheme.colorScheme.primary,
                     modifier = Modifier.weight(1f)
                 )
             }
@@ -768,7 +768,7 @@ private fun DriverDocumentCard(
                         onClick = onUploadClick,
                         shape = RoundedCornerShape(18.dp),
                         colors = ButtonDefaults.buttonColors(
-                            containerColor = Color(0xFF8A35F2)
+                            containerColor = MaterialTheme.colorScheme.primary
                         )
                     ) {
                         Text(
@@ -855,7 +855,7 @@ private fun documentStatusColor(status: DriverDocumentStatus): Color {
         DriverDocumentStatus.Verified -> Color(0xFF16A34A)
         DriverDocumentStatus.PendingReview -> Color(0xFFE17A00)
         DriverDocumentStatus.Missing -> Color(0xFFEF4444)
-        DriverDocumentStatus.ExpiringSoon -> Color(0xFF8A35F2)
+        DriverDocumentStatus.ExpiringSoon -> Color(0xFFF97316)
     }
 }
 

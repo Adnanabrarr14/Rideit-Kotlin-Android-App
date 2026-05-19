@@ -41,6 +41,7 @@ import androidx.compose.ui.graphics.luminance
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import com.example.rideit.FirebaseManager
+import com.example.rideit.isRideitRoseTheme
 
 @Immutable
 private data class WalletTopUpOption(
@@ -754,11 +755,7 @@ private fun WalletSafetyCard(
 private fun rememberWalletThemeColors(): WalletThemeColors {
     val scheme = MaterialTheme.colorScheme
 
-    val isRoseTheme =
-        scheme.primary == Color(0xFFFF5CA8) ||
-                scheme.primary == Color(0xFFEC4899) ||
-                scheme.primaryContainer == Color(0xFFFFD6E8)
-
+    val isRoseTheme = scheme.isRideitRoseTheme()
     val isLightTheme = scheme.background.luminance() > 0.5f
 
     return remember(scheme.primary, scheme.background) {
@@ -806,7 +803,7 @@ private fun rememberWalletThemeColors(): WalletThemeColors {
                 card = Color(0xFF1B1B1D),
                 innerCard = Color(0xFF252529),
                 iconCard = Color(0xFF2A2138),
-                primary = Color(0xFF8A35F2),
+                primary = scheme.primary,
                 secondary = Color(0xFF5B21B6),
                 text = Color.White,
                 subText = Color(0xFF9CA3AF),

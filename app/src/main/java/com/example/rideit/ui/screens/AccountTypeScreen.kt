@@ -43,6 +43,7 @@ import androidx.compose.ui.graphics.luminance
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
+import com.example.rideit.isRideitRoseTheme
 
 @Immutable
 private data class AccountTypeThemeColors(
@@ -423,11 +424,7 @@ private fun AccountChoiceCard(
 private fun rememberAccountTypeThemeColors(): AccountTypeThemeColors {
     val scheme = MaterialTheme.colorScheme
 
-    val isRoseTheme =
-        scheme.primary == Color(0xFFFF5CA8) ||
-                scheme.primary == Color(0xFFEC4899) ||
-                scheme.primaryContainer == Color(0xFFFFD6E8)
-
+    val isRoseTheme = scheme.isRideitRoseTheme()
     val isLightTheme = scheme.background.luminance() > 0.5f
 
     return remember(scheme.primary, scheme.background) {

@@ -52,6 +52,7 @@ import androidx.compose.ui.text.input.VisualTransformation
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import com.example.rideit.FirebaseManager
+import com.example.rideit.RideitThemeTokens
 
 @Immutable
 private data class SignupChoice(
@@ -124,7 +125,7 @@ fun SignupScreen(
     }
 
     val signupAccentColor = when (selectedThemeMode) {
-        FirebaseManager.THEME_ROSE -> Color(0xFFE45A8A)
+        FirebaseManager.THEME_ROSE -> RideitThemeTokens.RosePrimary
         FirebaseManager.THEME_DARK -> Color(0xFFB98CFF)
         FirebaseManager.THEME_LIGHT -> Color(0xFF8A35F2)
         else -> accentColor
@@ -354,7 +355,7 @@ fun SignupScreen(
                                 choice = choice,
                                 selected = selectedThemeMode == choice.code,
                                 selectedColor = if (choice.code == FirebaseManager.THEME_ROSE) {
-                                    Color(0xFFE45A8A)
+                                    RideitThemeTokens.RosePrimary
                                 } else {
                                     signupAccentColor
                                 },

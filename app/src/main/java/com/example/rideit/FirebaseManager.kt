@@ -1,6 +1,7 @@
 package com.example.rideit
 
 import android.app.Activity
+import android.net.Uri
 import com.google.firebase.FirebaseException
 import com.google.firebase.Timestamp
 import com.google.firebase.auth.FirebaseAuth
@@ -11,6 +12,7 @@ import com.google.firebase.auth.UserProfileChangeRequest
 import com.google.firebase.firestore.DocumentSnapshot
 import com.google.firebase.firestore.FirebaseFirestore
 import com.google.firebase.firestore.SetOptions
+import com.google.firebase.storage.FirebaseStorage
 import java.util.Locale
 import java.util.concurrent.TimeUnit
 
@@ -18,6 +20,7 @@ object FirebaseManager {
 
     private val auth: FirebaseAuth = FirebaseAuth.getInstance()
     private val firestore: FirebaseFirestore = FirebaseFirestore.getInstance()
+    private val storage: FirebaseStorage = FirebaseStorage.getInstance()
 
     const val ROLE_RIDER = "rider"
     const val ROLE_DRIVER = "driver"
@@ -49,7 +52,8 @@ object FirebaseManager {
         val phoneNumber: String = "",
         val role: String = ROLE_RIDER,
         val gender: String = GENDER_PREFER_NOT_TO_SAY,
-        val preferredThemeMode: String = THEME_SYSTEM
+        val preferredThemeMode: String = THEME_SYSTEM,
+        val profilePhotoUrl: String = ""
     )
 
     fun login(
@@ -479,7 +483,11 @@ object FirebaseManager {
                             ?: currentUser.phoneNumber.orEmpty(),
                         role = snapshot.getString("role") ?: ROLE_RIDER,
                         gender = snapshot.getString("gender") ?: GENDER_PREFER_NOT_TO_SAY,
-                        preferredThemeMode = snapshot.getString("preferredThemeMode") ?: THEME_SYSTEM
+                        preferredThemeMode = snapshot.getString("preferredThemeMode") ?: THEME_SYSTEM,
+                        profilePhotoUrl = snapshot.getString("profilePhotoUrl")
+                            ?: snapshot.getString("photoUrl")
+                            ?: snapshot.getString("avatarUrl")
+                            ?: currentUser.photoUrl?.toString().orEmpty()
                     )
                 )
             }
@@ -533,6 +541,62 @@ object FirebaseManager {
             }
             .addOnFailureListener { exception ->
                 onError(exception.message ?: "Failed to update account name.")
+            }
+    }
+
+    fun uploadCurrentUserProfilePhoto(
+        photoUri: Uri,
+        onSuccess: (String) -> Unit,
+        onError: (String) -> Unit
+    ) {
+        val currentUser = auth.currentUser
+
+        if (currentUser == null) {
+            onError("Please login again to update your photo.")
+            return
+        }
+
+        val safeUid = currentUser.uid
+        val photoRef = storage.reference
+            .child("profile_photos")
+            .child(safeUid)
+            .child("profile_${System.currentTimeMillis()}.jpg")
+
+        photoRef.putFile(photoUri)
+            .addOnSuccessListener {
+                photoRef.downloadUrl
+                    .addOnSuccessListener { downloadUri ->
+                        val photoUrl = downloadUri.toString()
+                        val profileUpdates = UserProfileChangeRequest.Builder()
+                            .setPhotoUri(downloadUri)
+                            .build()
+
+                        val photoData = hashMapOf<String, Any>(
+                            "profilePhotoUrl" to photoUrl,
+                            "photoUrl" to photoUrl,
+                            "avatarUrl" to photoUrl,
+                            "updatedAt" to Timestamp.now()
+                        )
+
+                        currentUser.updateProfile(profileUpdates)
+                            .addOnCompleteListener {
+                                firestore.collection("users")
+                                    .document(safeUid)
+                                    .set(photoData, SetOptions.merge())
+                                    .addOnSuccessListener {
+                                        onSuccess(photoUrl)
+                                    }
+                                    .addOnFailureListener { exception ->
+                                        onError(exception.message ?: "Failed to save profile photo.")
+                                    }
+                            }
+                    }
+                    .addOnFailureListener { exception ->
+                        onError(exception.message ?: "Failed to get profile photo URL.")
+                    }
+            }
+            .addOnFailureListener { exception ->
+                onError(exception.message ?: "Failed to upload profile photo.")
             }
     }
 
@@ -841,6 +905,7 @@ object FirebaseManager {
             status: String?,
             driverName: String?,
             driverEmail: String?,
+            driverProfilePhotoUrl: String?,
             feedbackSubmitted: Boolean
         ) -> Unit,
         onError: (String) -> Unit
@@ -848,7 +913,7 @@ object FirebaseManager {
         val currentUser = auth.currentUser
 
         if (currentUser == null) {
-            onSuccess(null, null, null, null, false)
+            onSuccess(null, null, null, null, null, false)
             return
         }
 
@@ -876,7 +941,7 @@ object FirebaseManager {
                     }
 
                 if (document == null) {
-                    onSuccess(null, null, null, null, false)
+                    onSuccess(null, null, null, null, null, false)
                     return@addOnSuccessListener
                 }
 
@@ -885,6 +950,9 @@ object FirebaseManager {
                     document.getString("status"),
                     document.getString("driverName"),
                     document.getString("driverEmail"),
+                    document.getString("driverProfilePhotoUrl")
+                        ?: document.getString("driverPhotoUrl")
+                        ?: document.getString("driverAvatarUrl"),
                     document.getBoolean("feedbackSubmitted") ?: false
                 )
             }
@@ -999,6 +1067,8 @@ object FirebaseManager {
                             "driverId" to currentUser.uid,
                             "driverEmail" to (currentUser.email ?: ""),
                             "driverName" to currentUserDisplayName("Rideit Driver"),
+                            "driverProfilePhotoUrl" to currentUserPhotoUrl(),
+                            "driverPhotoUrl" to currentUserPhotoUrl(),
                             "fareAmount" to safeEarningAmount,
                             "fare" to safeEarningText,
                             "fareEstimate" to safeEarningText,
@@ -1147,6 +1217,10 @@ object FirebaseManager {
 
     fun currentUserEmail(): String? {
         return auth.currentUser?.email
+    }
+
+    fun currentUserPhotoUrl(): String {
+        return auth.currentUser?.photoUrl?.toString().orEmpty()
     }
 
     fun currentUserDisplayName(

@@ -379,7 +379,7 @@ private fun DriverTripHistoryHeader(
                         colors = listOf(
                             Color(0xFF111827),
                             Color(0xFF1F2937),
-                            Color(0xFF8A35F2)
+                            MaterialTheme.colorScheme.primary
                         )
                     )
                 )
@@ -558,7 +558,7 @@ private fun HistoryMetricBox(
                 text = subtitle,
                 style = MaterialTheme.typography.bodySmall,
                 fontWeight = FontWeight.Medium,
-                color = Color(0xFF8A35F2)
+                color = MaterialTheme.colorScheme.primary
             )
         }
     }
@@ -611,14 +611,14 @@ private fun DriverTripHistoryPerformanceCard(
 
                 Surface(
                     shape = RoundedCornerShape(50),
-                    color = Color(0xFF8A35F2).copy(alpha = 0.10f)
+                    color = MaterialTheme.colorScheme.primary.copy(alpha = 0.10f)
                 ) {
                     Text(
                         text = "$percent%",
                         modifier = Modifier.padding(horizontal = 12.dp, vertical = 7.dp),
                         style = MaterialTheme.typography.labelLarge,
                         fontWeight = FontWeight.Black,
-                        color = Color(0xFF8A35F2)
+                        color = MaterialTheme.colorScheme.primary
                     )
                 }
             }
@@ -631,7 +631,7 @@ private fun DriverTripHistoryPerformanceCard(
                     .fillMaxWidth()
                     .height(8.dp)
                     .clip(RoundedCornerShape(50)),
-                color = Color(0xFF8A35F2),
+                color = MaterialTheme.colorScheme.primary,
                 trackColor = Color(0xFFE5E7EB)
             )
         }
@@ -664,7 +664,7 @@ private fun DriverTripHistoryLoadingCard() {
                     .fillMaxWidth()
                     .height(8.dp)
                     .clip(RoundedCornerShape(50)),
-                color = Color(0xFF8A35F2),
+                color = MaterialTheme.colorScheme.primary,
                 trackColor = Color(0xFFE5E7EB)
             )
         }
@@ -694,7 +694,7 @@ private fun DriverTripHistoryMessageCard(
                     .clip(CircleShape)
                     .background(
                         if (success) {
-                            Color(0xFF8A35F2).copy(alpha = 0.12f)
+                            MaterialTheme.colorScheme.primary.copy(alpha = 0.12f)
                         } else {
                             Color(0xFFEF4444).copy(alpha = 0.12f)
                         }
@@ -703,7 +703,7 @@ private fun DriverTripHistoryMessageCard(
             ) {
                 Text(
                     text = if (success) "↗" else "!",
-                    color = if (success) Color(0xFF8A35F2) else Color(0xFFEF4444),
+                    color = if (success) MaterialTheme.colorScheme.primary else Color(0xFFEF4444),
                     fontWeight = FontWeight.Black
                 )
             }
@@ -955,7 +955,7 @@ private fun DriverRouteMiniBlock(
             Spacer(modifier = Modifier.height(10.dp))
 
             RouteLine(
-                dotColor = Color(0xFF8A35F2),
+                dotColor = MaterialTheme.colorScheme.primary,
                 title = "Dropoff",
                 value = dropoff
             )

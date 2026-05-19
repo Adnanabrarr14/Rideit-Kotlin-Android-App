@@ -502,7 +502,7 @@ private fun DriverTripHeader(
     progress: Float,
     cancelled: Boolean
 ) {
-    val mainColor = if (cancelled) Color(0xFFEF4444) else Color(0xFF8A35F2)
+    val mainColor = if (cancelled) Color(0xFFEF4444) else MaterialTheme.colorScheme.primary
 
     Surface(
         modifier = Modifier.fillMaxWidth(),
@@ -642,8 +642,13 @@ private fun DriverGoogleRouteMapCard(
     val cameraPositionState = rememberCameraPositionState {
         position = CameraPosition.fromLatLngZoom(driverLatLng, 12f)
     }
-    val pickupDropoffRoutePoints = remember(pickupLatLng, dropoffLatLng) {
-        driverTripRoutePreviewPoints(pickupLatLng, dropoffLatLng)
+    val routeColor = MaterialTheme.colorScheme.primary
+    val activeRoutePoints = remember(tripStep, pickupLatLng, dropoffLatLng, driverLatLng, cancelled) {
+        when {
+            cancelled || tripStep >= 3 -> emptyList()
+            tripStep >= 2 -> driverTripRoutePreviewPoints(driverLatLng, dropoffLatLng)
+            else -> driverTripRoutePreviewPoints(driverLatLng, pickupLatLng)
+        }
     }
 
     LaunchedEffect(pickupLatLng, dropoffLatLng, driverLatLng) {
@@ -694,29 +699,11 @@ private fun DriverGoogleRouteMapCard(
                     compassEnabled = false
                 )
             ) {
-                Polyline(
-                    points = pickupDropoffRoutePoints,
-                    color = Color.White,
-                    width = 12f,
-                    geodesic = false
-                )
-
-                Polyline(
-                    points = pickupDropoffRoutePoints,
-                    color = if (cancelled) Color(0xFFEF4444) else Color(0xFF8A35F2),
-                    width = 7f,
-                    geodesic = false
-                )
-
-                if (!cancelled) {
+                if (activeRoutePoints.size >= 2) {
                     Polyline(
-                        points = if (tripStep >= 2) {
-                            listOf(driverLatLng, dropoffLatLng)
-                        } else {
-                            listOf(driverLatLng, pickupLatLng)
-                        },
-                        color = Color(0xFF0EA5E9),
-                        width = 5f,
+                        points = activeRoutePoints,
+                        color = routeColor,
+                        width = 7f,
                         geodesic = false
                     )
                 }
@@ -786,7 +773,7 @@ private fun DriverGoogleRouteMapCard(
                         text = dropoffText,
                         style = MaterialTheme.typography.labelSmall,
                         fontWeight = FontWeight.Black,
-                        color = if (cancelled) Color(0xFFEF4444) else Color(0xFF8A35F2),
+                        color = if (cancelled) Color(0xFFEF4444) else routeColor,
                         maxLines = 1,
                         overflow = TextOverflow.Ellipsis
                     )
@@ -838,14 +825,14 @@ private fun DriverTripRiderCard(
                 modifier = Modifier
                     .size(56.dp)
                     .clip(CircleShape)
-                    .background(Color(0xFF8A35F2).copy(alpha = 0.12f)),
+                    .background(MaterialTheme.colorScheme.primary.copy(alpha = 0.12f)),
                 contentAlignment = Alignment.Center
             ) {
                 Text(
                     text = riderInitial,
                     style = MaterialTheme.typography.titleLarge,
                     fontWeight = FontWeight.Black,
-                    color = Color(0xFF8A35F2)
+                    color = MaterialTheme.colorScheme.primary
                 )
             }
 
@@ -907,7 +894,7 @@ private fun DriverTripRouteCard(
             Spacer(modifier = Modifier.height(16.dp))
 
             DriverRoutePoint(
-                dotColor = Color(0xFF8A35F2),
+                dotColor = MaterialTheme.colorScheme.primary,
                 label = "Dropoff",
                 value = dropoffText
             )
@@ -1028,7 +1015,7 @@ private fun DriverTripActionCard(
                         .fillMaxWidth()
                         .height(7.dp)
                         .clip(RoundedCornerShape(50)),
-                    color = Color(0xFF8A35F2),
+                    color = MaterialTheme.colorScheme.primary,
                     trackColor = Color(0xFFE5E7EB)
                 )
 
@@ -1052,13 +1039,13 @@ private fun DriverTripActionCard(
                 shape = RoundedCornerShape(22.dp),
                 colors = ButtonDefaults.buttonColors(
                     containerColor = if (tripCancelledSafely) {
-                        Color(0xFF8A35F2)
+                        MaterialTheme.colorScheme.primary
                     } else {
                         when (tripStep) {
-                            0 -> Color(0xFF8A35F2)
+                            0 -> MaterialTheme.colorScheme.primary
                             1 -> Color(0xFF16A34A)
                             2 -> Color(0xFF111827)
-                            else -> Color(0xFF8A35F2)
+                            else -> MaterialTheme.colorScheme.primary
                         }
                     }
                 )

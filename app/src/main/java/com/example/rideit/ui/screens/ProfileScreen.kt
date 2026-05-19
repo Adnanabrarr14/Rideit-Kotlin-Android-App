@@ -1,5 +1,8 @@
 package com.example.rideit.ui.screens
 
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.PickVisualMediaRequest
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
@@ -47,6 +50,8 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.window.Dialog
 import com.example.rideit.FirebaseManager
+import com.example.rideit.ui.components.RideitProfilePhotoAvatar
+import com.example.rideit.isRideitRoseTheme
 
 @Immutable
 private data class ProfileThemeColors(
@@ -84,6 +89,10 @@ fun ProfileScreen(
         mutableStateOf("")
     }
 
+    var profilePhotoUrl by rememberSaveable {
+        mutableStateOf(FirebaseManager.currentUserPhotoUrl())
+    }
+
     var accountRole by rememberSaveable {
         mutableStateOf("Rider")
     }
@@ -100,8 +109,44 @@ fun ProfileScreen(
         mutableStateOf(false)
     }
 
+    var isPhotoUploading by rememberSaveable {
+        mutableStateOf(false)
+    }
+
     var showEditDialog by rememberSaveable {
         mutableStateOf(false)
+    }
+
+    val photoPickerLauncher = rememberLauncherForActivityResult(
+        contract = ActivityResultContracts.PickVisualMedia()
+    ) { photoUri ->
+        if (photoUri == null || isPhotoUploading) {
+            return@rememberLauncherForActivityResult
+        }
+
+        isPhotoUploading = true
+        statusMessage = "Uploading profile photo..."
+
+        FirebaseManager.uploadCurrentUserProfilePhoto(
+            photoUri = photoUri,
+            onSuccess = { uploadedUrl ->
+                profilePhotoUrl = uploadedUrl
+                isPhotoUploading = false
+                statusMessage = "Profile photo updated"
+            },
+            onError = {
+                isPhotoUploading = false
+                statusMessage = "Unable to update profile photo. Please try again."
+            }
+        )
+    }
+
+    fun launchProfilePhotoPicker() {
+        if (isPhotoUploading) return
+
+        photoPickerLauncher.launch(
+            PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.ImageOnly)
+        )
     }
 
     LaunchedEffect(Unit) {
@@ -114,6 +159,9 @@ fun ProfileScreen(
                     FirebaseManager.currentUserEmail() ?: "No email found"
                 }
                 phoneNumber = profile.phoneNumber
+                profilePhotoUrl = profile.profilePhotoUrl.ifBlank {
+                    FirebaseManager.currentUserPhotoUrl()
+                }
                 accountRole = if (profile.role == FirebaseManager.ROLE_DRIVER) {
                     "Driver"
                 } else {
@@ -122,9 +170,9 @@ fun ProfileScreen(
                 isLoading = false
                 statusMessage = ""
             },
-            onError = { error ->
+            onError = {
                 isLoading = false
-                statusMessage = error
+                statusMessage = "Unable to load profile. Please try again."
             }
         )
     }
@@ -204,22 +252,28 @@ fun ProfileScreen(
                     modifier = Modifier.padding(24.dp),
                     horizontalAlignment = Alignment.CenterHorizontally
                 ) {
-                    Box(
-                        modifier = Modifier
-                            .size(92.dp)
-                            .clip(CircleShape)
-                            .background(colors.primary),
-                        contentAlignment = Alignment.Center
+                    RideitProfilePhotoAvatar(
+                        photoUrl = profilePhotoUrl,
+                        fallbackText = avatarLetter,
+                        size = 92.dp,
+                        backgroundColor = colors.primary,
+                        contentColor = colors.buttonText
+                    )
+
+                    Spacer(modifier = Modifier.height(10.dp))
+
+                    TextButton(
+                        onClick = { launchProfilePhotoPicker() },
+                        enabled = !isPhotoUploading && !isSaving
                     ) {
                         Text(
-                            text = avatarLetter,
-                            color = colors.buttonText,
-                            fontWeight = FontWeight.Black,
-                            style = MaterialTheme.typography.displaySmall
+                            text = if (isPhotoUploading) "Uploading..." else "Change photo",
+                            color = colors.primary,
+                            fontWeight = FontWeight.Black
                         )
                     }
 
-                    Spacer(modifier = Modifier.height(16.dp))
+                    Spacer(modifier = Modifier.height(8.dp))
 
                     Text(
                         text = fullName,
@@ -307,7 +361,7 @@ fun ProfileScreen(
                     SettingRow(
                         icon = "👤",
                         title = "Edit Profile",
-                        subtitle = "Update your name and phone number",
+                        subtitle = "Update your name, phone and photo",
                         colors = colors,
                         onClick = {
                             showEditDialog = true
@@ -368,8 +422,12 @@ fun ProfileScreen(
                 initialName = fullName,
                 initialPhone = phoneNumber,
                 colors = colors,
+                isPhotoUploading = isPhotoUploading,
                 onDismiss = {
                     showEditDialog = false
+                },
+                onChangePhoto = {
+                    launchProfilePhotoPicker()
                 },
                 onSave = { newName, newPhone ->
                     isSaving = true
@@ -385,9 +443,9 @@ fun ProfileScreen(
                             statusMessage = "Profile updated"
                             showEditDialog = false
                         },
-                        onError = { error ->
+                        onError = {
                             isSaving = false
-                            statusMessage = error
+                            statusMessage = "Unable to update profile. Please try again."
                         }
                     )
                 }
@@ -509,7 +567,9 @@ private fun EditProfileDialog(
     initialName: String,
     initialPhone: String,
     colors: ProfileThemeColors,
+    isPhotoUploading: Boolean,
     onDismiss: () -> Unit,
+    onChangePhoto: () -> Unit,
     onSave: (String, String) -> Unit
 ) {
     var name by rememberSaveable {
@@ -555,6 +615,25 @@ private fun EditProfileDialog(
                 )
 
                 Spacer(modifier = Modifier.height(18.dp))
+
+                OutlinedButton(
+                    onClick = onChangePhoto,
+                    enabled = !isPhotoUploading,
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .height(50.dp),
+                    shape = RoundedCornerShape(18.dp),
+                    colors = ButtonDefaults.outlinedButtonColors(
+                        contentColor = colors.primary
+                    )
+                ) {
+                    Text(
+                        text = if (isPhotoUploading) "Uploading Photo..." else "Change Photo",
+                        fontWeight = FontWeight.Black
+                    )
+                }
+
+                Spacer(modifier = Modifier.height(12.dp))
 
                 ProfileTextField(
                     value = name,
@@ -668,11 +747,7 @@ private fun ProfileTextField(
 private fun rememberProfileThemeColors(): ProfileThemeColors {
     val scheme = MaterialTheme.colorScheme
 
-    val isRoseTheme =
-        scheme.primary == Color(0xFFFF5CA8) ||
-                scheme.primary == Color(0xFFEC4899) ||
-                scheme.primaryContainer == Color(0xFFFFD6E8)
-
+    val isRoseTheme = scheme.isRideitRoseTheme()
     val isLightTheme = scheme.background.luminance() > 0.5f
 
     return remember(scheme.primary, scheme.background) {
@@ -716,7 +791,7 @@ private fun rememberProfileThemeColors(): ProfileThemeColors {
                 card = Color(0xFF1B1B1D),
                 innerCard = Color(0xFF252529),
                 iconCard = Color(0xFF2A2138),
-                primary = Color(0xFF8A35F2),
+                primary = scheme.primary,
                 text = Color.White,
                 subText = Color(0xFF9CA3AF),
                 buttonText = Color.White,

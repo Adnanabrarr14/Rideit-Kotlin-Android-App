@@ -79,6 +79,7 @@ import com.example.rideit.map.model.MapUiState
 import com.example.rideit.map.model.RideOption
 import com.example.rideit.map.model.RideRequestStatus
 import com.example.rideit.map.viewmodel.MapViewModel
+import com.example.rideit.ui.components.RideitProfilePhotoAvatar
 import com.google.android.gms.common.api.ResolvableApiException
 import com.google.android.gms.location.LocationRequest
 import com.google.android.gms.location.LocationServices
@@ -129,6 +130,7 @@ fun MapScreen(
     var firebaseRideError by remember { mutableStateOf<String?>(null) }
     var firebaseDriverName by remember { mutableStateOf<String?>(null) }
     var firebaseDriverEmail by remember { mutableStateOf<String?>(null) }
+    var firebaseDriverPhotoUrl by remember { mutableStateOf<String?>(null) }
 
     var firebaseTripCompleted by remember { mutableStateOf(false) }
     var firebaseTripCancelledByDriver by remember { mutableStateOf(false) }
@@ -405,7 +407,7 @@ fun MapScreen(
         }
 
         FirebaseManager.findLatestRestorableRiderRide(
-            onSuccess = { requestId, status, driverName, driverEmail, feedbackSubmitted ->
+            onSuccess = { requestId, status, driverName, driverEmail, driverPhotoUrl, feedbackSubmitted ->
                 if (requestId.isNullOrBlank() || status.isNullOrBlank()) {
                     return@findLatestRestorableRiderRide
                 }
@@ -431,6 +433,7 @@ fun MapScreen(
                     firebaseLiveTripStatus = null
                     firebaseDriverName = null
                     firebaseDriverEmail = null
+                    firebaseDriverPhotoUrl = null
                     firebaseRideMessage = null
                     firebaseRideError = null
                     showPanel = true
@@ -440,6 +443,7 @@ fun MapScreen(
 
                 firebaseDriverName = driverName
                 firebaseDriverEmail = driverEmail
+                firebaseDriverPhotoUrl = driverPhotoUrl
                 firebaseLiveTripStatus = cleanStatus
 
                 when (cleanStatus) {
@@ -519,6 +523,9 @@ fun MapScreen(
                     val cleanStatus = status.lowercase()
                     val driverName = snapshot.getString("driverName")
                     val driverEmail = snapshot.getString("driverEmail")
+                    val driverPhotoUrl = snapshot.getString("driverProfilePhotoUrl")
+                        ?: snapshot.getString("driverPhotoUrl")
+                        ?: snapshot.getString("driverAvatarUrl")
 
                     firebaseLiveTripStatus = cleanStatus
 
@@ -528,6 +535,7 @@ fun MapScreen(
                             firebaseTripCancelledByDriver = false
                             firebaseDriverName = driverName ?: "Your driver"
                             firebaseDriverEmail = driverEmail
+                            firebaseDriverPhotoUrl = driverPhotoUrl
                             firebaseRideMessage = "${driverName ?: "Your driver"} accepted your ride."
                             firebaseRideError = null
                             showPanel = false
@@ -542,6 +550,7 @@ fun MapScreen(
                             firebaseTripCancelledByDriver = false
                             firebaseDriverName = driverName ?: firebaseDriverName ?: "Your driver"
                             firebaseDriverEmail = driverEmail ?: firebaseDriverEmail
+                            firebaseDriverPhotoUrl = driverPhotoUrl ?: firebaseDriverPhotoUrl
                             firebaseRideMessage = "${driverName ?: firebaseDriverName ?: "Your driver"} arrived at pickup."
                             firebaseRideError = null
                             showPanel = false
@@ -556,6 +565,7 @@ fun MapScreen(
                             firebaseTripCancelledByDriver = false
                             firebaseDriverName = driverName ?: firebaseDriverName ?: "Your driver"
                             firebaseDriverEmail = driverEmail ?: firebaseDriverEmail
+                            firebaseDriverPhotoUrl = driverPhotoUrl ?: firebaseDriverPhotoUrl
                             firebaseRideMessage = "Trip in progress. Enjoy your Rideit ride."
                             firebaseRideError = null
                             showPanel = false
@@ -571,6 +581,7 @@ fun MapScreen(
                             firebaseTripCancelledByDriver = false
                             firebaseDriverName = driverName ?: firebaseDriverName ?: "Your driver"
                             firebaseDriverEmail = driverEmail ?: firebaseDriverEmail
+                            firebaseDriverPhotoUrl = driverPhotoUrl ?: firebaseDriverPhotoUrl
                             firebaseRideMessage = "Trip completed successfully. Please rate your driver before viewing receipt."
                             firebaseRideError = null
                             activeRideRequestId = null
@@ -589,6 +600,7 @@ fun MapScreen(
                             firebaseTripCancelledByDriver = true
                             firebaseDriverName = driverName ?: firebaseDriverName
                             firebaseDriverEmail = driverEmail ?: firebaseDriverEmail
+                            firebaseDriverPhotoUrl = driverPhotoUrl ?: firebaseDriverPhotoUrl
                             firebaseRideMessage = null
                             firebaseRideError = "Driver cancelled the trip. Please book another ride."
                             activeRideRequestId = null
@@ -609,6 +621,7 @@ fun MapScreen(
                             firebaseTripCancelledByDriver = false
                             firebaseDriverName = null
                             firebaseDriverEmail = null
+                            firebaseDriverPhotoUrl = null
                             firebaseRideMessage = "This request was declined. Please book another ride."
                             firebaseRideError = null
                             activeRideRequestId = null
@@ -627,6 +640,7 @@ fun MapScreen(
                             firebaseTripCancelledByDriver = false
                             firebaseDriverName = null
                             firebaseDriverEmail = null
+                            firebaseDriverPhotoUrl = null
                             firebaseRideMessage = "Ride cancelled successfully."
                             firebaseRideError = null
                             activeRideRequestId = null
@@ -645,6 +659,7 @@ fun MapScreen(
                             firebaseTripCancelledByDriver = false
                             firebaseDriverName = null
                             firebaseDriverEmail = null
+                            firebaseDriverPhotoUrl = null
                             firebaseRideMessage = "Ride request saved. Waiting for a driver to accept."
                             firebaseRideError = null
                             showRideAlertSnackbar(
@@ -728,6 +743,11 @@ fun MapScreen(
 
                 firebaseDriverEmail = latestCompletedDocument.getString("driverEmail")
                     ?: firebaseDriverEmail
+
+                firebaseDriverPhotoUrl = latestCompletedDocument.getString("driverProfilePhotoUrl")
+                    ?: latestCompletedDocument.getString("driverPhotoUrl")
+                            ?: latestCompletedDocument.getString("driverAvatarUrl")
+                            ?: firebaseDriverPhotoUrl
 
                 firebaseRideMessage = "Trip completed successfully. Please rate your driver before viewing receipt."
                 firebaseRideError = null
@@ -968,6 +988,7 @@ fun MapScreen(
         firebaseRideError = null
         firebaseDriverName = null
         firebaseDriverEmail = null
+        firebaseDriverPhotoUrl = null
         activeRideRequestId = null
         completedRideRequestId = null
         submittedRating = null
@@ -1003,6 +1024,7 @@ fun MapScreen(
                 completedRideRequestId = null
                 firebaseDriverName = null
                 firebaseDriverEmail = null
+                firebaseDriverPhotoUrl = null
                 firebaseTripCompleted = false
                 firebaseTripCancelledByDriver = false
                 firebaseLiveTripStatus = "cancelled_by_rider"
@@ -1247,6 +1269,7 @@ fun MapScreen(
         RiderActiveTripCompactCard(
             visible = shouldShowDriverMiniCard,
             driverName = driverDisplayName,
+            driverPhotoUrl = firebaseDriverPhotoUrl,
             phoneNumber = driverPhone,
             vehicleModel = driverVehicleModel,
             vehicleNumber = driverVehicleNumber,
@@ -1659,6 +1682,7 @@ private fun FloatingMapButton(
 private fun RiderActiveTripCompactCard(
     visible: Boolean,
     driverName: String,
+    driverPhotoUrl: String?,
     phoneNumber: String,
     vehicleModel: String,
     vehicleNumber: String,
@@ -1688,15 +1712,13 @@ private fun RiderActiveTripCompactCard(
                     modifier = Modifier.fillMaxWidth(),
                     verticalAlignment = Alignment.CenterVertically
                 ) {
-                    Box(
-                        modifier = Modifier
-                            .size(48.dp)
-                            .clip(CircleShape)
-                            .background(Color(0xFF2563EB).copy(alpha = 0.12f)),
-                        contentAlignment = Alignment.Center
-                    ) {
-                        Text(text = "🚗", style = MaterialTheme.typography.titleLarge)
-                    }
+                    RideitProfilePhotoAvatar(
+                        photoUrl = driverPhotoUrl,
+                        fallbackText = driverName.firstOrNull()?.uppercase() ?: "D",
+                        size = 48.dp,
+                        backgroundColor = Color(0xFF2563EB).copy(alpha = 0.12f),
+                        contentColor = Color(0xFF2563EB)
+                    )
 
                     Spacer(modifier = Modifier.width(10.dp))
 

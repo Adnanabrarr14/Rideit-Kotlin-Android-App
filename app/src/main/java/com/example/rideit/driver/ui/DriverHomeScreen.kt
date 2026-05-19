@@ -69,6 +69,7 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import com.example.rideit.FirebaseManager
 import com.example.rideit.RideitNotificationCenter
+import com.example.rideit.ui.components.RideitProfilePhotoAvatar
 import com.google.firebase.Timestamp
 import com.google.firebase.firestore.DocumentSnapshot
 import com.google.firebase.firestore.FirebaseFirestore
@@ -115,6 +116,8 @@ fun DriverHomeScreen(
     driverName: String = FirebaseManager.currentDriverDisplayName(),
     onInnerPageChanged: (Boolean) -> Unit = {}
 ) {
+    var displayDriverName by remember { mutableStateOf(driverName) }
+    var driverProfilePhotoUrl by remember { mutableStateOf(FirebaseManager.currentUserPhotoUrl()) }
     var isOnline by remember { mutableStateOf(false) }
     var showRideRequest by remember { mutableStateOf(false) }
     var activeDestination by remember { mutableStateOf(DriverHomeDestination.Home) }
@@ -352,6 +355,18 @@ fun DriverHomeScreen(
     }
 
     LaunchedEffect(driverId) {
+        FirebaseManager.loadCurrentUserProfile(
+            onSuccess = { profile ->
+                displayDriverName = profile.fullName.ifBlank { driverName }
+                driverProfilePhotoUrl = profile.profilePhotoUrl.ifBlank {
+                    FirebaseManager.currentUserPhotoUrl()
+                }
+            },
+            onError = {
+                displayDriverName = driverName
+                driverProfilePhotoUrl = FirebaseManager.currentUserPhotoUrl()
+            }
+        )
         loadActiveDriverTrip()
     }
 
@@ -503,7 +518,7 @@ fun DriverHomeScreen(
     when (activeDestination) {
         DriverHomeDestination.ActiveTrip -> {
             DriverTripScreen(
-                driverName = driverName,
+                driverName = displayDriverName,
                 rideRequestId = activeRideRequestId,
                 onBackToDriverHome = {
                     resetRideRequestUi()
@@ -521,7 +536,7 @@ fun DriverHomeScreen(
 
         DriverHomeDestination.Wallet -> {
             DriverWalletScreen(
-                driverName = driverName,
+                driverName = displayDriverName,
                 onBackClick = {
                     activeDestination = DriverHomeDestination.Home
                 }
@@ -531,7 +546,7 @@ fun DriverHomeScreen(
 
         DriverHomeDestination.TripHistory -> {
             DriverTripHistoryScreen(
-                driverName = driverName,
+                driverName = displayDriverName,
                 onBackClick = {
                     activeDestination = DriverHomeDestination.Home
                 }
@@ -541,7 +556,7 @@ fun DriverHomeScreen(
 
         DriverHomeDestination.Documents -> {
             DriverDocumentsScreen(
-                driverName = driverName,
+                driverName = displayDriverName,
                 onBackClick = {
                     activeDestination = DriverHomeDestination.Home
                 }
@@ -551,7 +566,7 @@ fun DriverHomeScreen(
 
         DriverHomeDestination.Support -> {
             DriverSupportScreen(
-                driverName = driverName,
+                driverName = displayDriverName,
                 onBackClick = {
                     activeDestination = DriverHomeDestination.Home
                 }
@@ -578,7 +593,8 @@ fun DriverHomeScreen(
                 .padding(horizontal = 18.dp, vertical = 18.dp)
         ) {
             DriverHeaderCard(
-                driverName = driverName,
+                driverName = displayDriverName,
+                profilePhotoUrl = driverProfilePhotoUrl,
                 isOnline = isOnline,
                 todayEarnings = dashboardStats.todayEarnings,
                 todayTrips = dashboardStats.todayCompletedTrips,
@@ -657,7 +673,9 @@ fun DriverHomeScreen(
                                         "status" to "accepted",
                                         "driverId" to driverId,
                                         "driverEmail" to driverEmail,
-                                        "driverName" to driverName,
+                                        "driverName" to displayDriverName,
+                                        "driverProfilePhotoUrl" to driverProfilePhotoUrl,
+                                        "driverPhotoUrl" to driverProfilePhotoUrl,
                                         "acceptedAt" to Timestamp.now(),
                                         "updatedAt" to Timestamp.now()
                                     )
@@ -821,6 +839,7 @@ fun DriverHomeScreen(
 @Composable
 private fun DriverHeaderCard(
     driverName: String,
+    profilePhotoUrl: String,
     isOnline: Boolean,
     todayEarnings: Int,
     todayTrips: Int,
@@ -842,7 +861,7 @@ private fun DriverHeaderCard(
                         colors = listOf(
                             Color(0xFF111827),
                             Color(0xFF1F2937),
-                            Color(0xFF8A35F2)
+                            MaterialTheme.colorScheme.primary
                         )
                     )
                 )
@@ -852,20 +871,13 @@ private fun DriverHeaderCard(
                 modifier = Modifier.fillMaxWidth(),
                 verticalAlignment = Alignment.CenterVertically
             ) {
-                Box(
-                    modifier = Modifier
-                        .size(58.dp)
-                        .clip(CircleShape)
-                        .background(Color.White.copy(alpha = 0.16f)),
-                    contentAlignment = Alignment.Center
-                ) {
-                    Text(
-                        text = driverName.driverAvatarLetter(),
-                        style = MaterialTheme.typography.headlineSmall,
-                        fontWeight = FontWeight.Black,
-                        color = Color.White
-                    )
-                }
+                RideitProfilePhotoAvatar(
+                    photoUrl = profilePhotoUrl,
+                    fallbackText = driverName.driverAvatarLetter(),
+                    size = 58.dp,
+                    backgroundColor = Color.White.copy(alpha = 0.16f),
+                    contentColor = Color.White
+                )
 
                 Spacer(modifier = Modifier.width(14.dp))
 
@@ -1045,7 +1057,7 @@ private fun DriverRideRequestStatusCard(
         pendingRideRequest != null -> Color(0xFF16A34A)
         hasActiveTrip -> Color(0xFF2563EB)
         !isOnline -> Color(0xFF6B7280)
-        else -> Color(0xFF8A35F2)
+        else -> MaterialTheme.colorScheme.primary
     }
 
     val iconText = when {
@@ -1129,7 +1141,7 @@ private fun DriverRideRequestStatusCard(
                             .fillMaxWidth()
                             .height(7.dp)
                             .clip(RoundedCornerShape(50)),
-                        color = Color(0xFF8A35F2),
+                        color = MaterialTheme.colorScheme.primary,
                         trackColor = Color(0xFFE5E7EB)
                     )
                 }
@@ -1267,14 +1279,14 @@ private fun IncomingRideRequestCard(
                     modifier = Modifier
                         .size(52.dp)
                         .clip(CircleShape)
-                        .background(Color(0xFF8A35F2).copy(alpha = 0.12f)),
+                        .background(MaterialTheme.colorScheme.primary.copy(alpha = 0.12f)),
                     contentAlignment = Alignment.Center
                 ) {
                     Text(
                         text = "R",
                         style = MaterialTheme.typography.titleLarge,
                         fontWeight = FontWeight.Black,
-                        color = Color(0xFF8A35F2)
+                        color = MaterialTheme.colorScheme.primary
                     )
                 }
 
@@ -1327,14 +1339,14 @@ private fun IncomingRideRequestCard(
 
             Surface(
                 shape = RoundedCornerShape(50),
-                color = Color(0xFF8A35F2).copy(alpha = 0.10f)
+                color = MaterialTheme.colorScheme.primary.copy(alpha = 0.10f)
             ) {
                 Text(
-                    text = "Status: ${request.status} • Ride: ${request.rideType}",
+                    text = "Status: ${request.status} - Ride: ${request.rideType}",
                     modifier = Modifier.padding(horizontal = 12.dp, vertical = 7.dp),
                     style = MaterialTheme.typography.labelMedium,
                     fontWeight = FontWeight.Bold,
-                    color = Color(0xFF8A35F2),
+                    color = MaterialTheme.colorScheme.primary,
                     maxLines = 1,
                     overflow = TextOverflow.Ellipsis
                 )
@@ -1359,7 +1371,7 @@ private fun IncomingRideRequestCard(
                         .fillMaxWidth()
                         .height(7.dp)
                         .clip(RoundedCornerShape(50)),
-                    color = Color(0xFF8A35F2),
+                    color = MaterialTheme.colorScheme.primary,
                     trackColor = Color(0xFFE5E7EB)
                 )
 
@@ -1422,6 +1434,8 @@ private fun DriverRequestMiniMap(
     pickup: String,
     dropoff: String
 ) {
+    val accentColor = MaterialTheme.colorScheme.primary
+
     Surface(
         modifier = Modifier
             .fillMaxWidth()
@@ -1450,7 +1464,7 @@ private fun DriverRequestMiniMap(
 
                 drawPath(
                     path = routePath,
-                    color = Color(0xFF8A35F2),
+                    color = accentColor,
                     style = Stroke(
                         width = 9f,
                         cap = StrokeCap.Round
@@ -1464,7 +1478,7 @@ private fun DriverRequestMiniMap(
                 )
 
                 drawCircle(
-                    color = Color(0xFF8A35F2),
+                    color = accentColor,
                     radius = 13f,
                     center = Offset(w * 0.84f, h * 0.30f)
                 )
@@ -1519,7 +1533,7 @@ private fun DriverRequestMiniMap(
                         text = dropoff,
                         style = MaterialTheme.typography.labelSmall,
                         fontWeight = FontWeight.Black,
-                        color = Color(0xFF8A35F2),
+                        color = MaterialTheme.colorScheme.primary,
                         maxLines = 1,
                         overflow = TextOverflow.Ellipsis
                     )
@@ -1549,7 +1563,7 @@ private fun RideRoutePreview(
             Spacer(modifier = Modifier.height(14.dp))
 
             RouteLineItem(
-                dotColor = Color(0xFF8A35F2),
+                dotColor = MaterialTheme.colorScheme.primary,
                 label = "Dropoff",
                 value = dropoff
             )
@@ -1824,7 +1838,7 @@ private fun DriverStatCard(
                 text = subtitle,
                 style = MaterialTheme.typography.bodySmall,
                 fontWeight = FontWeight.Medium,
-                color = Color(0xFF8A35F2),
+                color = MaterialTheme.colorScheme.primary,
                 maxLines = 1,
                 overflow = TextOverflow.Ellipsis
             )
@@ -1882,14 +1896,14 @@ private fun DriverTodayEarningsCard(
 
                 Surface(
                     shape = RoundedCornerShape(50),
-                    color = Color(0xFF8A35F2).copy(alpha = 0.10f)
+                    color = MaterialTheme.colorScheme.primary.copy(alpha = 0.10f)
                 ) {
                     Text(
                         text = if (isLoading) "..." else "$percent%",
                         modifier = Modifier.padding(horizontal = 12.dp, vertical = 7.dp),
                         style = MaterialTheme.typography.labelLarge,
                         fontWeight = FontWeight.Black,
-                        color = Color(0xFF8A35F2)
+                        color = MaterialTheme.colorScheme.primary
                     )
                 }
             }
@@ -1902,7 +1916,7 @@ private fun DriverTodayEarningsCard(
                     .fillMaxWidth()
                     .height(8.dp)
                     .clip(RoundedCornerShape(50)),
-                color = Color(0xFF8A35F2),
+                color = MaterialTheme.colorScheme.primary,
                 trackColor = Color(0xFFE5E7EB)
             )
 
@@ -2027,14 +2041,14 @@ private fun DriverToolRow(
             modifier = Modifier
                 .size(42.dp)
                 .clip(CircleShape)
-                .background(Color(0xFF8A35F2).copy(alpha = 0.10f)),
+                .background(MaterialTheme.colorScheme.primary.copy(alpha = 0.10f)),
             contentAlignment = Alignment.Center
         ) {
             Text(
                 text = emoji,
                 style = MaterialTheme.typography.titleMedium,
                 fontWeight = FontWeight.Black,
-                color = Color(0xFF8A35F2)
+                color = MaterialTheme.colorScheme.primary
             )
         }
 

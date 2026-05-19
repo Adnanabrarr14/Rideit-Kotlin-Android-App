@@ -1,6 +1,7 @@
 package com.example.rideit
 
 import androidx.compose.foundation.isSystemInDarkTheme
+import androidx.compose.material3.ColorScheme
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.darkColorScheme
 import androidx.compose.material3.lightColorScheme
@@ -14,6 +15,27 @@ import androidx.compose.ui.graphics.Color
 import com.google.firebase.auth.FirebaseAuth
 import com.google.firebase.firestore.FirebaseFirestore
 import com.google.firebase.firestore.ListenerRegistration
+
+object RideitThemeTokens {
+    val RosePrimary = Color(0xFFFF5CA8)
+    val RoseSecondary = Color(0xFFEC4899)
+    val RosePrimaryContainer = Color(0xFFFFD6E8)
+    val RoseSecondaryContainer = Color(0xFFFFE4F1)
+    val RoseBackground = Color(0xFFFFF7FB)
+    val RoseSurface = Color(0xFFFFFBFD)
+    val RoseSurfaceVariant = Color(0xFFFFEAF3)
+    val RoseText = Color(0xFF24111A)
+    val RoseSubText = Color(0xFF7A445A)
+    val RoseOutline = Color(0xFFF9A8D4)
+}
+
+fun ColorScheme.isRideitRoseTheme(): Boolean {
+    return primary == RideitThemeTokens.RosePrimary ||
+            primary == Color(0xFFE45A8A) ||
+            primary == RideitThemeTokens.RoseSecondary ||
+            primaryContainer == RideitThemeTokens.RosePrimaryContainer ||
+            background == RideitThemeTokens.RoseBackground
+}
 
 private val RideitLightColorScheme = lightColorScheme(
     primary = Color(0xFF8A35F2),
@@ -64,25 +86,25 @@ private val RideitDarkColorScheme = darkColorScheme(
 )
 
 private val RideitRoseColorScheme = lightColorScheme(
-    primary = Color(0xFFE45A8A),
+    primary = RideitThemeTokens.RosePrimary,
     onPrimary = Color.White,
-    primaryContainer = Color(0xFFFFDCE9),
+    primaryContainer = RideitThemeTokens.RosePrimaryContainer,
     onPrimaryContainer = Color(0xFF4A0A27),
 
-    secondary = Color(0xFFBE4B78),
+    secondary = RideitThemeTokens.RoseSecondary,
     onSecondary = Color.White,
-    secondaryContainer = Color(0xFFFFE4F1),
+    secondaryContainer = RideitThemeTokens.RoseSecondaryContainer,
     onSecondaryContainer = Color(0xFF4A0A27),
 
-    background = Color(0xFFFFF7FB),
-    onBackground = Color(0xFF24111A),
+    background = RideitThemeTokens.RoseBackground,
+    onBackground = RideitThemeTokens.RoseText,
 
-    surface = Color(0xFFFFFBFD),
-    onSurface = Color(0xFF24111A),
-    surfaceVariant = Color(0xFFFFEAF3),
-    onSurfaceVariant = Color(0xFF6B3B50),
+    surface = RideitThemeTokens.RoseSurface,
+    onSurface = RideitThemeTokens.RoseText,
+    surfaceVariant = RideitThemeTokens.RoseSurfaceVariant,
+    onSurfaceVariant = RideitThemeTokens.RoseSubText,
 
-    outline = Color(0xFFF3B4C9),
+    outline = RideitThemeTokens.RoseOutline,
     error = Color(0xFFEF4444),
     onError = Color.White
 )
@@ -119,7 +141,6 @@ fun RideitTheme(
                         ?.getString("preferredThemeMode")
                         ?.trim()
                         ?.lowercase()
-                        ?: FirebaseManager.THEME_SYSTEM
 
                     val savedGender = snapshot
                         ?.getString("gender")
@@ -128,6 +149,7 @@ fun RideitTheme(
                         .orEmpty()
 
                     selectedThemeMode = when (savedThemeMode) {
+                        FirebaseManager.THEME_SYSTEM -> FirebaseManager.THEME_SYSTEM
                         FirebaseManager.THEME_LIGHT -> FirebaseManager.THEME_LIGHT
                         FirebaseManager.THEME_DARK -> FirebaseManager.THEME_DARK
                         FirebaseManager.THEME_ROSE -> FirebaseManager.THEME_ROSE

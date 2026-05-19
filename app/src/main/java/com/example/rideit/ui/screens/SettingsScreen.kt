@@ -44,6 +44,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import com.example.rideit.FirebaseManager
+import com.example.rideit.RideitThemeTokens
 import com.google.firebase.Timestamp
 import com.google.firebase.auth.FirebaseAuth
 import com.google.firebase.firestore.FirebaseFirestore
@@ -260,13 +261,13 @@ fun SettingsScreen(
 
     val iconBackgroundColor = when (selectedThemeMode) {
         FirebaseManager.THEME_LIGHT -> Color(0xFFEBDDFF)
-        FirebaseManager.THEME_ROSE -> Color(0xFFFFDCE9)
+        FirebaseManager.THEME_ROSE -> RideitThemeTokens.RoseSurfaceVariant
         else -> Color(0xFF2A2138)
     }
 
     val iconTextColor = when (selectedThemeMode) {
         FirebaseManager.THEME_LIGHT -> Color(0xFF8A35F2)
-        FirebaseManager.THEME_ROSE -> Color(0xFFE45A8A)
+        FirebaseManager.THEME_ROSE -> RideitThemeTokens.RosePrimary
         else -> Color.White
     }
 
@@ -800,7 +801,7 @@ private fun SettingsFooterCard(
                 modifier = Modifier
                     .size(48.dp)
                     .clip(CircleShape)
-                    .background(if (roseMode) Color(0xFFFF5CA8) else Color(0xFF8A35F2)),
+                    .background(if (roseMode) RideitThemeTokens.RosePrimary else Color(0xFF8A35F2)),
                 contentAlignment = Alignment.Center
             ) {
                 Text(
@@ -948,7 +949,7 @@ private fun PreferenceOptionRow(
     roseMode: Boolean,
     onClick: () -> Unit
 ) {
-    val selectedColor = if (roseMode) Color(0xFFFF5CA8) else Color(0xFF8A35F2)
+    val selectedColor = if (roseMode) RideitThemeTokens.RosePrimary else Color(0xFF8A35F2)
 
     Surface(
         modifier = Modifier

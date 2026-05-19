@@ -239,7 +239,7 @@ private fun DriverSupportHeader(
                         colors = listOf(
                             Color(0xFF111827),
                             Color(0xFF1F2937),
-                            Color(0xFF8A35F2)
+                            MaterialTheme.colorScheme.primary
                         )
                     )
                 )
@@ -421,7 +421,7 @@ private fun DriverSupportQuickActionsCard(
                 SupportQuickButton(
                     title = "Chat",
                     icon = "💬",
-                    color = Color(0xFF8A35F2),
+                    color = MaterialTheme.colorScheme.primary,
                     modifier = Modifier.weight(1f),
                     onClick = onLiveChatClick
                 )
@@ -512,14 +512,14 @@ private fun DriverSupportTopicCard(
                 modifier = Modifier
                     .size(50.dp)
                     .clip(CircleShape)
-                    .background(Color(0xFF8A35F2).copy(alpha = 0.12f)),
+                    .background(MaterialTheme.colorScheme.primary.copy(alpha = 0.12f)),
                 contentAlignment = Alignment.Center
             ) {
                 Text(
                     text = topic.icon,
                     style = MaterialTheme.typography.titleSmall,
                     fontWeight = FontWeight.Black,
-                    color = Color(0xFF8A35F2)
+                    color = MaterialTheme.colorScheme.primary
                 )
             }
 

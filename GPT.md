@@ -4058,3 +4058,21 @@ Android Studio → Commit → Push → GitHub
 - Fixed trip completed rating/feedback overlap with menu/drawer.
 - Removed unnecessary current-location snackbar.
 - Preserved route line, map behavior and Firebase trip flows.
+
+## Phase 8.21.12 Final Theme Polish
+
+- Made Rose/Pink theme apply globally across rider and driver UI.
+- Updated drawer/menu theme colors to respect selected Rose theme.
+- Preserved gender-based Rose suggestion while allowing any user to select Rose.
+- Removed unsafe hardcoded purple accents where theme-aware colors were needed.
+- Preserved rider and driver Firebase flows.
+
+## Phase 8.21.12 Driver Theme + Profile Photo + Route Polish
+
+- Fixed driver-side Rose/Pink theme consistency across driver screens and drawer/menu.
+- Added rider profile edit/photo upload support with avatar fallback.
+- Added driver profile edit/photo upload support with avatar fallback.
+- Displayed driver profile photo in rider finding-driver/active-trip panel when available.
+- Fixed driver active trip map to show only one route line based on current trip stage.
+- Preserved rider and driver Firebase trip flows.
+- TODO before production: publish Firebase Storage rules for `profile_photos/{uid}/...`.

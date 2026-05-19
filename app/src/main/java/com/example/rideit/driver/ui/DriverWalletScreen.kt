@@ -361,7 +361,7 @@ private fun DriverWalletHeroCard(
                         colors = listOf(
                             Color(0xFF111827),
                             Color(0xFF2563EB),
-                            Color(0xFF8A35F2)
+                            MaterialTheme.colorScheme.primary
                         )
                     )
                 )
@@ -602,7 +602,7 @@ private fun DriverPayoutCard(
                     .fillMaxWidth()
                     .height(8.dp)
                     .clip(RoundedCornerShape(50)),
-                color = Color(0xFF8A35F2),
+                color = MaterialTheme.colorScheme.primary,
                 trackColor = Color.White.copy(alpha = 0.12f)
             )
 
@@ -630,7 +630,7 @@ private fun DriverPayoutCard(
                         modifier = Modifier
                             .size(48.dp)
                             .clip(RoundedCornerShape(17.dp))
-                            .background(Color(0xFF8A35F2).copy(alpha = 0.18f)),
+                            .background(MaterialTheme.colorScheme.primary.copy(alpha = 0.18f)),
                         contentAlignment = Alignment.Center
                     ) {
                         Text(
@@ -667,7 +667,7 @@ private fun DriverPayoutCard(
 
                     Text(
                         text = "Demo",
-                        color = Color(0xFF8A35F2),
+                        color = MaterialTheme.colorScheme.primary,
                         fontWeight = FontWeight.Black,
                         style = MaterialTheme.typography.labelMedium
                     )
@@ -770,7 +770,7 @@ private fun DriverEarningTripRow(
 
                 Surface(
                     shape = RoundedCornerShape(50),
-                    color = Color(0xFF8A35F2).copy(alpha = 0.16f)
+                    color = MaterialTheme.colorScheme.primary.copy(alpha = 0.16f)
                 ) {
                     Text(
                         text = trip.paymentMethod,

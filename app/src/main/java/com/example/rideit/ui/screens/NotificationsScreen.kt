@@ -43,6 +43,7 @@ import androidx.compose.ui.unit.dp
 import com.example.rideit.FirebaseManager
 import com.example.rideit.RideitNotificationCenter
 import com.example.rideit.RideitUserNotification
+import com.example.rideit.isRideitRoseTheme
 import com.google.firebase.Timestamp
 import java.util.Date
 import java.util.concurrent.TimeUnit
@@ -613,11 +614,7 @@ private fun NotificationCard(
 private fun rememberNotificationsThemeColors(): NotificationsThemeColors {
     val scheme = MaterialTheme.colorScheme
 
-    val isRoseTheme =
-        scheme.primary == Color(0xFFFF5CA8) ||
-                scheme.primary == Color(0xFFEC4899) ||
-                scheme.primaryContainer == Color(0xFFFFD6E8)
-
+    val isRoseTheme = scheme.isRideitRoseTheme()
     val isLightTheme = scheme.background.luminance() > 0.5f
 
     return remember(scheme.primary, scheme.background) {
@@ -651,7 +648,7 @@ private fun rememberNotificationsThemeColors(): NotificationsThemeColors {
                 subText = Color(0xFF6B7280),
                 border = Color(0xFFE5E7EB),
                 success = Color(0xFF16A34A),
-                warning = Color(0xFF8A35F2),
+                warning = scheme.primary,
                 danger = Color(0xFFDC2626),
                 onPrimary = Color.White
             )
@@ -663,12 +660,12 @@ private fun rememberNotificationsThemeColors(): NotificationsThemeColors {
                 card = Color(0xFF1B1B1D),
                 unreadCard = Color(0xFF21182E),
                 iconCard = Color(0xFF2A2138),
-                primary = Color(0xFF8A35F2),
+                primary = scheme.primary,
                 text = Color.White,
                 subText = Color(0xFF9CA3AF),
                 border = Color(0xFF2A2A31),
                 success = Color(0xFF16A34A),
-                warning = Color(0xFF8A35F2),
+                warning = scheme.primary,
                 danger = Color(0xFFEF4444),
                 onPrimary = Color.White
             )

@@ -54,6 +54,9 @@ fun PremiumRideCompletionSheet(
     onDismiss: () -> Unit,
     onSubmitRating: (rating: Int, tags: List<String>, feedback: String) -> Unit
 ) {
+    val primary = MaterialTheme.colorScheme.primary
+    val onPrimary = MaterialTheme.colorScheme.onPrimary
+
     AnimatedVisibility(
         visible = visible,
         enter = fadeIn(),
@@ -99,14 +102,14 @@ fun PremiumRideCompletionSheet(
                         modifier = Modifier
                             .size(60.dp)
                             .clip(CircleShape)
-                            .background(Color(0xFF8A35F2).copy(alpha = 0.12f)),
+                            .background(primary.copy(alpha = 0.12f)),
                         contentAlignment = Alignment.Center
                     ) {
                         Text(
                             text = "✓",
                             style = MaterialTheme.typography.headlineLarge,
                             fontWeight = FontWeight.Black,
-                            color = Color(0xFF8A35F2)
+                            color = primary
                         )
                     }
 
@@ -200,7 +203,7 @@ fun PremiumRideCompletionSheet(
                                 },
                                 shape = RoundedCornerShape(50),
                                 color = if (selected) {
-                                    Color(0xFF8A35F2)
+                                    primary
                                 } else {
                                     Color(0xFFF3F4F6)
                                 }
@@ -237,9 +240,9 @@ fun PremiumRideCompletionSheet(
                         maxLines = 4,
                         shape = RoundedCornerShape(22.dp),
                         colors = OutlinedTextFieldDefaults.colors(
-                            focusedBorderColor = Color(0xFF8A35F2),
-                            focusedLabelColor = Color(0xFF8A35F2),
-                            cursorColor = Color(0xFF8A35F2)
+                            focusedBorderColor = primary,
+                            focusedLabelColor = primary,
+                            cursorColor = primary
                         )
                     )
 
@@ -258,8 +261,8 @@ fun PremiumRideCompletionSheet(
                             .height(52.dp),
                         shape = RoundedCornerShape(22.dp),
                         colors = ButtonDefaults.buttonColors(
-                            containerColor = Color(0xFF8A35F2),
-                            contentColor = Color.White
+                            containerColor = primary,
+                            contentColor = onPrimary
                         )
                     ) {
                         Text(
