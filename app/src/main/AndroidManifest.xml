@@ -10,7 +10,7 @@
         android:icon="@mipmap/ic_launcher"
         android:roundIcon="@mipmap/ic_launcher_round"
         android:theme="@style/Theme.Rideit"
-        android:label="Rideit"
+        android:label="@string/app_name"
         android:supportsRtl="true">
 
         <meta-data

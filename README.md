@@ -1,4 +1,4 @@
-# Rideit — Premium Ride-Hailing Android App
+# Rideit - Premium Ride-Hailing Android App
 
 Rideit is a modern ride-hailing Android application built with **Kotlin**, **Jetpack Compose**, **Firebase**, and **Google Maps**.
 
@@ -8,7 +8,7 @@ This project is designed as a professional portfolio app to demonstrate real-wor
 
 ---
 
-## ✨ Features
+## Features
 
 ### Rider Features
 
@@ -16,7 +16,7 @@ This project is designed as a professional portfolio app to demonstrate real-wor
 - Role-safe Firebase authentication
 - Premium rider map screen
 - Pickup and dropoff search
-- Ride option selection
+- Ride type selection
 - Ride booking with Firebase Firestore
 - Active ride restore after logout/login
 - Driver accepted state visibility
@@ -25,7 +25,7 @@ This project is designed as a professional portfolio app to demonstrate real-wor
 - Trip receipt and completion UI
 - Rider trip history
 - Payment methods screen
-- Notifications and promotions screen
+- Notifications screen
 - Settings screen
 - Rider drawer navigation
 
@@ -47,20 +47,15 @@ This project is designed as a professional portfolio app to demonstrate real-wor
 - Driver drawer navigation
 - Real Firebase driver name/email fallback
 
-### Security and Professional Fixes
+---
 
-- Google Maps API key moved to `local.properties`
-- Firestore Security Rules added and tested
-- Duplicate/conflicting files removed
-- Legacy routes cleaned
-- Ride prices moved into a constants file
-- App icon connected
-- Role-safe rider/driver navigation
-- Main app files audited for duplicate cleanup
+## Security Notes
+
+API keys and Firebase configuration files are not included in this repository. To run the project, create your own Firebase project and Google Maps API key.
 
 ---
 
-## 🛠 Tech Stack
+## Tech Stack
 
 - **Language:** Kotlin
 - **UI:** Jetpack Compose
@@ -77,7 +72,7 @@ This project is designed as a professional portfolio app to demonstrate real-wor
 
 ---
 
-## 📱 Main App Screens
+## Main App Screens
 
 - Account Type Selection
 - Rider Login
@@ -99,34 +94,34 @@ This project is designed as a professional portfolio app to demonstrate real-wor
 
 ---
 
-## 🧭 App Flow
+## App Flow
 
 ### Rider Flow
 
 ```text
 Account Type
-→ Rider Login / Signup
-→ Rider Map
-→ Select pickup/dropoff
-→ Choose ride option
-→ Book ride
-→ Driver accepts
-→ Rider sees driver
-→ Complete/cancel
-→ Rating / receipt
-→ Trip history
+-> Rider Login / Signup
+-> Rider Map
+-> Select pickup/dropoff
+-> Choose ride type
+-> Book ride
+-> Driver accepts
+-> Rider sees driver
+-> Complete/cancel
+-> Rating / receipt
+-> Trip history
 ```
 
 ### Driver Flow
 
 ```text
 Account Type
-→ Driver Login / Signup
-→ Driver Dashboard
-→ Go Live
-→ Check ride request
-→ Accept / decline ride
-→ Active trip
-→ Complete / cancel trip
-→ Wallet / history update
+-> Driver Login / Signup
+-> Driver Dashboard
+-> Go Live
+-> Check ride request
+-> Accept / decline ride
+-> Active trip
+-> Complete / cancel trip
+-> Wallet / history update
 ```
