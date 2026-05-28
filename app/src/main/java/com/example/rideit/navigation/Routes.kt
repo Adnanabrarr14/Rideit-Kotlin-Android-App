@@ -1,6 +1,7 @@
 package com.example.rideit.navigation
 
 object Routes {
+    const val SPLASH = "splash"
     const val ACCOUNT_TYPE = "account_type"
 
     const val RIDER_LOGIN = "rider_login"

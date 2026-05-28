@@ -58,6 +58,7 @@ import com.example.rideit.ui.screens.NotificationsScreen
 import com.example.rideit.ui.screens.PaymentScreen
 import com.example.rideit.ui.screens.ProfileScreen
 import com.example.rideit.ui.screens.RiderWalletScreen
+import com.example.rideit.ui.screens.RideitSplashScreen
 import com.example.rideit.ui.screens.SettingsScreen
 import com.example.rideit.ui.screens.SignupScreen
 import com.example.rideit.ui.screens.TripHistoryScreen
@@ -91,9 +92,22 @@ fun RideitNavGraph(
 
     NavHost(
         navController = navController,
-        startDestination = Routes.ACCOUNT_TYPE,
+        startDestination = Routes.SPLASH,
         modifier = modifier
     ) {
+        composable(Routes.SPLASH) {
+            RideitSplashScreen(
+                onSplashFinished = {
+                    navController.navigate(Routes.ACCOUNT_TYPE) {
+                        popUpTo(Routes.SPLASH) {
+                            inclusive = true
+                        }
+                        launchSingleTop = true
+                    }
+                }
+            )
+        }
+
         composable(Routes.ACCOUNT_TYPE) {
             AccountTypeScreen(
                 onRiderLoginClick = {
